@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/bizzkoot/copilot-tracker/compare/v1.1.1...v1.1.2) (2026-02-01)
+
+
+### Bug Fixes
+
+* sync settings UI with tray and improve canvas types ([1eff249](https://github.com/bizzkoot/copilot-tracker/commit/1eff24942d7bd3ef31459e3c501b79f7339c2510))
+
 ## [1.1.1](https://github.com/bizzkoot/copilot-tracker/compare/v1.1.0...v1.1.1) (2026-02-01)
 
 
