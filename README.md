@@ -1,4 +1,4 @@
-# Copilot Tracker
+# <img src="resources/icon.png" width="48" height="48" alt="Copilot Tracker Icon" style="vertical-align: middle; margin-right: 8px;" /> Copilot Tracker
 
 > A modern, cross-platform GitHub Copilot usage monitoring application
 
@@ -21,7 +21,15 @@ Cross-platform desktop application built with Electron, React, and TypeScript to
 
 ## Screenshots
 
-_Coming soon_
+### Dashboard
+<p align="center">
+  <img src="assets/Dashboard.gif" alt="Copilot Tracker Dashboard" width="700"/>
+</p>
+
+### System Tray (Windows)
+<p align="center">
+  <img src="assets/Taskbar.gif" alt="System Tray Integration" width="500"/>
+</p>
 
 ## Installation
 
@@ -47,6 +55,54 @@ Copilot-Tracker-Setup-1.0.0.exe
 chmod +x Copilot-Tracker-1.0.0.AppImage
 ./Copilot-Tracker-1.0.0.AppImage
 ```
+
+## Security Warnings (Unsigned Builds)
+
+⚠️ **This application is distributed without code signing.** You may see security warnings when first running the app. This is expected for open-source projects without paid developer certificates.
+
+### macOS
+
+When you first try to open the app, you may see:
+> "App cannot be opened because it was not downloaded from the App Store"
+
+**To bypass:**
+
+**Option 1: Right-click method (GUI)**
+1. Right-click (or Control-click) on the app
+2. Select "Open"
+3. Click "Open" in the confirmation dialog
+
+**Option 2: Terminal method (remove quarantine)**
+```bash
+# After copying the app to Applications folder
+xattr -cr /Applications/copilot-tracker.app
+```
+
+**Option 3: System Settings**
+1. Open System Settings → Privacy & Security
+2. Find the message about the app being blocked
+3. Click "Open Anyway"
+
+### Windows
+
+When you first run the installer or app, you may see:
+> "Microsoft Defender SmartScreen prevented an unrecognized app from starting"
+
+**To bypass:**
+1. Click "More info"
+2. Click "Run anyway"
+
+### Linux
+
+No warnings - Linux apps run without restrictions.
+
+### Why Unsigned?
+
+Code signing requires paid certificates:
+- **macOS**: Apple Developer Program ($99/year)
+- **Windows**: Code signing certificate ($100-300/year)
+
+As an open-source project, we distribute unsigned builds. The source code is publicly available for review if you wish to verify the app's safety.
 
 ## Development
 
@@ -80,54 +136,38 @@ npm run build
 npm run build:mac      # macOS
 npm run build:win      # Windows
 npm run build:linux    # Linux
-
-# Build for all platforms
-npm run build:all
 ```
-
-## Documentation
-
-Comprehensive planning and implementation documentation is available in the [`docs/`](./docs) folder:
-
-- **[README.md](./docs/README.md)** - Documentation overview
-- **[01-spec-copilot-tracker.md](./docs/01-spec-copilot-tracker.md)** - Project specification
-- **[02-research-copilot-tracker.md](./docs/02-research-copilot-tracker.md)** - Technical research
-- **[03-implementation-copilot-tracker.md](./docs/03-implementation-copilot-tracker.md)** - Implementation guide
-- **[copilot-tracker-implementation.md](./docs/copilot-tracker-implementation.md)** - Consolidated plan
 
 ## Tech Stack
 
-| Component | Technology |
-|-----------|------------|
-| Framework | Electron 33+ |
-| Frontend | React 18 |
-| Language | TypeScript |
-| Styling | Tailwind CSS + shadcn/ui |
-| State | Zustand |
-| Charts | Recharts |
-| Build | electron-vite |
-| Packaging | electron-builder |
+| Component | Technology               |
+| --------- | ------------------------ |
+| Framework | Electron 33+             |
+| Frontend  | React 18                 |
+| Language  | TypeScript               |
+| Styling   | Tailwind CSS + shadcn/ui |
+| State     | Zustand                  |
+| Charts    | Recharts                 |
+| Build     | electron-vite            |
+| Packaging | electron-builder         |
 
 ## Project Status
 
-🚧 **Status**: Planning Complete, Implementation In Progress
-
-See [docs/03-implementation-copilot-tracker.md](./docs/03-implementation-copilot-tracker.md) for detailed progress.
+✅ **Status**: v1.0.0 Completed
 
 ## Roadmap
 
 - [x] Complete project planning and research
-- [ ] Phase 1: Project setup and scaffolding
-- [ ] Phase 2: Core data types and services
-- [ ] Phase 3: Authentication system
-- [ ] Phase 4: Data fetching and caching
-- [ ] Phase 5: Dashboard UI
-- [ ] Phase 6: System tray integration
-- [ ] Phase 7: Settings and preferences
-- [ ] Phase 8: Notifications
-- [ ] Phase 9: Packaging and distribution
-- [ ] Beta testing
-- [ ] v1.0.0 Release
+- [x] Phase 1: Project setup and scaffolding
+- [x] Phase 2: Core data types and services
+- [x] Phase 3: Authentication system
+- [x] Phase 4: Data fetching and caching
+- [x] Phase 5: Dashboard UI
+- [x] Phase 6: System tray integration
+- [x] Phase 7: Settings and preferences
+- [x] Phase 8: Notifications
+- [x] Phase 9: Packaging and distribution
+- [x] v1.0.0 Release
 
 ## Contributing
 
@@ -153,7 +193,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - 🐛 [Report a bug](https://github.com/bizzkoot/copilot-tracker/issues)
 - 💡 [Request a feature](https://github.com/bizzkoot/copilot-tracker/issues)
-- 📖 [Read the docs](./docs)
 
 ---
 
