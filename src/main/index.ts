@@ -11,6 +11,11 @@ import {
 } from "electron";
 import { join } from "path";
 import Store from "electron-store";
+import dotenv from "dotenv";
+import { config, devLog } from "./config";
+
+// Load environment variables from .env file
+dotenv.config();
 
 const icon = join(__dirname, "../../resources/icon.png");
 
@@ -55,9 +60,6 @@ interface UsagePrediction {
 }
 
 // Constants
-const GITHUB_BILLING_URL =
-  "https://github.com/settings/billing/premium_requests_usage";
-const GITHUB_LOGIN_URL = "https://github.com/login";
 const DEFAULT_SETTINGS: Settings = {
   refreshInterval: 60,
   predictionPeriod: 7,
@@ -285,7 +287,7 @@ function updateTrayMenu(usage?: CopilotUsage | null): void {
   menuItems.push({
     label: "Open Billing",
     click: (): void => {
-      shell.openExternal(GITHUB_BILLING_URL);
+      shell.openExternal(config.githubBillingUrl);
     },
   });
 
@@ -384,7 +386,7 @@ function updateTrayMenu(usage?: CopilotUsage | null): void {
       );
       tray.setImage(iconWithNumbers);
     } catch (e) {
-      console.error("[Tray] Failed to create custom icon:", e);
+      devLog.error("[Tray] Failed to create custom icon:", e);
       // Fallback to default icon (no change)
     }
   }
@@ -502,7 +504,7 @@ function calculatePrediction(
 
   // Step 6: Calculate predicted add-on cost
   const limit = currentUsage.userPremiumRequestEntitlement;
-  const costPerRequest = 0.04;
+  const costPerRequest = config.costPerRequest;
   const predictedBilledAmount =
     predictedMonthlyTotal > limit
       ? (predictedMonthlyTotal - limit) * costPerRequest
@@ -576,7 +578,7 @@ function createTrayIconWithNumbers(
           __dirname,
           "../../resources/tray/trayTemplate.png",
         );
-        console.log("[TrayIcon] Loading icon from:", basePath);
+        devLog.log("[TrayIcon] Loading icon from:", basePath);
         const fs = require("fs");
         trayBaseIconBuffer = fs.readFileSync(basePath);
       }
@@ -589,7 +591,7 @@ function createTrayIconWithNumbers(
       iconLoaded = true;
       // console.log("[TrayIcon] Base icon loaded successfully");
     } catch (e) {
-      console.log("[TrayIcon] Failed to load base icon:", e);
+      devLog.log("[TrayIcon] Failed to load base icon:", e);
     }
 
     // Fallback: draw a simple icon if image didn't load
@@ -608,14 +610,14 @@ function createTrayIconWithNumbers(
       ctx.fillStyle = "#FFFFFF";
       ctx.font = "bold 10px monospace";
       ctx.fillText(costText, size + 2, 12);
-      console.log("[TrayIcon] Drawing cost text:", costText);
+      devLog.log("[TrayIcon] Drawing cost text:", costText);
     } else {
       // Show usage count
       const countText = used.toString();
       ctx.fillStyle = "#FFFFFF";
       ctx.font = "bold 11px monospace";
       ctx.fillText(countText, size + 2, 12);
-      console.log("[TrayIcon] Drawing count text:", countText);
+      devLog.log("[TrayIcon] Drawing count text:", countText);
 
       // Draw small progress circle
       const percentage = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
@@ -652,10 +654,10 @@ function createTrayIconWithNumbers(
 
     const dataUrl = canvasObj.toDataURL();
     const nativeImg = nativeImage.createFromDataURL(dataUrl);
-    console.log("[TrayIcon] Created native image, size:", nativeImg.getSize());
+    devLog.log("[TrayIcon] Created native image, size:", nativeImg.getSize());
     return nativeImg;
   } catch (e) {
-    console.error("[TrayIcon] Failed to create custom icon:", e);
+    devLog.error("[TrayIcon] Failed to create custom icon:", e);
     throw e;
   }
 }
@@ -696,18 +698,18 @@ function createAuthView(): void {
   });
 
   // Navigate to billing page
-  authView.webContents.loadURL(GITHUB_BILLING_URL);
+  authView.webContents.loadURL(config.githubBillingUrl);
 
   // Monitor navigation
   authView.webContents.on("did-navigate", (_event, url) => {
-    console.log("[Auth] Navigated to:", url);
+    devLog.log("[Auth] Navigated to:", url);
     if (url.includes("/login") || url.includes("/session")) {
-      console.log("[Auth] Detected login page");
+      devLog.log("[Auth] Detected login page");
       mainWindow?.webContents.send("auth:state-changed", "unauthenticated");
       stopRefreshTimer(); // Stop timer when logged out
       // Don't auto-show login window here - let the explicit login request handle it
     } else if (url.includes("/settings/billing")) {
-      console.log("[Auth] Detected billing page - user is authenticated");
+      devLog.log("[Auth] Detected billing page - user is authenticated");
       mainWindow?.webContents.send("auth:state-changed", "authenticated");
       hideLoginWindow();
       startRefreshTimer(); // Start timer when authenticated
@@ -725,13 +727,13 @@ function createAuthView(): void {
   // Check auth state after page loads
   authView.webContents.on("did-finish-load", async () => {
     const url = authView?.webContents.getURL() || "";
-    console.log("[Auth] Page finished loading:", url);
+    devLog.log("[Auth] Page finished loading:", url);
     if (url.includes("/login") || url.includes("/session")) {
-      console.log("[Auth] Login page loaded");
+      devLog.log("[Auth] Login page loaded");
       mainWindow?.webContents.send("auth:state-changed", "unauthenticated");
       stopRefreshTimer(); // Ensure timer is stopped when logged out
     } else if (url.includes("/settings/billing")) {
-      console.log("[Auth] Billing page loaded - authenticated");
+      devLog.log("[Auth] Billing page loaded - authenticated");
       mainWindow?.webContents.send("auth:state-changed", "authenticated");
       hideLoginWindow();
       // Only start timer if not already running
@@ -754,7 +756,7 @@ function showLoginWindow(): void {
       authWindow.show();
       authWindow.focus();
       // Always reload the login URL to ensure fresh state
-      authWindow.loadURL(GITHUB_LOGIN_URL);
+      authWindow.loadURL(config.githubLoginUrl);
       return;
     }
   }
@@ -790,7 +792,7 @@ function showLoginWindow(): void {
 
   const handleAuthWindowNavigation = (): void => {
     const url = authWindow?.webContents.getURL() || "";
-    console.log("[Auth] AuthWindow navigation:", url);
+    devLog.log("[Auth] AuthWindow navigation:", url);
 
     // If on login page, just record that we've seen it
     if (url.includes("/login") || url.includes("/session")) {
@@ -801,15 +803,15 @@ function showLoginWindow(): void {
     // Only load billing URL if we've previously seen the login page
     // and now we're on a different page (user logged in)
     if (hasNavigatedFromLogin && authView) {
-      console.log("[Auth] User logged in, loading billing page");
-      authView.webContents.loadURL(GITHUB_BILLING_URL);
+      devLog.log("[Auth] User logged in, loading billing page");
+      authView.webContents.loadURL(config.githubBillingUrl);
     }
   };
 
   authWindow.webContents.on("did-navigate", handleAuthWindowNavigation);
   authWindow.webContents.on("did-finish-load", handleAuthWindowNavigation);
 
-  authWindow.loadURL(GITHUB_LOGIN_URL);
+  authWindow.loadURL(config.githubLoginUrl);
 }
 
 function hideLoginWindow(): void {
@@ -827,15 +829,15 @@ async function getCustomerId(): Promise<number | null> {
   // Method 0: Extract from URL query parameters
   try {
     const url = authView.webContents.getURL();
-    console.log("[Auth] Getting customer ID from URL:", url);
+    devLog.log("[Auth] Getting customer ID from URL:", url);
     const match = url.match(/[?&]customer=(\d+)/);
     if (match) {
       customerId = parseInt(match[1], 10);
-      console.log("[Auth] Found customer ID in URL:", customerId);
+      devLog.log("[Auth] Found customer ID in URL:", customerId);
       return customerId;
     }
   } catch (e) {
-    console.error("[Auth] Method 0 (URL) failed:", e);
+    devLog.error("[Auth] Method 0 (URL) failed:", e);
   }
 
   // Method 1: API call
@@ -860,12 +862,12 @@ async function getCustomerId(): Promise<number | null> {
       return customerId;
     }
   } catch (e) {
-    console.error("Method 1 failed:", e);
+    devLog.error("Method 1 failed:", e);
   }
 
   // Method 2: DOM extraction from script tag (matching copilot-usage-monitor Swift implementation)
   try {
-    console.log("[Auth] Trying Method 2: DOM extraction from script tag");
+    devLog.log("[Auth] Trying Method 2: DOM extraction from script tag");
     const result = await authView.webContents.executeJavaScript(`
       (function() {
         try {
@@ -883,18 +885,18 @@ async function getCustomerId(): Promise<number | null> {
         }
       })()
     `);
-    console.log("[Auth] Method 2 result:", result);
+    devLog.log("[Auth] Method 2 result:", result);
 
     // Check if result is a valid customer ID (numeric string)
     if (result && /^\d+$/.test(result)) {
       customerId = parseInt(result, 10);
-      console.log("[Auth] Method 2 success - Customer ID:", customerId);
+      devLog.log("[Auth] Method 2 success - Customer ID:", customerId);
       return customerId;
     } else {
-      console.log("[Auth] Method 2 failed:", result);
+      devLog.log("[Auth] Method 2 failed:", result);
     }
   } catch (e) {
-    console.error("[Auth] Method 2 exception:", e);
+    devLog.error("[Auth] Method 2 exception:", e);
   }
 
   // Method 3: Regex
@@ -920,7 +922,7 @@ async function getCustomerId(): Promise<number | null> {
       return customerId;
     }
   } catch (e) {
-    console.error("Method 3 failed:", e);
+    devLog.error("Method 3 failed:", e);
   }
 
   return null;
@@ -929,12 +931,12 @@ async function getCustomerId(): Promise<number | null> {
 async function fetchUsageData(): Promise<void> {
   if (!authView || !mainWindow) return;
 
-  console.log("[Usage] Starting fetchUsageData");
+  devLog.log("[Usage] Starting fetchUsageData");
   mainWindow.webContents.send("usage:loading", true);
 
   try {
     const id = await getCustomerId();
-    console.log("[Usage] Got customer ID:", id);
+    devLog.log("[Usage] Got customer ID:", id);
     if (!id) {
       mainWindow.webContents.send("usage:data", {
         success: false,
@@ -944,7 +946,7 @@ async function fetchUsageData(): Promise<void> {
     }
 
     // Fetch usage card
-    console.log("[Usage] Fetching usage card for customer:", id);
+    devLog.log("[Usage] Fetching usage card for customer:", id);
     const usageResult = await authView.webContents.executeJavaScript(`
       (async function() {
         try {
@@ -978,7 +980,7 @@ async function fetchUsageData(): Promise<void> {
     }
 
     // Fetch usage history
-    console.log("[Usage] Fetching usage history");
+    devLog.log("[Usage] Fetching usage history");
     const historyResult = await authView.webContents.executeJavaScript(`
       (async function() {
         try {
@@ -998,7 +1000,7 @@ async function fetchUsageData(): Promise<void> {
     `);
 
     const historyParsed = JSON.parse(historyResult);
-    console.log(
+    devLog.log(
       "[Usage] History parsed:",
       historyParsed.success ? "success" : "failed",
     );
@@ -1006,52 +1008,52 @@ async function fetchUsageData(): Promise<void> {
     // DEBUG: Log raw history data structure
     if (historyParsed.success && historyParsed.data) {
       const rawHistory = historyParsed.data;
-      console.log(
+      devLog.log(
         "[Usage] History data keys:",
         Object.keys(rawHistory).join(", "),
       );
-      console.log(
+      devLog.log(
         "[Usage] History has 'table' field?:",
         Object.prototype.hasOwnProperty.call(rawHistory, "table"),
       );
-      console.log(
+      devLog.log(
         "[Usage] History has 'rows' field?:",
         Object.prototype.hasOwnProperty.call(rawHistory, "rows"),
       );
 
       // Check for nested table.rows structure
       if (rawHistory.table && rawHistory.table.rows) {
-        console.log("[Usage] Found table.rows structure");
-        console.log(
+        devLog.log("[Usage] Found table.rows structure");
+        devLog.log(
           "[Usage] Number of history rows:",
           rawHistory.table.rows.length,
         );
         if (rawHistory.table.rows.length > 0) {
-          console.log(
+          devLog.log(
             "[Usage] First row sample:",
             JSON.stringify(rawHistory.table.rows[0]).slice(0, 200),
           );
         }
       } else if (rawHistory.rows) {
-        console.log("[Usage] Number of history rows:", rawHistory.rows.length);
+        devLog.log("[Usage] Number of history rows:", rawHistory.rows.length);
         if (rawHistory.rows.length > 0) {
-          console.log(
+          devLog.log(
             "[Usage] First row sample:",
             JSON.stringify(rawHistory.rows[0]).slice(0, 200),
           );
         }
       }
     } else {
-      console.log("[Usage] History data missing or failed:", historyParsed);
+      devLog.log("[Usage] History data missing or failed:", historyParsed);
     }
 
     // Parse usage data
     const usageData = usageParsed.data;
-    console.log(
+    devLog.log(
       "[Usage] Raw usage data keys:",
       Object.keys(usageData).join(", "),
     );
-    console.log("[Usage] Sample values:", {
+    devLog.log("[Usage] Sample values:", {
       netBilledAmount:
         usageData.netBilledAmount ?? usageData.net_billed_amount ?? "missing",
       discountQuantity:
@@ -1077,7 +1079,7 @@ async function fetchUsageData(): Promise<void> {
         usageData.filtered_user_premium_request_entitlement ??
         0,
     };
-    console.log("[Usage] Parsed usage:", usage);
+    devLog.log("[Usage] Parsed usage:", usage);
 
     // Parse history data - handle nested table.rows.cells structure
     const historyData = historyParsed.success
@@ -1168,7 +1170,7 @@ async function fetchUsageData(): Promise<void> {
       lastFetched: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("Failed to fetch usage:", error);
+    devLog.error("Failed to fetch usage:", error);
     mainWindow.webContents.send("usage:data", {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
@@ -1214,7 +1216,7 @@ function setupIpcHandlers(): void {
       // and reload billing in authView after successful login
       showLoginWindow();
     } catch (error) {
-      console.error("Auth login failed:", error);
+      devLog.error("Auth login failed:", error);
       mainWindow?.webContents.send("auth:state-changed", "error");
     }
   });
@@ -1243,7 +1245,7 @@ function setupIpcHandlers(): void {
         mainWindow?.webContents.send("auth:state-changed", "checking");
       }
     } catch (error) {
-      console.error("Auth check failed:", error);
+      devLog.error("Auth check failed:", error);
       mainWindow?.webContents.send("auth:state-changed", "error");
     }
   });
@@ -1294,17 +1296,17 @@ function setupIpcHandlers(): void {
 function registerShortcuts(): void {
   // CommandOrControl+R: Refresh usage data
   globalShortcut.register("CommandOrControl+R", () => {
-    console.log("[Shortcuts] Refresh triggered");
+    devLog.log("[Shortcuts] Refresh triggered");
     fetchUsageData();
   });
 
   // CommandOrControl+B: Open GitHub billing page
   globalShortcut.register("CommandOrControl+B", () => {
-    console.log("[Shortcuts] Open Billing triggered");
-    shell.openExternal(GITHUB_BILLING_URL);
+    devLog.log("[Shortcuts] Open Billing triggered");
+    shell.openExternal(config.githubBillingUrl);
   });
 
-  console.log("[Shortcuts] Registered keyboard shortcuts");
+  devLog.log("[Shortcuts] Registered keyboard shortcuts");
 }
 
 /**
@@ -1312,7 +1314,7 @@ function registerShortcuts(): void {
  */
 function unregisterAllShortcuts(): void {
   globalShortcut.unregisterAll();
-  console.log("[Shortcuts] Unregistered all keyboard shortcuts");
+  devLog.log("[Shortcuts] Unregistered all keyboard shortcuts");
 }
 
 app.whenReady().then(() => {

@@ -69,6 +69,8 @@ export const PREDICTION_PERIODS: Record<number, PredictionWeights> = {
 };
 
 // Cost per add-on request
+// Note: The main process uses the actual configured value from .env
+// This default is only used for renderer-side calculations
 export const COST_PER_REQUEST = 0.04;
 
 // ============= Computed Helper Functions =============
