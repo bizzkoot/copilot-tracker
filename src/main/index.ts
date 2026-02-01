@@ -7,7 +7,6 @@ import {
   Menu,
   nativeImage,
   WebContentsView,
-  globalShortcut,
 } from "electron";
 import { join } from "path";
 import Store from "electron-store";
@@ -119,10 +118,11 @@ function createWindow(): void {
   });
 
   mainWindow.on("close", (event) => {
-    // On macOS, hide window instead of closing
+    // On macOS, hide window and app from dock instead of closing
     if (process.platform === "darwin") {
       event.preventDefault();
       mainWindow?.hide();
+      app.hide(); // Also hide from dock so only tray icon remains visible
     }
   });
 
@@ -1298,34 +1298,6 @@ function setupIpcHandlers(): void {
 
 // ============= App Lifecycle =============
 
-/**
- * Register global keyboard shortcuts
- * Matches Swift app's keyboard shortcuts
- */
-function registerShortcuts(): void {
-  // CommandOrControl+R: Refresh usage data
-  globalShortcut.register("CommandOrControl+R", () => {
-    devLog.log("[Shortcuts] Refresh triggered");
-    fetchUsageData();
-  });
-
-  // CommandOrControl+B: Open GitHub billing page
-  globalShortcut.register("CommandOrControl+B", () => {
-    devLog.log("[Shortcuts] Open Billing triggered");
-    shell.openExternal(config.githubBillingUrl);
-  });
-
-  devLog.log("[Shortcuts] Registered keyboard shortcuts");
-}
-
-/**
- * Unregister all keyboard shortcuts
- */
-function unregisterAllShortcuts(): void {
-  globalShortcut.unregisterAll();
-  devLog.log("[Shortcuts] Unregistered all keyboard shortcuts");
-}
-
 app.whenReady().then(() => {
   // Set app user model id for Windows
   app.setAppUserModelId("com.copilot-tracker");
@@ -1349,9 +1321,6 @@ app.whenReady().then(() => {
   createTray();
   createAuthView();
 
-  // Register keyboard shortcuts
-  registerShortcuts();
-
   // Don't start refresh timer yet - wait for auth state
   // Timer will be started when auth state becomes 'authenticated'
 
@@ -1374,9 +1343,6 @@ app.on("window-all-closed", () => {
 
 // Cleanup on quit
 app.on("before-quit", () => {
-  // Unregister shortcuts
-  unregisterAllShortcuts();
-
   stopRefreshTimer();
 
   // Destroy auth view using the centralized function
