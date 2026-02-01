@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/bizzkoot/copilot-tracker/compare/v1.1.0...v1.1.1) (2026-02-01)
+
+
+### Bug Fixes
+
+* upload release assets using tag_name output instead of github.ref ([4f68eb6](https://github.com/bizzkoot/copilot-tracker/commit/4f68eb6233bedd6dbc2c65ec84408b5a8cff2b65))
+
 ## [1.1.0](https://github.com/bizzkoot/copilot-tracker/compare/v1.0.0...v1.1.0) (2026-02-01)
 
 
