@@ -5,8 +5,9 @@
  */
 
 // GitHub billing page URLs
-export const GITHUB_BILLING_URL = 'https://github.com/settings/billing/premium_requests_usage'
-export const GITHUB_LOGIN_URL = 'https://github.com/login'
+export const GITHUB_BILLING_URL =
+  "https://github.com/settings/billing/premium_requests_usage";
+export const GITHUB_LOGIN_URL = "https://github.com/login";
 
 /**
  * JavaScript scripts to be injected into GitHub WebView
@@ -169,26 +170,27 @@ export const API_SCRIPTS = {
         return JSON.stringify({ authenticated: false, error: error.message });
       }
     })()
-  `
-}
+  `,
+};
 
 /**
  * Parse usage card response into CopilotUsage type
  */
 export function parseUsageCardResponse(data: {
-  net_billed_amount?: number
-  net_quantity?: number
-  discount_quantity?: number
-  user_premium_request_entitlement?: number
-  filtered_user_premium_request_entitlement?: number
+  net_billed_amount?: number;
+  net_quantity?: number;
+  discount_quantity?: number;
+  user_premium_request_entitlement?: number;
+  filtered_user_premium_request_entitlement?: number;
 }) {
   return {
     netBilledAmount: data.net_billed_amount ?? 0,
     netQuantity: data.net_quantity ?? 0,
     discountQuantity: data.discount_quantity ?? 0,
     userPremiumRequestEntitlement: data.user_premium_request_entitlement ?? 0,
-    filteredUserPremiumRequestEntitlement: data.filtered_user_premium_request_entitlement ?? 0
-  }
+    filteredUserPremiumRequestEntitlement:
+      data.filtered_user_premium_request_entitlement ?? 0,
+  };
 }
 
 /**
@@ -196,23 +198,23 @@ export function parseUsageCardResponse(data: {
  */
 export function parseUsageTableResponse(data: {
   rows?: Array<{
-    date: string
-    included_requests?: number
-    billed_requests?: number
-    gross_amount?: number
-    billed_amount?: number
-  }>
+    date: string;
+    included_requests?: number;
+    billed_requests?: number;
+    gross_amount?: number;
+    billed_amount?: number;
+  }>;
 }) {
   const days = (data.rows ?? []).map((row) => ({
     date: new Date(row.date),
     includedRequests: row.included_requests ?? 0,
     billedRequests: row.billed_requests ?? 0,
     grossAmount: row.gross_amount ?? 0,
-    billedAmount: row.billed_amount ?? 0
-  }))
+    billedAmount: row.billed_amount ?? 0,
+  }));
 
   return {
     fetchedAt: new Date(),
-    days
-  }
+    days,
+  };
 }

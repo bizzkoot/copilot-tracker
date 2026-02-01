@@ -1,11 +1,11 @@
-import { Layout } from './components/layout/Layout'
-import { useTheme } from './hooks/useTheme'
+import { Layout } from "./components/layout/Layout";
+import { useTheme } from "./hooks/useTheme";
 
 function App(): JSX.Element {
   // Initialize theme
-  useTheme()
+  useTheme();
 
-  return <Layout />
+  return <Layout />;
 }
 
-export default App
+export default App;

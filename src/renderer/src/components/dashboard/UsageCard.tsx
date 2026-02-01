@@ -3,22 +3,22 @@
  * Displays current Copilot usage with progress bar
  */
 
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
-import { Progress } from '../ui/progress'
-import { Skeleton } from '../ui/skeleton'
-import { Tooltip } from '../ui/tooltip'
-import type { CopilotUsage } from '@renderer/types/usage'
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { Progress } from "../ui/progress";
+import { Skeleton } from "../ui/skeleton";
+import { Tooltip } from "../ui/tooltip";
+import type { CopilotUsage } from "@renderer/types/usage";
 import {
   getUsedRequests,
   getLimitRequests,
   getUsagePercentage,
   getProgressColor,
-  formatCurrency
-} from '@renderer/types/usage'
+  formatCurrency,
+} from "@renderer/types/usage";
 
 interface UsageCardProps {
-  usage: CopilotUsage | null
-  isLoading?: boolean
+  usage: CopilotUsage | null;
+  isLoading?: boolean;
 }
 
 export function UsageCard({ usage, isLoading }: UsageCardProps) {
@@ -34,7 +34,7 @@ export function UsageCard({ usage, isLoading }: UsageCardProps) {
           <Skeleton className="h-4 w-24" />
         </CardContent>
       </Card>
-    )
+    );
   }
 
   if (!usage) {
@@ -47,14 +47,14 @@ export function UsageCard({ usage, isLoading }: UsageCardProps) {
           <p className="text-muted-foreground">No usage data available</p>
         </CardContent>
       </Card>
-    )
+    );
   }
 
-  const used = getUsedRequests(usage)
-  const limit = getLimitRequests(usage)
-  const percentage = getUsagePercentage(usage)
-  const progressColor = getProgressColor(percentage)
-  const addOnCost = usage.netBilledAmount
+  const used = getUsedRequests(usage);
+  const limit = getLimitRequests(usage);
+  const percentage = getUsagePercentage(usage);
+  const progressColor = getProgressColor(percentage);
+  const addOnCost = usage.netBilledAmount;
 
   return (
     <Card>
@@ -83,8 +83,12 @@ export function UsageCard({ usage, isLoading }: UsageCardProps) {
         {/* Usage Numbers */}
         <div className="flex items-baseline gap-2">
           <span className="text-3xl font-bold">{used.toLocaleString()}</span>
-          <span className="text-muted-foreground">/ {limit.toLocaleString()}</span>
-          <span className={`text-sm font-medium ${percentage >= 90 ? 'text-red-500' : percentage >= 75 ? 'text-yellow-500' : 'text-green-500'}`}>
+          <span className="text-muted-foreground">
+            / {limit.toLocaleString()}
+          </span>
+          <span
+            className={`text-sm font-medium ${percentage >= 90 ? "text-red-500" : percentage >= 75 ? "text-yellow-500" : "text-green-500"}`}
+          >
             ({percentage.toFixed(1)}%)
           </span>
         </div>
@@ -102,5 +106,5 @@ export function UsageCard({ usage, isLoading }: UsageCardProps) {
         )}
       </CardContent>
     </Card>
-  )
+  );
 }

@@ -90,6 +90,7 @@ let customerId: number | null = null;
 let refreshTimer: NodeJS.Timeout | null = null;
 let usageHistory: UsageHistory | null = null;
 let usagePrediction: UsagePrediction | null = null;
+let trayBaseIconBuffer: Buffer | null = null;
 
 // ============= Window Management =============
 
@@ -560,29 +561,33 @@ function createTrayIconWithNumbers(
 ): Electron.NativeImage {
   try {
     const size = 16;
-    const { createCanvas, loadImage } = require("canvas");
+    const { createCanvas } = require("canvas");
     const canvasObj = createCanvas(size * 2, size); // Double width for icon + text
     const ctx = canvasObj.getContext("2d");
 
     // Clear background (transparent)
     ctx.clearRect(0, 0, size * 2, size);
 
-    // Load base icon - use synchronous version with proper template
+    // Load base icon - use cached buffer if available, otherwise read from disk
     let iconLoaded = false;
     try {
-      const basePath = join(__dirname, "../../resources/tray/trayTemplate.png");
-      console.log("[TrayIcon] Loading icon from:", basePath);
+      if (!trayBaseIconBuffer) {
+        const basePath = join(
+          __dirname,
+          "../../resources/tray/trayTemplate.png",
+        );
+        console.log("[TrayIcon] Loading icon from:", basePath);
+        const fs = require("fs");
+        trayBaseIconBuffer = fs.readFileSync(basePath);
+      }
 
-      // Load and draw the icon synchronously
-      const fs = require("fs");
-      const imageBuffer = fs.readFileSync(basePath);
       const img = new (require("canvas").Image)();
-      img.src = imageBuffer;
+      img.src = trayBaseIconBuffer;
 
       // Draw icon at 16x16 size
       ctx.drawImage(img, 0, 0, size, size);
       iconLoaded = true;
-      console.log("[TrayIcon] Base icon loaded successfully");
+      // console.log("[TrayIcon] Base icon loaded successfully");
     } catch (e) {
       console.log("[TrayIcon] Failed to load base icon:", e);
     }
@@ -661,6 +666,7 @@ function destroyAuthView(): void {
   if (!authView) return;
 
   // Remove all event listeners
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const wc = (authView as any).webContents as Electron.WebContents;
   if (wc && !wc.isDestroyed()) {
     wc.removeAllListeners("did-navigate");
@@ -1006,11 +1012,11 @@ async function fetchUsageData(): Promise<void> {
       );
       console.log(
         "[Usage] History has 'table' field?:",
-        rawHistory.hasOwnProperty("table"),
+        Object.prototype.hasOwnProperty.call(rawHistory, "table"),
       );
       console.log(
         "[Usage] History has 'rows' field?:",
-        rawHistory.hasOwnProperty("rows"),
+        Object.prototype.hasOwnProperty.call(rawHistory, "rows"),
       );
 
       // Check for nested table.rows structure
@@ -1083,12 +1089,14 @@ async function fetchUsageData(): Promise<void> {
 
     const history: UsageHistory = {
       fetchedAt: new Date().toISOString(),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       days: rawRows.map((row: any) => {
         // Handle Swift-style nested cells structure
         if (row.cells && Array.isArray(row.cells)) {
           const cells = row.cells;
 
           // Helper to parse cell value
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const parseCell = (cell: any): number => {
             if (!cell) return 0;
             const value = cell.value || cell.sortValue || "";

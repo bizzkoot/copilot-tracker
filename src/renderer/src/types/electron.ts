@@ -3,86 +3,92 @@
  * Type definitions for IPC communication between main and renderer
  */
 
-import type { CopilotUsage, UsageHistory, UsagePrediction } from './usage'
-import type { Settings } from './settings'
+import type { CopilotUsage, UsageHistory, UsagePrediction } from "./usage";
+import type { Settings } from "./settings";
 
 // Auth state
-export type AuthState = 'unknown' | 'checking' | 'authenticated' | 'unauthenticated' | 'error'
+export type AuthState =
+  | "unknown"
+  | "checking"
+  | "authenticated"
+  | "unauthenticated"
+  | "error";
 
 // Customer ID result
 export interface CustomerIdResult {
-  success: boolean
-  id?: number
-  error?: string
+  success: boolean;
+  id?: number;
+  error?: string;
 }
 
 // Usage fetch result
 export interface UsageFetchResult {
-  success: boolean
-  usage?: CopilotUsage
-  history?: UsageHistory
-  prediction?: UsagePrediction
-  error?: string
+  success: boolean;
+  usage?: CopilotUsage;
+  history?: UsageHistory;
+  prediction?: UsagePrediction;
+  error?: string;
 }
 
 // IPC Events from main to renderer
 export interface MainToRendererEvents {
-  'auth:state-changed': (state: AuthState) => void
-  'auth:session-expired': () => void
-  'auth:ready': () => void
-  'usage:data': (data: UsageFetchResult) => void
-  'usage:loading': (loading: boolean) => void
-  'settings:changed': (settings: Settings) => void
+  "auth:state-changed": (state: AuthState) => void;
+  "auth:session-expired": () => void;
+  "auth:ready": () => void;
+  "usage:data": (data: UsageFetchResult) => void;
+  "usage:loading": (loading: boolean) => void;
+  "settings:changed": (settings: Settings) => void;
 }
 
 // IPC Events from renderer to main
 export interface RendererToMainEvents {
-  'auth:login': () => void
-  'auth:logout': () => void
-  'auth:check': () => void
-  'usage:fetch': () => void
-  'usage:refresh': () => void
-  'settings:get': () => Settings
-  'settings:set': (settings: Partial<Settings>) => void
-  'settings:reset': () => void
-  'app:quit': () => void
-  'window:show': () => void
-  'window:hide': () => void
+  "auth:login": () => void;
+  "auth:logout": () => void;
+  "auth:check": () => void;
+  "usage:fetch": () => void;
+  "usage:refresh": () => void;
+  "settings:get": () => Settings;
+  "settings:set": (settings: Partial<Settings>) => void;
+  "settings:reset": () => void;
+  "app:quit": () => void;
+  "window:show": () => void;
+  "window:hide": () => void;
 }
 
 // Electron API exposed to renderer
 export interface ElectronAPI {
   // Auth
-  login: () => void
-  logout: () => void
-  checkAuth: () => void
-  onAuthStateChanged: (callback: (state: AuthState) => void) => () => void
-  onSessionExpired: (callback: () => void) => () => void
+  login: () => void;
+  logout: () => void;
+  checkAuth: () => void;
+  onAuthStateChanged: (callback: (state: AuthState) => void) => () => void;
+  onSessionExpired: (callback: () => void) => () => void;
 
   // Usage
-  fetchUsage: () => void
-  refreshUsage: () => void
-  onUsageData: (callback: (data: UsageFetchResult) => void) => () => void
-  onUsageLoading: (callback: (loading: boolean) => void) => () => void
+  fetchUsage: () => void;
+  refreshUsage: () => void;
+  onUsageData: (callback: (data: UsageFetchResult) => void) => () => void;
+  onUsageLoading: (callback: (loading: boolean) => void) => () => void;
 
   // Settings
-  getSettings: () => Promise<Settings>
-  setSettings: (settings: Partial<Settings>) => Promise<void>
-  resetSettings: () => Promise<void>
-  onSettingsChanged: (callback: (settings: Settings) => void) => () => void
+  getSettings: () => Promise<Settings>;
+  setSettings: (settings: Partial<Settings>) => Promise<void>;
+  resetSettings: () => Promise<void>;
+  onSettingsChanged: (callback: (settings: Settings) => void) => () => void;
 
   // App
-  quit: () => void
-  showWindow: () => void
-  hideWindow: () => void
-  
+  quit: () => void;
+  showWindow: () => void;
+  hideWindow: () => void;
+  onNavigate: (callback: (route: string) => void) => () => void;
+
   // Platform info
-  platform: NodeJS.Platform
+  platform: NodeJS.Platform;
 }
 
 // Window API for global access
 declare global {
   interface Window {
-    electron: ElectronAPI
+    electron: ElectronAPI;
   }
 }

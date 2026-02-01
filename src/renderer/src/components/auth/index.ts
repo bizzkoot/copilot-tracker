@@ -2,4 +2,4 @@
  * Auth Components Index
  */
 
-export * from './LoginPrompt'
+export * from "./LoginPrompt";

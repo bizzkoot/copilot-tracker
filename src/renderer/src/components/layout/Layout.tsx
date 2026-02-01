@@ -3,7 +3,7 @@
  * Main layout wrapper with header and content area
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Header } from "./Header";
 import { Dashboard } from "../dashboard/Dashboard";
 import { Settings } from "../settings/Settings";
@@ -15,6 +15,17 @@ type View = "dashboard" | "settings";
 export function Layout() {
   const [currentView, setCurrentView] = useState<View>("dashboard");
   const { needsLogin, isLoading } = useAuth();
+
+  useEffect(() => {
+    const cleanup = window.electron.onNavigate((route: string) => {
+      if (route === "settings") {
+        setCurrentView("settings");
+      } else if (route === "dashboard") {
+        setCurrentView("dashboard");
+      }
+    });
+    return cleanup;
+  }, []);
 
   const handleSettingsClick = () => {
     setCurrentView(currentView === "settings" ? "dashboard" : "settings");

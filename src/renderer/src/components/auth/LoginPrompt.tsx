@@ -3,13 +3,19 @@
  * Shown when user needs to authenticate with GitHub
  */
 
-import { Button } from '../ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
-import { useAuth } from '@renderer/hooks/useAuth'
-import { Github, Loader2 } from 'lucide-react'
+import { Button } from "../ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "../ui/card";
+import { useAuth } from "@renderer/hooks/useAuth";
+import { Github, Loader2 } from "lucide-react";
 
 export function LoginPrompt() {
-  const { login, isLoading, hasError } = useAuth()
+  const { login, isLoading, hasError } = useAuth();
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -33,7 +39,8 @@ export function LoginPrompt() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground text-center">
-            Sign in with your GitHub account to track your Copilot usage, view predictions, and get notified before exceeding your quota.
+            Sign in with your GitHub account to track your Copilot usage, view
+            predictions, and get notified before exceeding your quota.
           </p>
 
           {hasError && (
@@ -64,10 +71,11 @@ export function LoginPrompt() {
           </Button>
 
           <p className="text-xs text-muted-foreground text-center">
-            This app uses secure GitHub OAuth. Your credentials are never stored.
+            This app uses secure GitHub OAuth. Your credentials are never
+            stored.
           </p>
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

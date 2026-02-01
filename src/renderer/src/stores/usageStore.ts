@@ -3,47 +3,51 @@
  * Zustand store for managing usage data state
  */
 
-import { create } from 'zustand'
-import type { CopilotUsage, UsageHistory, UsagePrediction } from '../types/usage'
-import type { AuthState } from '../types/electron'
+import { create } from "zustand";
+import type {
+  CopilotUsage,
+  UsageHistory,
+  UsagePrediction,
+} from "../types/usage";
+import type { AuthState } from "../types/electron";
 
 interface UsageState {
   // Auth state
-  authState: AuthState
-  setAuthState: (state: AuthState) => void
+  authState: AuthState;
+  setAuthState: (state: AuthState) => void;
 
   // Usage data
-  usage: CopilotUsage | null
-  history: UsageHistory | null
-  prediction: UsagePrediction | null
-  setUsage: (usage: CopilotUsage | null) => void
-  setHistory: (history: UsageHistory | null) => void
-  setPrediction: (prediction: UsagePrediction | null) => void
+  usage: CopilotUsage | null;
+  history: UsageHistory | null;
+  prediction: UsagePrediction | null;
+  setUsage: (usage: CopilotUsage | null) => void;
+  setHistory: (history: UsageHistory | null) => void;
+  setPrediction: (prediction: UsagePrediction | null) => void;
   setUsageData: (data: {
-    usage?: CopilotUsage | null
-    history?: UsageHistory | null
-    prediction?: UsagePrediction | null
-  }) => void
+    usage?: CopilotUsage | null;
+    history?: UsageHistory | null;
+    prediction?: UsagePrediction | null;
+  }) => void;
 
   // Loading state
-  isLoading: boolean
-  setIsLoading: (loading: boolean) => void
+  isLoading: boolean;
+  setIsLoading: (loading: boolean) => void;
 
   // Error state
-  error: string | null
-  setError: (error: string | null) => void
+  error: string | null;
+  setError: (error: string | null) => void;
 
   // Last updated timestamp
-  lastUpdated: Date | null
-  setLastUpdated: (date: Date | null) => void
+  lastUpdated: Date | null;
+  setLastUpdated: (date: Date | null) => void;
 
   // Reset all data
-  reset: () => void
+  reset: () => void;
 }
 
 export const useUsageStore = create<UsageState>((set) => ({
   // Auth state
-  authState: 'unknown',
+  authState: "unknown",
   setAuthState: (authState) => set({ authState }),
 
   // Usage data
@@ -57,9 +61,10 @@ export const useUsageStore = create<UsageState>((set) => ({
     set((state) => ({
       usage: data.usage !== undefined ? data.usage : state.usage,
       history: data.history !== undefined ? data.history : state.history,
-      prediction: data.prediction !== undefined ? data.prediction : state.prediction,
+      prediction:
+        data.prediction !== undefined ? data.prediction : state.prediction,
       lastUpdated: new Date(),
-      error: null
+      error: null,
     })),
 
   // Loading state
@@ -77,23 +82,24 @@ export const useUsageStore = create<UsageState>((set) => ({
   // Reset all data
   reset: () =>
     set({
-      authState: 'unknown',
+      authState: "unknown",
       usage: null,
       history: null,
       prediction: null,
       isLoading: false,
       error: null,
-      lastUpdated: null
-    })
-}))
+      lastUpdated: null,
+    }),
+}));
 
 // Selectors for commonly used derived state
-export const useAuthState = () => useUsageStore((state) => state.authState)
-export const useIsAuthenticated = () => useUsageStore((state) => state.authState === 'authenticated')
-export const useIsLoading = () => useUsageStore((state) => state.isLoading)
+export const useAuthState = () => useUsageStore((state) => state.authState);
+export const useIsAuthenticated = () =>
+  useUsageStore((state) => state.authState === "authenticated");
+export const useIsLoading = () => useUsageStore((state) => state.isLoading);
 export const useUsageData = () =>
   useUsageStore((state) => ({
     usage: state.usage,
     history: state.history,
-    prediction: state.prediction
-  }))
+    prediction: state.prediction,
+  }));
