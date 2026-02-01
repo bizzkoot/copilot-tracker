@@ -95,6 +95,16 @@ let trayBaseIconBuffer: Buffer | null = null;
 
 // ============= Window Management =============
 
+function showMainWindow(): void {
+  if (!mainWindow) return;
+  // On macOS, switch to regular policy so app appears in dock when window is visible
+  if (process.platform === "darwin") {
+    app.setActivationPolicy("regular");
+  }
+  mainWindow.show();
+  mainWindow.focus();
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 900,
@@ -118,11 +128,13 @@ function createWindow(): void {
   });
 
   mainWindow.on("close", (event) => {
-    // On macOS, hide window and app from dock instead of closing
+    // On all platforms, hide window instead of closing (tray app behavior)
+    event.preventDefault();
+    mainWindow?.hide();
+
+    // On macOS, switch to accessory policy to hide from dock (tray only mode)
     if (process.platform === "darwin") {
-      event.preventDefault();
-      mainWindow?.hide();
-      app.hide(); // Also hide from dock so only tray icon remains visible
+      app.setActivationPolicy("accessory");
     }
   });
 
@@ -332,8 +344,7 @@ function updateTrayMenu(usage?: CopilotUsage | null): void {
   menuItems.push({
     label: "Settings",
     click: (): void => {
-      mainWindow?.show();
-      mainWindow?.focus();
+      showMainWindow();
       mainWindow?.webContents.send("navigate", "settings");
     },
   });
@@ -564,9 +575,21 @@ function createTrayIconWithNumbers(
   try {
     const size = 16;
     // Try to import canvas, with fallback if not available
-    let createCanvas: any;
+    interface CanvasModule {
+      createCanvas: (
+        width: number,
+        height: number,
+      ) => {
+        getContext: (contextId: "2d") => CanvasRenderingContext2D;
+        toDataURL: () => string;
+      };
+      Image: new () => {
+        src: Buffer;
+      };
+    }
+    let createCanvas: CanvasModule["createCanvas"] | undefined;
     try {
-      const canvasModule = require("canvas");
+      const canvasModule = require("canvas") as CanvasModule;
       createCanvas = canvasModule.createCanvas;
     } catch (e) {
       devLog.error("[TrayIcon] Canvas module not available:", e);
@@ -1280,19 +1303,23 @@ function setupIpcHandlers(): void {
       startRefreshTimer();
     }
 
+    // Update tray menu to reflect new settings (e.g., launchAtLogin checkbox)
+    updateTrayMenu();
+
     mainWindow?.webContents.send("settings:changed", updated);
   });
   ipcMain.handle("settings:reset", () => {
     store.set("settings", DEFAULT_SETTINGS);
+    // Reset login item settings
+    app.setLoginItemSettings({ openAtLogin: DEFAULT_SETTINGS.launchAtLogin });
+    // Update tray menu to reflect reset settings
+    updateTrayMenu();
     mainWindow?.webContents.send("settings:changed", DEFAULT_SETTINGS);
   });
 
   // App
   ipcMain.on("app:quit", () => app.quit());
-  ipcMain.on("window:show", () => {
-    mainWindow?.show();
-    mainWindow?.focus();
-  });
+  ipcMain.on("window:show", () => showMainWindow());
   ipcMain.on("window:hide", () => mainWindow?.hide());
 }
 
@@ -1321,6 +1348,14 @@ app.whenReady().then(() => {
   createTray();
   createAuthView();
 
+  // Sync launchAtLogin setting with macOS login items
+  const settings = store.get("settings") as Settings;
+  app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin });
+  devLog.log(
+    "[App] Launch at login:",
+    settings.launchAtLogin ? "enabled" : "disabled",
+  );
+
   // Don't start refresh timer yet - wait for auth state
   // Timer will be started when auth state becomes 'authenticated'
 
@@ -1329,7 +1364,7 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     } else {
-      mainWindow?.show();
+      showMainWindow();
     }
   });
 });

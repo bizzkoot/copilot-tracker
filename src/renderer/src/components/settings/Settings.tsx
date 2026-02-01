@@ -19,6 +19,7 @@ import {
   THEME_OPTIONS,
 } from "@renderer/types/settings";
 import { ArrowLeft, RotateCcw } from "lucide-react";
+import { useEffect } from "react";
 
 interface SettingsProps {
   onClose: () => void;
@@ -38,8 +39,26 @@ export function Settings({ onClose }: SettingsProps) {
     setLaunchAtLogin,
     setNotificationsEnabled,
     setNotificationThresholds,
+    updateSettings,
     resetSettings,
   } = useSettingsStore();
+
+  const handleLaunchAtLoginToggle = async () => {
+    const newValue = !launchAtLogin;
+    // Update local state immediately for responsive UI
+    setLaunchAtLogin(newValue);
+    // Sync with main process (which calls app.setLoginItemSettings)
+    await window.electron.setSettings({ launchAtLogin: newValue });
+  };
+
+  // Listen for settings changes from main process (e.g., when changed via tray menu)
+  useEffect(() => {
+    const cleanup = window.electron.onSettingsChanged((settings) => {
+      // Sync local state with settings changed from other sources (tray menu)
+      updateSettings(settings);
+    });
+    return cleanup;
+  }, [updateSettings]);
 
   const handleThresholdToggle = (threshold: number) => {
     const newThresholds = notifications.thresholds.includes(threshold)
@@ -212,7 +231,7 @@ export function Settings({ onClose }: SettingsProps) {
             <Button
               variant={launchAtLogin ? "default" : "outline"}
               size="sm"
-              onClick={() => setLaunchAtLogin(!launchAtLogin)}
+              onClick={handleLaunchAtLoginToggle}
             >
               {launchAtLogin ? "Enabled" : "Disabled"}
             </Button>
