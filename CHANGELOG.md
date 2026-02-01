@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.0](https://github.com/bizzkoot/copilot-tracker/compare/v1.2.0...v1.3.0) (2026-02-01)
+
+
+### Features
+
+* **tray:** add monthly prediction banner and dashboard action - release ([a8b4081](https://github.com/bizzkoot/copilot-tracker/commit/a8b4081db3f96d78250b0d1aa593387bfb996360))
+
+
+### Bug Fixes
+
+* startup authentication and auto-minimize on launch ([6cc332e](https://github.com/bizzkoot/copilot-tracker/commit/6cc332efe68f8ace86a5e60b16253a536bbac03a))
+
 ## [1.2.0](https://github.com/bizzkoot/copilot-tracker/compare/v1.1.2...v1.2.0) (2026-02-01)
 
 ### Features
