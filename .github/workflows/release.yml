@@ -47,7 +47,28 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
+          sudo apt-get install -y build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev libxi-dev
+
+      - name: Install Dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install cairo pango libjpeg giflib librsvg
+
+      - name: Install Dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          choco install -y gtk-runtime
+
+      - name: Rebuild Canvas (if needed)
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            # Windows: Try to rebuild canvas, continue on failure
+            npm rebuild canvas --no-optional || echo "Canvas rebuild skipped"
+          else
+            # Unix: Try to rebuild canvas, continue on failure
+            npm rebuild canvas --no-optional || echo "Canvas rebuild skipped"
+          fi
+        shell: bash
 
       - name: Install Dependencies
         run: npm ci
