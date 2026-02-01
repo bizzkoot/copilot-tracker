@@ -563,7 +563,16 @@ function createTrayIconWithNumbers(
 ): Electron.NativeImage {
   try {
     const size = 16;
-    const { createCanvas } = require("canvas");
+    // Try to import canvas, with fallback if not available
+    let createCanvas: any;
+    try {
+      const canvasModule = require("canvas");
+      createCanvas = canvasModule.createCanvas;
+    } catch (e) {
+      devLog.error("[TrayIcon] Canvas module not available:", e);
+      // Return a simple fallback icon
+      return nativeImage.createFromPath(icon);
+    }
     const canvasObj = createCanvas(size * 2, size); // Double width for icon + text
     const ctx = canvasObj.getContext("2d");
 
@@ -658,7 +667,7 @@ function createTrayIconWithNumbers(
     return nativeImg;
   } catch (e) {
     devLog.error("[TrayIcon] Failed to create custom icon:", e);
-    throw e;
+    return nativeImage.createFromPath(icon); // Fallback instead of throw
   }
 }
 

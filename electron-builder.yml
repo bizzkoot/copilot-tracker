@@ -11,6 +11,7 @@ files:
   - "!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}"
 asarUnpack:
   - resources/**
+  - node_modules/canvas/**  # Unpack canvas native module
 win:
   icon: resources/icon.png
   executableName: copilot-tracker
