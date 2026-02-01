@@ -18,20 +18,76 @@ Cross-platform desktop application built with Electron, React, and TypeScript to
 - 🎯 **System Tray**: Quick access from menu bar (macOS) or system tray
 - 🔐 **Secure Auth**: WebView-based GitHub OAuth (no API tokens stored)
 - 🔄 **Auto-Updates**: Automatic updates via GitHub releases
+- 📡 **Offline Mode**: View cached usage data even without internet
 
 ## Screenshots
 
 ### Dashboard
+
 <p align="center">
   <img src="assets/Dashboard.gif" alt="Copilot Tracker Dashboard" width="700"/>
 </p>
 
 ### System Tray (Windows)
+
 <p align="center">
   <img src="assets/Taskbar.gif" alt="System Tray Integration" width="500"/>
 </p>
 
-## Installation
+## Download
+
+Choose the file that matches your operating system from the [latest release](https://github.com/bizzkoot/copilot-tracker/releases/latest):
+
+| Operating System                  | Download This File                |
+| --------------------------------- | --------------------------------- |
+| **macOS** (Intel & Apple Silicon) | `copilot-tracker-X.X.X.dmg`       |
+| **Windows**                       | `Copilot-Tracker-Setup-X.X.X.exe` |
+| **Linux** (any distribution)      | `copilot-tracker-X.X.X.AppImage`  |
+| **Linux** (Debian/Ubuntu only)    | `copilot-tracker-X.X.X.deb`       |
+
+> **Note:** Replace `X.X.X` with the latest version number from the releases page.
+
+<details>
+<summary><strong>🔒 Privacy & Security</strong></summary>
+
+### How it works
+
+- **No API Tokens**: We do not ask for or store Personal Access Tokens (PAT).
+- **Secure Auth**: Authentication happens via a secure WebView directly with GitHub.
+- **Local Storage**: All data (usage history, settings) is stored locally on your machine.
+- **No Tracking**: We do not collect any usage stats or analytics.
+
+### Data Location
+
+- **macOS**: `~/Library/Application Support/copilot-tracker/`
+- **Windows**: `%APPDATA%/copilot-tracker/`
+- **Linux**: `~/.config/copilot-tracker/`
+
+</details>
+
+<details>
+<summary><strong>❓ Troubleshooting</strong></summary>
+
+### Common Issues
+
+**Data not updating?**
+
+- Try re-logging in via the Settings menu.
+- Check your internet connection.
+- GitHub's internal API might have changed. Check for app updates.
+
+**"Unrecognized App" Warning?**
+
+- See the **Security Warnings** section above for bypass instructions.
+
+### Resetting the App
+
+If the app is stuck, you can clear data by deleting the configuration folder (see paths in Privacy section).
+
+</details>
+
+<details>
+<summary><strong>📥 Installation Guide</strong></summary>
 
 ### macOS
 
@@ -50,35 +106,78 @@ Copilot-Tracker-Setup-1.0.0.exe
 
 ### Linux
 
+**Option 1: AppImage (universal)**
+
 ```bash
 # Download the .AppImage from releases
-chmod +x Copilot-Tracker-1.0.0.AppImage
-./Copilot-Tracker-1.0.0.AppImage
+chmod +x copilot-tracker-1.0.0.AppImage
+./copilot-tracker-1.0.0.AppImage
 ```
 
-## Security Warnings (Unsigned Builds)
+**Option 2: Debian/Ubuntu package**
+
+```bash
+# Download the .deb from releases
+sudo dpkg -i copilot-tracker_1.0.0_amd64.deb
+```
+
+### Uninstallation
+
+To remove the application and its data:
+
+**macOS**
+
+```bash
+rm -rf /Applications/copilot-tracker.app
+rm -rf ~/Library/Application\ Support/copilot-tracker
+```
+
+**Windows**
+
+- Run the uninstaller from Control Panel or Settings.
+- Delete `%APPDATA%/copilot-tracker` to remove data.
+
+**Linux**
+
+```bash
+# If installed via AppImage, just delete the file
+rm copilot-tracker-*.AppImage
+rm -rf ~/.config/copilot-tracker
+
+# If installed via deb
+sudo apt remove copilot-tracker
+```
+
+</details>
+
+<details>
+<summary><strong>⚠️ Security Warnings (Unsigned Builds)</strong></summary>
 
 ⚠️ **This application is distributed without code signing.** You may see security warnings when first running the app. This is expected for open-source projects without paid developer certificates.
 
 ### macOS
 
 When you first try to open the app, you may see:
+
 > "App cannot be opened because it was not downloaded from the App Store"
 
 **To bypass:**
 
 **Option 1: Right-click method (GUI)**
+
 1. Right-click (or Control-click) on the app
 2. Select "Open"
 3. Click "Open" in the confirmation dialog
 
 **Option 2: Terminal method (remove quarantine)**
+
 ```bash
 # After copying the app to Applications folder
 xattr -cr /Applications/copilot-tracker.app
 ```
 
 **Option 3: System Settings**
+
 1. Open System Settings → Privacy & Security
 2. Find the message about the app being blocked
 3. Click "Open Anyway"
@@ -86,9 +185,11 @@ xattr -cr /Applications/copilot-tracker.app
 ### Windows
 
 When you first run the installer or app, you may see:
+
 > "Microsoft Defender SmartScreen prevented an unrecognized app from starting"
 
 **To bypass:**
+
 1. Click "More info"
 2. Click "Run anyway"
 
@@ -99,10 +200,16 @@ No warnings - Linux apps run without restrictions.
 ### Why Unsigned?
 
 Code signing requires paid certificates:
+
 - **macOS**: Apple Developer Program ($99/year)
 - **Windows**: Code signing certificate ($100-300/year)
 
 As an open-source project, we distribute unsigned builds. The source code is publicly available for review if you wish to verify the app's safety.
+
+</details>
+
+<details>
+<summary><strong>🛠️ Developer Guide</strong></summary>
 
 ## Development
 
@@ -143,12 +250,14 @@ npm run build:linux    # Linux
 ### Prerequisites
 
 For Linux builds, install canvas dependencies:
+
 ```bash
 sudo apt-get install build-essential libcairo2-dev libpango1.0-dev \
   libjpeg-dev libgif-dev librsvg2-dev libxi-dev
 ```
 
 For macOS builds, install:
+
 ```bash
 brew install cairo pango libjpeg giflib librsvg
 ```
@@ -177,11 +286,17 @@ cp .env.example .env
 ```
 
 Available variables:
+
 - `APP_ID` - Application identifier
 - `PRODUCT_NAME` - Product name
 - `GITHUB_BILLING_URL` - GitHub billing page URL
 - `GITHUB_LOGIN_URL` - GitHub login page URL
 - `COST_PER_REQUEST` - Cost per Copilot request (default: 0.04)
+
+</details>
+
+<details>
+<summary><strong>ℹ️ Project Details & Contributing</strong></summary>
 
 ## Tech Stack
 
@@ -218,11 +333,19 @@ Available variables:
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+### Development Workflow
+
+1.  **Fork & Clone**: Fork the repo and clone it locally.
+2.  **Branch**: Create your feature branch (`git checkout -b feature/AmazingFeature`).
+3.  **Code**: Implement your changes.
+    - Follow the code style (PascalCase for components, camelCase for functions).
+    - Use `npm run lint` to check for issues.
+    - Use `npm run format` to ensure consistent formatting.
+4.  **Commit**: Commit your changes (`git commit -m 'Add some AmazingFeature'`).
+5.  **Push**: Push to the branch (`git push origin feature/AmazingFeature`).
+6.  **PR**: Open a Pull Request.
+
+</details>
 
 ## License
 
