@@ -340,6 +340,55 @@ function updateTrayMenu(usage?: CopilotUsage | null): void {
     { type: "separator" },
   ];
 
+  // Add Monthly Prediction Banner (if available)
+  if (usagePrediction && usage) {
+    const limit = usage.userPremiumRequestEntitlement;
+    const predictedRequests = Math.round(
+      usagePrediction.predictedMonthlyRequests,
+    );
+    const percentOfLimit = (
+      (usagePrediction.predictedMonthlyRequests / limit) *
+      100
+    ).toFixed(0);
+    const willExceed = usagePrediction.predictedMonthlyRequests > limit;
+
+    // Status indicator
+    const statusIcon = willExceed ? "⚠️" : "✅";
+    const statusText = willExceed ? "May exceed limit" : "On track";
+
+    // Confidence level
+    const confidenceIcon =
+      usagePrediction.confidenceLevel === "high"
+        ? "🟢"
+        : usagePrediction.confidenceLevel === "medium"
+          ? "🟡"
+          : "🔴";
+    const confidenceText =
+      usagePrediction.confidenceLevel.charAt(0).toUpperCase() +
+      usagePrediction.confidenceLevel.slice(1) +
+      " confidence";
+
+    menuItems.push(
+      {
+        label: "📊 Monthly Prediction",
+        enabled: false,
+      },
+      {
+        label: `   ${predictedRequests.toLocaleString()} requests (${percentOfLimit}% of limit)`,
+        enabled: false,
+      },
+      {
+        label: `   ${statusIcon} ${statusText} | ${confidenceIcon} ${confidenceText}`,
+        enabled: false,
+      },
+      {
+        label: `   Based on ${usagePrediction.daysUsedForPrediction} day${usagePrediction.daysUsedForPrediction !== 1 ? "s" : ""} of usage data`,
+        enabled: false,
+      },
+      { type: "separator" },
+    );
+  }
+
   // Add Usage History submenu if we have history data
   if (usageHistory && usageHistory.days.length > 0) {
     const historySubmenu: Electron.MenuItemConstructorOptions[] = [];
@@ -421,6 +470,14 @@ function updateTrayMenu(usage?: CopilotUsage | null): void {
   });
 
   menuItems.push({ type: "separator" });
+
+  // Add Open Dashboard action
+  menuItems.push({
+    label: "Open Dashboard",
+    click: (): void => {
+      showMainWindow();
+    },
+  });
 
   // Add Open Billing action
   menuItems.push({
@@ -1393,8 +1450,8 @@ async function fetchUsageData(): Promise<void> {
     // Store history globally for tray menu
     usageHistory = history;
 
-    // Calculate prediction if we have enough data
-    if (history.days.length >= 3 && usage) {
+    // Calculate prediction if we have any data
+    if (history.days.length > 0 && usage) {
       const settings = store.get("settings") as Settings;
       const prediction = calculatePrediction(
         history,
