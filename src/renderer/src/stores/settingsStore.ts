@@ -13,6 +13,7 @@ interface SettingsState extends Settings {
   setRefreshInterval: (interval: Settings["refreshInterval"]) => void;
   setPredictionPeriod: (period: Settings["predictionPeriod"]) => void;
   setLaunchAtLogin: (enabled: boolean) => void;
+  setStartMinimized: (enabled: boolean) => void;
   setNotificationsEnabled: (enabled: boolean) => void;
   setNotificationThresholds: (thresholds: number[]) => void;
   setTheme: (theme: Settings["theme"]) => void;
@@ -32,6 +33,8 @@ export const useSettingsStore = create<SettingsState>()(
       setPredictionPeriod: (predictionPeriod) => set({ predictionPeriod }),
 
       setLaunchAtLogin: (launchAtLogin) => set({ launchAtLogin }),
+
+      setStartMinimized: (startMinimized) => set({ startMinimized }),
 
       setNotificationsEnabled: (enabled) =>
         set((state) => ({

@@ -34,11 +34,13 @@ export function Settings({ onClose }: SettingsProps) {
     predictionPeriod,
     theme,
     launchAtLogin,
+    startMinimized,
     notifications,
     setRefreshInterval,
     setPredictionPeriod,
     setTheme,
     setLaunchAtLogin,
+    setStartMinimized,
     setNotificationsEnabled,
     setNotificationThresholds,
     updateSettings,
@@ -51,6 +53,14 @@ export function Settings({ onClose }: SettingsProps) {
     setLaunchAtLogin(newValue);
     // Sync with main process (which calls app.setLoginItemSettings)
     await window.electron.setSettings({ launchAtLogin: newValue });
+  };
+
+  const handleStartMinimizedToggle = async () => {
+    const newValue = !startMinimized;
+    // Update local state immediately for responsive UI
+    setStartMinimized(newValue);
+    // Sync with main process
+    await window.electron.setSettings({ startMinimized: newValue });
   };
 
   // Listen for settings changes from main process (e.g., when changed via tray menu)
@@ -241,7 +251,7 @@ export function Settings({ onClose }: SettingsProps) {
             Launch behavior when your computer starts
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-sm">Launch at login</span>
             <Button
@@ -250,6 +260,21 @@ export function Settings({ onClose }: SettingsProps) {
               onClick={handleLaunchAtLoginToggle}
             >
               {launchAtLogin ? "Enabled" : "Disabled"}
+            </Button>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <span className="text-sm">Start minimized</span>
+              <p className="text-xs text-muted-foreground mt-1">
+                Hide window on startup (tray icon only)
+              </p>
+            </div>
+            <Button
+              variant={startMinimized ? "default" : "outline"}
+              size="sm"
+              onClick={handleStartMinimizedToggle}
+            >
+              {startMinimized ? "Enabled" : "Disabled"}
             </Button>
           </div>
         </CardContent>

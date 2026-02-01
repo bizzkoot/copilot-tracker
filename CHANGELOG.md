@@ -2,10 +2,9 @@
 
 ## [1.2.0](https://github.com/bizzkoot/copilot-tracker/compare/v1.1.2...v1.2.0) (2026-02-01)
 
-
 ### Features
 
-* add update notification system with native alerts and tray indicators ([edc2666](https://github.com/bizzkoot/copilot-tracker/commit/edc2666f2d73095188e15db9b52e45029652dce7))
+- add update notification system with native alerts and tray indicators ([edc2666](https://github.com/bizzkoot/copilot-tracker/commit/edc2666f2d73095188e15db9b52e45029652dce7))
 
 ## [1.1.2](https://github.com/bizzkoot/copilot-tracker/compare/v1.1.1...v1.1.2) (2026-02-01)
 

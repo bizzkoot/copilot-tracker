@@ -12,6 +12,7 @@ export interface Settings {
   refreshInterval: 10 | 30 | 60 | 300 | 1800; // seconds
   predictionPeriod: 7 | 14 | 21; // days
   launchAtLogin: boolean;
+  startMinimized: boolean; // Auto-hide window on startup/login
   notifications: NotificationSettings;
   theme: "light" | "dark" | "system";
 }
@@ -20,6 +21,7 @@ export const DEFAULT_SETTINGS: Settings = {
   refreshInterval: 60,
   predictionPeriod: 7,
   launchAtLogin: false,
+  startMinimized: true, // Auto-hide window on startup by default
   notifications: {
     enabled: true,
     thresholds: [75, 90, 100],

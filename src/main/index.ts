@@ -26,6 +26,7 @@ interface Settings {
   refreshInterval: number;
   predictionPeriod: number;
   launchAtLogin: boolean;
+  startMinimized: boolean;
   notifications: {
     enabled: boolean;
     thresholds: number[];
@@ -66,6 +67,7 @@ const DEFAULT_SETTINGS: Settings = {
   refreshInterval: 60,
   predictionPeriod: 7,
   launchAtLogin: false,
+  startMinimized: true,
   notifications: {
     enabled: true,
     thresholds: [75, 90, 100],
@@ -96,6 +98,17 @@ let usageHistory: UsageHistory | null = null;
 let usagePrediction: UsagePrediction | null = null;
 let trayBaseIconBuffer: Buffer | null = null;
 let availableUpdate: { version: string; url: string } | null = null;
+let isInitialStartup = true; // Track if this is the first app launch
+
+// ============= Utility Functions =============
+
+/**
+ * Helper function to create a delay promise
+ * @param ms - milliseconds to wait
+ */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 // ============= Update Check Logic =============
 
@@ -221,7 +234,20 @@ function createWindow(): void {
   });
 
   mainWindow.on("ready-to-show", () => {
-    mainWindow?.show();
+    const settings = store.get("settings") as Settings;
+    // Use explicit default for startMinimized in case it's missing from stored settings
+    const startMinimized = settings.startMinimized ?? true;
+
+    // Only show window if startMinimized is false
+    // This way, the window stays hidden by default (tray-only mode)
+    if (!startMinimized) {
+      mainWindow?.show();
+      devLog.log("[Window] Start minimized disabled, showing window");
+    } else {
+      devLog.log("[Window] Start minimized enabled, window remains hidden");
+      // Don't show window, it will remain hidden
+    }
+
     // Check for updates
     if (app.isPackaged) {
       checkForUpdatesDirectly();
@@ -839,6 +865,7 @@ function createAuthView(): void {
     destroyAuthView();
   }
 
+  devLog.log("[Auth] Creating authView with persist:github partition");
   authView = new WebContentsView({
     webPreferences: {
       partition: "persist:github",
@@ -846,9 +873,6 @@ function createAuthView(): void {
       contextIsolation: true,
     },
   });
-
-  // Navigate to billing page
-  authView.webContents.loadURL(config.githubBillingUrl);
 
   // Monitor navigation
   authView.webContents.on("did-navigate", (_event, url) => {
@@ -864,6 +888,27 @@ function createAuthView(): void {
       hideLoginWindow();
       startRefreshTimer(); // Start timer when authenticated
       fetchUsageData();
+
+      // Auto-minimize ONLY on initial startup, not during Re-login
+      const settings = store.get("settings") as Settings;
+      const startMinimized = settings.startMinimized ?? true;
+      if (
+        isInitialStartup &&
+        startMinimized &&
+        mainWindow &&
+        !mainWindow.isDestroyed()
+      ) {
+        devLog.log(
+          "[Auth] Auto-minimizing window after initial authentication",
+        );
+        mainWindow.hide();
+        // On macOS, switch to accessory policy to hide from dock
+        if (process.platform === "darwin") {
+          app.setActivationPolicy("accessory");
+        }
+        // Reset flag after first successful authentication
+        isInitialStartup = false;
+      }
     }
   });
 
@@ -891,8 +936,34 @@ function createAuthView(): void {
         startRefreshTimer();
       }
       fetchUsageData();
+
+      // Auto-minimize ONLY on initial startup, not during Re-login
+      const settings = store.get("settings") as Settings;
+      const startMinimized = settings.startMinimized ?? true;
+      if (
+        isInitialStartup &&
+        startMinimized &&
+        mainWindow &&
+        !mainWindow.isDestroyed()
+      ) {
+        devLog.log(
+          "[Auth] Auto-minimizing window after initial authentication",
+        );
+        mainWindow.hide();
+        // On macOS, switch to accessory policy to hide from dock
+        if (process.platform === "darwin") {
+          app.setActivationPolicy("accessory");
+        }
+        // Reset flag after first successful authentication
+        isInitialStartup = false;
+      }
     }
   });
+
+  // Always load billing URL and let navigation handlers detect auth status
+  // This is simpler and more reliable than cookie checking
+  devLog.log("[Auth] Loading billing URL");
+  authView.webContents.loadURL(config.githubBillingUrl);
 }
 
 function showLoginWindow(): void {
@@ -930,36 +1001,18 @@ function showLoginWindow(): void {
   });
 
   authWindow.on("closed", () => {
-    // Notify renderer that auth was cancelled by user
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("auth:state-changed", "unauthenticated");
-    }
+    devLog.log("[Auth] AuthWindow closed");
     authWindow = null;
-  });
 
-  // Track if user has logged in (navigated away from login page)
-  let hasNavigatedFromLogin = false;
-
-  const handleAuthWindowNavigation = (): void => {
-    const url = authWindow?.webContents.getURL() || "";
-    devLog.log("[Auth] AuthWindow navigation:", url);
-
-    // If on login page, just record that we've seen it
-    if (url.includes("/login") || url.includes("/session")) {
-      hasNavigatedFromLogin = true;
-      return;
-    }
-
-    // Only load billing URL if we've previously seen the login page
-    // and now we're on a different page (user logged in)
-    if (hasNavigatedFromLogin && authView) {
-      devLog.log("[Auth] User logged in, loading billing page");
+    // Always reload billing URL in authView when authWindow closes
+    // This handles both cases: user logged in OR user was already authenticated
+    if (authView) {
+      devLog.log(
+        "[Auth] Reloading billing URL in authView after authWindow closed",
+      );
       authView.webContents.loadURL(config.githubBillingUrl);
     }
-  };
-
-  authWindow.webContents.on("did-navigate", handleAuthWindowNavigation);
-  authWindow.webContents.on("did-finish-load", handleAuthWindowNavigation);
+  });
 
   authWindow.loadURL(config.githubLoginUrl);
 }
@@ -972,9 +1025,12 @@ function hideLoginWindow(): void {
 
 // ============= Data Fetching =============
 
-async function getCustomerId(): Promise<number | null> {
+/**
+ * Attempts to get customer ID using various extraction methods.
+ * This is a single attempt without retry logic.
+ */
+async function attemptGetCustomerId(): Promise<number | null> {
   if (!authView) return null;
-  if (customerId) return customerId;
 
   // Method 0: Extract from URL query parameters
   try {
@@ -982,9 +1038,9 @@ async function getCustomerId(): Promise<number | null> {
     devLog.log("[Auth] Getting customer ID from URL:", url);
     const match = url.match(/[?&]customer=(\d+)/);
     if (match) {
-      customerId = parseInt(match[1], 10);
-      devLog.log("[Auth] Found customer ID in URL:", customerId);
-      return customerId;
+      const id = parseInt(match[1], 10);
+      devLog.log("[Auth] Found customer ID in URL:", id);
+      return id;
     }
   } catch (e) {
     devLog.error("[Auth] Method 0 (URL) failed:", e);
@@ -1008,8 +1064,7 @@ async function getCustomerId(): Promise<number | null> {
     `);
     const parsed = JSON.parse(result);
     if (parsed.success) {
-      customerId = parsed.id;
-      return customerId;
+      return parsed.id;
     }
   } catch (e) {
     devLog.error("Method 1 failed:", e);
@@ -1039,9 +1094,9 @@ async function getCustomerId(): Promise<number | null> {
 
     // Check if result is a valid customer ID (numeric string)
     if (result && /^\d+$/.test(result)) {
-      customerId = parseInt(result, 10);
-      devLog.log("[Auth] Method 2 success - Customer ID:", customerId);
-      return customerId;
+      const id = parseInt(result, 10);
+      devLog.log("[Auth] Method 2 success - Customer ID:", id);
+      return id;
     } else {
       devLog.log("[Auth] Method 2 failed:", result);
     }
@@ -1068,13 +1123,59 @@ async function getCustomerId(): Promise<number | null> {
     `);
     const parsed = JSON.parse(result);
     if (parsed.success) {
-      customerId = parsed.id;
-      return customerId;
+      return parsed.id;
     }
   } catch (e) {
     devLog.error("Method 3 failed:", e);
   }
 
+  return null;
+}
+
+/**
+ * Gets customer ID with retry logic for resilience on cold startup.
+ * On macOS cold boot, network/keychain may not be immediately available,
+ * causing the first attempts to fail. This retry mechanism handles that.
+ */
+async function getCustomerId(): Promise<number | null> {
+  if (!authView) return null;
+  if (customerId) return customerId;
+
+  const maxRetries = 3;
+  const baseDelayMs = 1500; // 1.5 seconds base delay
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      const delayMs = baseDelayMs * Math.pow(2, attempt - 1); // 1.5s, 3s, 6s
+      devLog.log(
+        `[Auth] Retry ${attempt}/${maxRetries} - waiting ${delayMs}ms before retry`,
+      );
+      await delay(delayMs);
+
+      // Reload the billing page before retry to get fresh content
+      if (authView && !authView.webContents.isDestroyed()) {
+        devLog.log("[Auth] Reloading billing page for retry");
+        authView.webContents.loadURL(config.githubBillingUrl);
+        // Wait for page to load
+        await delay(2000);
+      }
+    }
+
+    devLog.log(
+      `[Auth] Attempt ${attempt + 1}/${maxRetries + 1} to get customer ID`,
+    );
+    const id = await attemptGetCustomerId();
+    if (id) {
+      customerId = id;
+      devLog.log(
+        `[Auth] Successfully got customer ID on attempt ${attempt + 1}:`,
+        id,
+      );
+      return id;
+    }
+  }
+
+  devLog.error("[Auth] All attempts to get customer ID failed");
   return null;
 }
 
@@ -1452,7 +1553,7 @@ function setupIpcHandlers(): void {
 
 // ============= App Lifecycle =============
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Set app user model id for Windows
   app.setAppUserModelId("com.copilot-tracker");
 
@@ -1473,6 +1574,18 @@ app.whenReady().then(() => {
   // Create window and tray
   createWindow();
   createTray();
+
+  // On cold startup (login items), add a delay to allow system to be ready
+  // This gives time for network and keychain to initialize on macOS
+  if (isInitialStartup && process.platform === "darwin") {
+    devLog.log(
+      "[App] macOS initial startup detected, waiting for system ready...",
+    );
+    await delay(3000); // Wait 3 seconds on cold startup
+  }
+
+  // Create authView - navigation handlers will detect auth status
+  devLog.log("[App] Creating authView");
   createAuthView();
 
   // Check for updates on startup (even if window is hidden)
