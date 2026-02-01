@@ -22,6 +22,8 @@ nsis:
   createDesktopShortcut: always
 mac:
   icon: resources/icon.icns
+  target:
+    - dmg
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
@@ -35,7 +37,6 @@ linux:
   icon: resources/icon.png
   target:
     - AppImage
-    - snap
     - deb
   maintainer: electronjs.org
   category: Utility

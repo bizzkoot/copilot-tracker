@@ -10,10 +10,8 @@ export const config = {
   githubBillingUrl:
     process.env.GITHUB_BILLING_URL ||
     "https://github.com/settings/billing/premium_requests_usage",
-  githubLoginUrl:
-    process.env.GITHUB_LOGIN_URL || "https://github.com/login",
-  costPerRequest:
-    parseFloat(process.env.COST_PER_REQUEST || "0.04"),
+  githubLoginUrl: process.env.GITHUB_LOGIN_URL || "https://github.com/login",
+  costPerRequest: parseFloat(process.env.COST_PER_REQUEST || "0.04"),
 } as const;
 
 // Development logger - only logs in development

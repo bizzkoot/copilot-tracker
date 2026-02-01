@@ -94,9 +94,7 @@ jobs:
         with:
           files: |
             dist/*.dmg
-            dist/*.zip
             dist/*.exe
             dist/*.AppImage
-            dist/*.snap
             dist/*.deb
           tag_name: ${{ needs.release-please.outputs.tag_name }}
