@@ -86,6 +86,7 @@ jobs:
           elif [ "$RUNNER_OS" == "macOS" ]; then
             npm run build:mac
           fi
+        shell: bash
 
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v1
