@@ -247,12 +247,17 @@ function createAuthView(): void {
 
   // Monitor navigation
   authView.webContents.on("did-navigate", (_event, url) => {
+    console.log("[Auth] Navigated to:", url);
     if (url.includes("/login") || url.includes("/session")) {
+      console.log("[Auth] Detected login page");
       mainWindow?.webContents.send("auth:state-changed", "unauthenticated");
-      showLoginWindow();
+      stopRefreshTimer(); // Stop timer when logged out
+      // Don't auto-show login window here - let the explicit login request handle it
     } else if (url.includes("/settings/billing")) {
+      console.log("[Auth] Detected billing page - user is authenticated");
       mainWindow?.webContents.send("auth:state-changed", "authenticated");
       hideLoginWindow();
+      startRefreshTimer(); // Start timer when authenticated
       fetchUsageData();
     }
   });
@@ -267,11 +272,19 @@ function createAuthView(): void {
   // Check auth state after page loads
   authView.webContents.on("did-finish-load", async () => {
     const url = authView?.webContents.getURL() || "";
+    console.log("[Auth] Page finished loading:", url);
     if (url.includes("/login") || url.includes("/session")) {
+      console.log("[Auth] Login page loaded");
       mainWindow?.webContents.send("auth:state-changed", "unauthenticated");
+      stopRefreshTimer(); // Ensure timer is stopped when logged out
     } else if (url.includes("/settings/billing")) {
+      console.log("[Auth] Billing page loaded - authenticated");
       mainWindow?.webContents.send("auth:state-changed", "authenticated");
       hideLoginWindow();
+      // Only start timer if not already running
+      if (!refreshTimer) {
+        startRefreshTimer();
+      }
       fetchUsageData();
     }
   });
@@ -280,10 +293,17 @@ function createAuthView(): void {
 function showLoginWindow(): void {
   if (!mainWindow) return;
 
+  // If authWindow exists but is destroyed, recreate it
   if (authWindow) {
-    authWindow.show();
-    authWindow.focus();
-    return;
+    if (authWindow.isDestroyed()) {
+      authWindow = null;
+    } else {
+      authWindow.show();
+      authWindow.focus();
+      // Always reload the login URL to ensure fresh state
+      authWindow.loadURL(GITHUB_LOGIN_URL);
+      return;
+    }
   }
 
   authWindow = new BrowserWindow({
@@ -312,10 +332,25 @@ function showLoginWindow(): void {
     authWindow = null;
   });
 
+  // Track if user has logged in (navigated away from login page)
+  let hasNavigatedFromLogin = false;
+
   const handleAuthWindowNavigation = (): void => {
     const url = authWindow?.webContents.getURL() || "";
-    if (url.includes("/login") || url.includes("/session")) return;
-    authView?.webContents.loadURL(GITHUB_BILLING_URL);
+    console.log("[Auth] AuthWindow navigation:", url);
+
+    // If on login page, just record that we've seen it
+    if (url.includes("/login") || url.includes("/session")) {
+      hasNavigatedFromLogin = true;
+      return;
+    }
+
+    // Only load billing URL if we've previously seen the login page
+    // and now we're on a different page (user logged in)
+    if (hasNavigatedFromLogin && authView) {
+      console.log("[Auth] User logged in, loading billing page");
+      authView.webContents.loadURL(GITHUB_BILLING_URL);
+    }
   };
 
   authWindow.webContents.on("did-navigate", handleAuthWindowNavigation);
@@ -335,6 +370,20 @@ function hideLoginWindow(): void {
 async function getCustomerId(): Promise<number | null> {
   if (!authView) return null;
   if (customerId) return customerId;
+
+  // Method 0: Extract from URL query parameters
+  try {
+    const url = authView.webContents.getURL();
+    console.log("[Auth] Getting customer ID from URL:", url);
+    const match = url.match(/[?&]customer=(\d+)/);
+    if (match) {
+      customerId = parseInt(match[1], 10);
+      console.log("[Auth] Found customer ID in URL:", customerId);
+      return customerId;
+    }
+  } catch (e) {
+    console.error("[Auth] Method 0 (URL) failed:", e);
+  }
 
   // Method 1: API call
   try {
@@ -361,27 +410,38 @@ async function getCustomerId(): Promise<number | null> {
     console.error("Method 1 failed:", e);
   }
 
-  // Method 2: DOM extraction
+  // Method 2: DOM extraction from script tag (matching copilot-usage-monitor Swift implementation)
   try {
+    console.log("[Auth] Trying Method 2: DOM extraction from script tag");
     const result = await authView.webContents.executeJavaScript(`
       (function() {
         try {
           const el = document.querySelector('script[data-target="react-app.embeddedData"]');
-          if (!el) return JSON.stringify({ success: false, error: 'Element not found' });
-          const data = JSON.parse(el.textContent);
-          return JSON.stringify({ success: true, id: data.payload.customer.customerId });
+          if (!el) return 'no_element';
+          try {
+            const data = JSON.parse(el.textContent);
+            const id = data?.payload?.customer?.customerId;
+            return id ? id.toString() : 'no_id_in_json';
+          } catch(e) {
+            return 'parse_error: ' + e.message;
+          }
         } catch (error) {
-          return JSON.stringify({ success: false, error: error.message });
+          return 'error: ' + error.message;
         }
       })()
     `);
-    const parsed = JSON.parse(result);
-    if (parsed.success) {
-      customerId = parsed.id;
+    console.log("[Auth] Method 2 result:", result);
+
+    // Check if result is a valid customer ID (numeric string)
+    if (result && /^\d+$/.test(result)) {
+      customerId = parseInt(result, 10);
+      console.log("[Auth] Method 2 success - Customer ID:", customerId);
       return customerId;
+    } else {
+      console.log("[Auth] Method 2 failed:", result);
     }
   } catch (e) {
-    console.error("Method 2 failed:", e);
+    console.error("[Auth] Method 2 exception:", e);
   }
 
   // Method 3: Regex
@@ -416,10 +476,12 @@ async function getCustomerId(): Promise<number | null> {
 async function fetchUsageData(): Promise<void> {
   if (!authView || !mainWindow) return;
 
+  console.log("[Usage] Starting fetchUsageData");
   mainWindow.webContents.send("usage:loading", true);
 
   try {
     const id = await getCustomerId();
+    console.log("[Usage] Got customer ID:", id);
     if (!id) {
       mainWindow.webContents.send("usage:data", {
         success: false,
@@ -429,22 +491,31 @@ async function fetchUsageData(): Promise<void> {
     }
 
     // Fetch usage card
+    console.log("[Usage] Fetching usage card for customer:", id);
     const usageResult = await authView.webContents.executeJavaScript(`
       (async function() {
         try {
           const res = await fetch('/settings/billing/copilot_usage_card?customer_id=${id}&period=3', {
             headers: { 'Accept': 'application/json', 'x-requested-with': 'XMLHttpRequest' }
           });
+          console.log('[Usage] Usage card response status:', res.status);
           if (!res.ok) throw new Error('Request failed: ' + res.status);
           const data = await res.json();
+          console.log('[Usage] Usage card data:', JSON.stringify(data).slice(0, 200));
           return JSON.stringify({ success: true, data });
         } catch (error) {
+          console.error('[Usage] Usage card error:', error.message);
           return JSON.stringify({ success: false, error: error.message });
         }
       })()
     `);
 
     const usageParsed = JSON.parse(usageResult);
+    console.log(
+      "[Usage] Usage card parsed:",
+      usageParsed.success ? "success" : "failed",
+      usageParsed.error || "",
+    );
     if (!usageParsed.success) {
       mainWindow.webContents.send("usage:data", {
         success: false,
@@ -454,34 +525,64 @@ async function fetchUsageData(): Promise<void> {
     }
 
     // Fetch usage history
+    console.log("[Usage] Fetching usage history");
     const historyResult = await authView.webContents.executeJavaScript(`
       (async function() {
         try {
           const res = await fetch('/settings/billing/copilot_usage_table?customer_id=${id}&group=0&period=3&query=&page=1', {
             headers: { 'Accept': 'application/json', 'x-requested-with': 'XMLHttpRequest' }
           });
+          console.log('[Usage] History response status:', res.status);
           if (!res.ok) throw new Error('Request failed: ' + res.status);
           const data = await res.json();
+          console.log('[Usage] History data rows:', data.rows ? data.rows.length : 0);
           return JSON.stringify({ success: true, data });
         } catch (error) {
+          console.error('[Usage] History error:', error.message);
           return JSON.stringify({ success: false, error: error.message });
         }
       })()
     `);
 
     const historyParsed = JSON.parse(historyResult);
+    console.log(
+      "[Usage] History parsed:",
+      historyParsed.success ? "success" : "failed",
+    );
 
     // Parse usage data
     const usageData = usageParsed.data;
+    console.log(
+      "[Usage] Raw usage data keys:",
+      Object.keys(usageData).join(", "),
+    );
+    console.log("[Usage] Sample values:", {
+      netBilledAmount:
+        usageData.netBilledAmount ?? usageData.net_billed_amount ?? "missing",
+      discountQuantity:
+        usageData.discountQuantity ?? usageData.discount_quantity ?? "missing",
+      entitlement:
+        usageData.userPremiumRequestEntitlement ??
+        usageData.user_premium_request_entitlement ??
+        "missing",
+    });
+
     const usage: CopilotUsage = {
-      netBilledAmount: usageData.net_billed_amount ?? 0,
-      netQuantity: usageData.net_quantity ?? 0,
-      discountQuantity: usageData.discount_quantity ?? 0,
+      netBilledAmount:
+        usageData.netBilledAmount ?? usageData.net_billed_amount ?? 0,
+      netQuantity: usageData.netQuantity ?? usageData.net_quantity ?? 0,
+      discountQuantity:
+        usageData.discountQuantity ?? usageData.discount_quantity ?? 0,
       userPremiumRequestEntitlement:
-        usageData.user_premium_request_entitlement ?? 0,
+        usageData.userPremiumRequestEntitlement ??
+        usageData.user_premium_request_entitlement ??
+        0,
       filteredUserPremiumRequestEntitlement:
-        usageData.filtered_user_premium_request_entitlement ?? 0,
+        usageData.filteredUserPremiumRequestEntitlement ??
+        usageData.filtered_user_premium_request_entitlement ??
+        0,
     };
+    console.log("[Usage] Parsed usage:", usage);
 
     // Parse history data
     const historyData = historyParsed.success
@@ -556,13 +657,17 @@ function setupIpcHandlers(): void {
   // Auth
   ipcMain.on("auth:login", () => {
     try {
-      if (!authView) {
-        createAuthView();
+      // Destroy existing authWindow if any
+      if (authWindow && !authWindow.isDestroyed()) {
+        authWindow.destroy();
+        authWindow = null;
       }
-      if (!authView) {
-        throw new Error("Failed to create auth view");
-      }
-      authView.webContents.loadURL(GITHUB_BILLING_URL);
+
+      // Clear customer ID to force re-authentication
+      customerId = null;
+
+      // Show login window - this will handle the auth flow
+      // and reload billing in authView after successful login
       showLoginWindow();
     } catch (error) {
       console.error("Auth login failed:", error);
@@ -655,8 +760,8 @@ app.whenReady().then(() => {
   createTray();
   createAuthView();
 
-  // Start refresh timer
-  startRefreshTimer();
+  // Don't start refresh timer yet - wait for auth state
+  // Timer will be started when auth state becomes 'authenticated'
 
   // On macOS, re-create window when dock icon is clicked
   app.on("activate", function () {
