@@ -7,10 +7,13 @@ import {
   Menu,
   nativeImage,
   WebContentsView,
+  net,
+  Notification,
 } from "electron";
 import { join } from "path";
 import Store from "electron-store";
 import dotenv from "dotenv";
+import semver from "semver";
 import { config, devLog } from "./config";
 
 // Load environment variables from .env file
@@ -92,6 +95,100 @@ let refreshTimer: NodeJS.Timeout | null = null;
 let usageHistory: UsageHistory | null = null;
 let usagePrediction: UsagePrediction | null = null;
 let trayBaseIconBuffer: Buffer | null = null;
+let availableUpdate: { version: string; url: string } | null = null;
+
+// ============= Update Check Logic =============
+
+async function checkForUpdatesDirectly(): Promise<void> {
+  devLog.log("[Update] Checking for updates via GitHub API...");
+
+  try {
+    const request = net.request(
+      "https://api.github.com/repos/bizzkoot/copilot-tracker/releases/latest",
+    );
+    request.setHeader("User-Agent", "Copilot-Tracker-App");
+
+    request.on("response", (response) => {
+      let data = "";
+
+      response.on("data", (chunk) => {
+        data += chunk.toString();
+      });
+
+      response.on("end", () => {
+        if (response.statusCode === 200) {
+          try {
+            const release = JSON.parse(data);
+            const latestVersion = release.tag_name.replace(/^v/, "");
+            const currentVersion = app.getVersion();
+
+            devLog.log(
+              `[Update] Current: ${currentVersion}, Latest: ${latestVersion}`,
+            );
+
+            if (semver.gt(latestVersion, currentVersion)) {
+              devLog.log("[Update] New version available!");
+
+              // Store update info for tray menu
+              availableUpdate = {
+                version: release.tag_name,
+                url: release.html_url,
+              };
+
+              const updateInfo = {
+                version: release.tag_name,
+                files: [],
+                path: "",
+                sha512: "",
+                releaseName: release.name,
+                releaseNotes: release.body,
+                releaseDate: release.published_at,
+              };
+
+              // Show notification (works even when dashboard is hidden)
+              if (Notification.isSupported()) {
+                const notification = new Notification({
+                  title: "Copilot Tracker Update Available",
+                  body: `Version ${release.tag_name} is available. Click to view.`,
+                  icon: icon,
+                });
+                notification.on("click", () => {
+                  showMainWindow();
+                  mainWindow?.webContents.send("navigate", "settings");
+                });
+                notification.show();
+              }
+
+              // Send to dashboard if it's open
+              mainWindow?.webContents.send("update:available", updateInfo);
+
+              // Update tray menu to show update available
+              updateTrayMenu();
+            } else {
+              devLog.log("[Update] App is up to date.");
+              // Clear any previous update
+              availableUpdate = null;
+            }
+          } catch (e) {
+            devLog.error("[Update] Failed to parse GitHub response:", e);
+          }
+        } else {
+          devLog.error(
+            `[Update] GitHub API returned status: ${response.statusCode}`,
+          );
+        }
+      });
+    });
+
+    request.on("error", (error) => {
+      devLog.error("[Update] Network request failed:", error);
+    });
+
+    request.end();
+  } catch (e) {
+    devLog.error("[Update] Exception during check:", e);
+  }
+}
 
 // ============= Window Management =============
 
@@ -125,6 +222,10 @@ function createWindow(): void {
 
   mainWindow.on("ready-to-show", () => {
     mainWindow?.show();
+    // Check for updates
+    if (app.isPackaged) {
+      checkForUpdatesDirectly();
+    }
   });
 
   mainWindow.on("close", (event) => {
@@ -348,6 +449,23 @@ function updateTrayMenu(usage?: CopilotUsage | null): void {
       mainWindow?.webContents.send("navigate", "settings");
     },
   });
+
+  // Add Check for Updates or Update Available
+  if (availableUpdate) {
+    menuItems.push({
+      label: `⬆️ Update Available: ${availableUpdate.version}`,
+      click: (): void => {
+        shell.openExternal(availableUpdate!.url);
+      },
+    });
+  } else {
+    menuItems.push({
+      label: "Check for Updates",
+      click: (): void => {
+        checkForUpdatesDirectly();
+      },
+    });
+  }
 
   // Add Launch at Login toggle
   menuItems.push({
@@ -1321,6 +1439,15 @@ function setupIpcHandlers(): void {
   ipcMain.on("app:quit", () => app.quit());
   ipcMain.on("window:show", () => showMainWindow());
   ipcMain.on("window:hide", () => mainWindow?.hide());
+  ipcMain.on("shell:open", (_event, url) => {
+    shell.openExternal(url);
+  });
+  ipcMain.handle("app:get-version", () => app.getVersion());
+
+  // Updates
+  ipcMain.on("update:check", () => {
+    checkForUpdatesDirectly();
+  });
 }
 
 // ============= App Lifecycle =============
@@ -1347,6 +1474,12 @@ app.whenReady().then(() => {
   createWindow();
   createTray();
   createAuthView();
+
+  // Check for updates on startup (even if window is hidden)
+  // This ensures users get notified even when app starts at login
+  setTimeout(() => {
+    checkForUpdatesDirectly();
+  }, 5000); // Wait 5 seconds for everything to settle
 
   // Sync launchAtLogin setting with macOS login items
   const settings = store.get("settings") as Settings;

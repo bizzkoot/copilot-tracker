@@ -18,8 +18,8 @@ import {
   PREDICTION_PERIOD_OPTIONS,
   THEME_OPTIONS,
 } from "@renderer/types/settings";
-import { ArrowLeft, RotateCcw } from "lucide-react";
-import { useEffect } from "react";
+import { ArrowLeft, RotateCcw, RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
 
 interface SettingsProps {
   onClose: () => void;
@@ -27,6 +27,8 @@ interface SettingsProps {
 
 export function Settings({ onClose }: SettingsProps) {
   const { login, isAuthenticated } = useAuth();
+  const [checkingForUpdate, setCheckingForUpdate] = useState(false);
+  const [appVersion, setAppVersion] = useState("Loading...");
   const {
     refreshInterval,
     predictionPeriod,
@@ -60,11 +62,25 @@ export function Settings({ onClose }: SettingsProps) {
     return cleanup;
   }, [updateSettings]);
 
+  // Fetch app version
+  useEffect(() => {
+    window.electron.getVersion().then(setAppVersion);
+  }, []);
+
   const handleThresholdToggle = (threshold: number) => {
     const newThresholds = notifications.thresholds.includes(threshold)
       ? notifications.thresholds.filter((t) => t !== threshold)
       : [...notifications.thresholds, threshold].sort((a, b) => a - b);
     setNotificationThresholds(newThresholds);
+  };
+
+  const handleCheckForUpdate = () => {
+    setCheckingForUpdate(true);
+    // Use the exposed API to check for updates
+    window.electron.checkForUpdates();
+    // Reset loading state after a timeout (since we don't have a specific 'check complete' event yet)
+    // In a real app, we'd listen for 'update-not-available' too.
+    setTimeout(() => setCheckingForUpdate(false), 3000);
   };
 
   return (
@@ -217,7 +233,7 @@ export function Settings({ onClose }: SettingsProps) {
         </CardContent>
       </Card>
 
-      {/* Launch at Login */}
+      {/* Startup */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Startup</CardTitle>
@@ -235,6 +251,35 @@ export function Settings({ onClose }: SettingsProps) {
             >
               {launchAtLogin ? "Enabled" : "Disabled"}
             </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* About */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">About</CardTitle>
+          <CardDescription>App information and updates</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <span className="text-sm">App Version</span>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-muted-foreground">
+                v{appVersion}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCheckForUpdate}
+                disabled={checkingForUpdate}
+              >
+                <RefreshCw
+                  className={`h-4 w-4 mr-2 ${checkingForUpdate ? "animate-spin" : ""}`}
+                />
+                Check for Updates
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

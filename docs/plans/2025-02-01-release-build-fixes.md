@@ -5,6 +5,7 @@
 **Goal:** Fix critical release build issues to ensure GitHub releases work reliably
 
 **Architecture:**
+
 - Add security warnings with bypass instructions to README
 - Move hardcoded values to environment variables using dotenv
 - Add asset validation with pre-build checks
@@ -30,13 +31,14 @@ This plan addresses 5 critical issues:
 ## Task 1: Add Security Warnings to README
 
 **Files:**
+
 - Modify: `README.md`
 
 **Step 1: Add security warning section to README**
 
 Insert this section after the "Installation" section (after line 57):
 
-```markdown
+````markdown
 ## Security Warnings (Unsigned Builds)
 
 ⚠️ **This application is distributed without code signing.** You may see security warnings when first running the app. This is expected for open-source projects without paid developer certificates.
@@ -44,22 +46,27 @@ Insert this section after the "Installation" section (after line 57):
 ### macOS
 
 When you first try to open the app, you may see:
+
 > "App cannot be opened because it was not downloaded from the App Store"
 
 **To bypass:**
 
 **Option 1: Right-click method (GUI)**
+
 1. Right-click (or Control-click) on the app
 2. Select "Open"
 3. Click "Open" in the confirmation dialog
 
 **Option 2: Terminal method (remove quarantine)**
+
 ```bash
 # After copying the app to Applications folder
 xattr -cr /Applications/copilot-tracker.app
 ```
+````
 
 **Option 3: System Settings**
+
 1. Open System Settings → Privacy & Security
 2. Find the message about the app being blocked
 3. Click "Open Anyway"
@@ -67,9 +74,11 @@ xattr -cr /Applications/copilot-tracker.app
 ### Windows
 
 When you first run the installer or app, you may see:
+
 > "Microsoft Defender SmartScreen prevented an unrecognized app from starting"
 
 **To bypass:**
+
 1. Click "More info"
 2. Click "Run anyway"
 
@@ -80,24 +89,27 @@ No warnings - Linux apps run without restrictions.
 ### Why Unsigned?
 
 Code signing requires paid certificates:
+
 - **macOS**: Apple Developer Program ($99/year)
 - **Windows**: Code signing certificate ($100-300/year)
 
 As an open-source project, we distribute unsigned builds. The source code is publicly available for review if you wish to verify the app's safety.
-```
+
+````
 
 **Step 2: Commit**
 
 ```bash
 git add README.md
 git commit -m "docs: add security warnings for unsigned builds"
-```
+````
 
 ---
 
 ## Task 2: Add Environment Variables Configuration
 
 **Files:**
+
 - Create: `.env.example`
 - Create: `src/main/config.ts`
 - Modify: `package.json`
@@ -146,10 +158,8 @@ export const config = {
   githubBillingUrl:
     process.env.GITHUB_BILLING_URL ||
     "https://github.com/settings/billing/premium_requests_usage",
-  githubLoginUrl:
-    process.env.GITHUB_LOGIN_URL || "https://github.com/login",
-  costPerRequest:
-    parseFloat(process.env.COST_PER_REQUEST || "0.04"),
+  githubLoginUrl: process.env.GITHUB_LOGIN_URL || "https://github.com/login",
+  costPerRequest: parseFloat(process.env.COST_PER_REQUEST || "0.04"),
 } as const;
 
 // Development logger - only logs in development
@@ -208,6 +218,7 @@ const icon = join(__dirname, "../../resources/icon.png");
 ```
 
 Remove lines 58-60 (old constants):
+
 ```typescript
 // OLD - Remove these lines:
 // const GITHUB_BILLING_URL =
@@ -215,15 +226,17 @@ Remove lines 58-60 (old constants):
 // const GITHUB_LOGIN_URL = "https://github.com/login";
 ```
 
-**Step 7: Update src/main/index.ts - replace GITHUB_* URLs**
+**Step 7: Update src/main/index.ts - replace GITHUB\_\* URLs**
 
 Find and replace all occurrences of `GITHUB_BILLING_URL` with `config.githubBillingUrl`:
+
 - Line 288: `shell.openExternal(config.githubBillingUrl);`
 - Line 699: `authView.webContents.loadURL(config.githubBillingUrl);`
 - Line 805: `authView.webContents.loadURL(config.githubBillingUrl);`
 - Line 1304: `shell.openExternal(config.githubBillingUrl);`
 
 Find and replace all occurrences of `GITHUB_LOGIN_URL` with `config.githubLoginUrl`:
+
 - Line 757: `authWindow.loadURL(config.githubLoginUrl);`
 - Line 812: `authWindow.loadURL(config.githubLoginUrl);`
 
@@ -239,6 +252,7 @@ const costPerRequest = config.costPerRequest;
 **Step 9: Update src/main/index.ts - replace console.log with devLog**
 
 Replace all debug console.log statements with devLog:
+
 - Line 387: `devLog.error("[Tray] Failed to create custom icon:", e);`
 - Line 579: `devLog.log("[TrayIcon] Loading icon from:", basePath);`
 - Line 592: `devLog.log("[TrayIcon] Failed to load base icon:", e);`
@@ -249,6 +263,7 @@ Replace all debug console.log statements with devLog:
 - Line 658: `devLog.error("[TrayIcon] Failed to create custom icon:", e);`
 
 Replace authentication console.log statements (keep critical errors):
+
 - Line 703: `devLog.log("[Auth] Navigated to:", url);`
 - Line 705: `devLog.log("[Auth] Detected login page");`
 - Line 710: `devLog.log("[Auth] Detected billing page - user is authenticated");`
@@ -266,6 +281,7 @@ Replace authentication console.log statements (keep critical errors):
 - Line 897: `devLog.error("[Auth] Method 2 exception:", e);`
 
 Replace usage console.log statements (keep critical errors):
+
 - Line 932: `devLog.log("[Usage] Starting fetchUsageData");`
 - Line 937: `devLog.log("[Usage] Got customer ID:", id);`
 - Line 947: `devLog.log("[Usage] Fetching usage card for customer:", id);`
@@ -278,6 +294,7 @@ Replace usage console.log statements (keep critical errors):
 - Line 1050-1063: Keep existing logs (data parsing debugging)
 
 Replace shortcut console.log statements:
+
 - Line 1297: `devLog.log("[Shortcuts] Refresh triggered");`
 - Line 1303: `devLog.log("[Shortcuts] Open Billing triggered");`
 - Line 1307: `devLog.log("[Shortcuts] Registered keyboard shortcuts");`
@@ -290,7 +307,7 @@ Modify `src/renderer/src/types/usage.ts` line 72:
 ```typescript
 // OLD: export const COST_PER_REQUEST = 0.04;
 export const COST_PER_REQUEST = parseFloat(
-  import.meta.env.VITE_COST_PER_REQUEST || "0.04"
+  import.meta.env.VITE_COST_PER_REQUEST || "0.04",
 );
 ```
 
@@ -323,6 +340,7 @@ git commit -m "feat: add environment variables configuration and dev-only loggin
 ## Task 3: Add Asset Validation
 
 **Files:**
+
 - Create: `scripts/validate-assets.ts`
 - Modify: `package.json`
 
@@ -429,6 +447,7 @@ git commit -m "feat: add asset validation script"
 ## Task 4: Configure Canvas Locally (Do NOT push yet!)
 
 **Files:**
+
 - Modify: `electron-builder.yml`
 - Modify: `src/main/index.ts`
 
@@ -439,7 +458,7 @@ Modify `electron-builder.yml` line 12-13:
 ```yaml
 asarUnpack:
   - resources/**
-  - node_modules/canvas/**  # Unpack canvas native module
+  - node_modules/canvas/** # Unpack canvas native module
 ```
 
 **Step 2: Add fallback for canvas in main process**
@@ -486,24 +505,28 @@ git commit -m "fix: configure canvas dependency with fallback"
 ## Task 5: Update README with Build Information
 
 **Files:**
+
 - Modify: `README.md`
 
 **Step 1: Add build instructions to README**
 
 Add section to `README.md` (after the "Development" section, before "Tech Stack"):
 
-```markdown
+````markdown
 ## Building for Production
 
 ### Prerequisites
 
 For Linux builds, install canvas dependencies:
+
 ```bash
 sudo apt-get install build-essential libcairo2-dev libpango1.0-dev \
   libjpeg-dev libgif-dev librsvg2-dev libxi-dev
 ```
+````
 
 For macOS builds, install:
+
 ```bash
 brew install cairo pango libjpeg giflib librsvg
 ```
@@ -532,19 +555,21 @@ cp .env.example .env
 ```
 
 Available variables:
+
 - `APP_ID` - Application identifier
 - `PRODUCT_NAME` - Product name
 - `GITHUB_BILLING_URL` - GitHub billing page URL
 - `GITHUB_LOGIN_URL` - GitHub login page URL
 - `COST_PER_REQUEST` - Cost per Copilot request (default: 0.04)
-```
+
+````
 
 **Step 2: Commit**
 
 ```bash
 git add README.md
 git commit -m "docs: add build instructions to README"
-```
+````
 
 ---
 
@@ -553,6 +578,7 @@ git commit -m "docs: add build instructions to README"
 ⚠️ **IMPORTANT:** This task modifies `.github/workflows/release.yml` which will trigger the GitHub Actions workflow when pushed. Only do this task after ALL other changes are complete and tested.
 
 **Files:**
+
 - Modify: `.github/workflows/release.yml`
 
 **Step 1: Update GitHub Actions to handle canvas dependency**
@@ -560,21 +586,21 @@ git commit -m "docs: add build instructions to README"
 Modify `.github/workflows/release.yml` lines 46-50:
 
 ```yaml
-      - name: Install Dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev libxi-dev
+- name: Install Dependencies (Linux)
+  if: runner.os == 'Linux'
+  run: |
+    sudo apt-get update
+    sudo apt-get install -y build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev libxi-dev
 
-      - name: Install Dependencies (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install cairo pango libjpeg giflib librsvg
+- name: Install Dependencies (macOS)
+  if: runner.os == 'macOS'
+  run: |
+    brew install cairo pango libjpeg giflib librsvg
 
-      - name: Install Dependencies (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          choco install -y gtk-runtime
+- name: Install Dependencies (Windows)
+  if: runner.os == 'Windows'
+  run: |
+    choco install -y gtk-runtime
 ```
 
 **Step 2: Add optional canvas rebuild**
@@ -582,16 +608,16 @@ Modify `.github/workflows/release.yml` lines 46-50:
 Modify `.github/workflows/release.yml` after dependencies (after line 54):
 
 ```yaml
-      - name: Rebuild Canvas (if needed)
-        run: |
-          if [ "$RUNNER_OS" == "Windows" ]; then
-            # Windows: Try to rebuild canvas, continue on failure
-            npm rebuild canvas --no-optional || echo "Canvas rebuild skipped"
-          else
-            # Unix: Try to rebuild canvas, continue on failure
-            npm rebuild canvas --no-optional || echo "Canvas rebuild skipped"
-          fi
-        shell: bash
+- name: Rebuild Canvas (if needed)
+  run: |
+    if [ "$RUNNER_OS" == "Windows" ]; then
+      # Windows: Try to rebuild canvas, continue on failure
+      npm rebuild canvas --no-optional || echo "Canvas rebuild skipped"
+    else
+      # Unix: Try to rebuild canvas, continue on failure
+      npm rebuild canvas --no-optional || echo "Canvas rebuild skipped"
+    fi
+  shell: bash
 ```
 
 **Step 3: Verify workflow changes**
@@ -621,6 +647,7 @@ git push
 Run: `npm run dev`
 
 Expected checks:
+
 - App starts successfully
 - Tray icon appears
 - Debug logs appear in console
@@ -631,6 +658,7 @@ Expected checks:
 Run: `npm run build:unpack`
 
 Expected checks:
+
 - Asset validation passes
 - Build completes without errors
 - App runs from `dist/` folder

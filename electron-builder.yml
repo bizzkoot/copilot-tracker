@@ -11,7 +11,7 @@ files:
   - "!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}"
 asarUnpack:
   - resources/**
-  - node_modules/canvas/**  # Unpack canvas native module
+  - node_modules/canvas/** # Unpack canvas native module
 win:
   icon: resources/icon.png
   executableName: copilot-tracker
@@ -44,5 +44,6 @@ appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
 publish:
-  provider: generic
-  url: https://example.com/auto-updates
+  provider: github
+  owner: bizzkoot
+  repo: copilot-tracker

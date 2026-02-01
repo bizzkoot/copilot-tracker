@@ -11,6 +11,7 @@ Create a modern, cross-platform desktop application that monitors GitHub Copilot
 ### Problem Statement
 
 GitHub Copilot users need to track their premium request usage to:
+
 - Avoid unexpected billing charges
 - Understand their usage patterns
 - Get notified before exceeding their included quota
@@ -21,6 +22,7 @@ The original `copilot-usage-monitor` app solves this for macOS users, but Window
 ### Solution
 
 Build a cross-platform Electron application that:
+
 1. Authenticates via GitHub OAuth (WebView-based, no API tokens needed)
 2. Fetches usage data from GitHub's internal billing APIs
 3. Displays current usage, predictions, and history
@@ -33,27 +35,27 @@ Build a cross-platform Electron application that:
 
 ### Goals
 
-| Goal | Priority | Description |
-|------|----------|-------------|
-| Cross-platform | P0 | Must work on macOS, Windows, Linux |
-| Same functionality | P0 | All features from original app |
-| Modern UI | P1 | Better visual design than original |
-| System tray | P1 | Native system tray on all platforms |
-| Dark/Light theme | P1 | Theme support with system detection |
-| Usage charts | P1 | Trend visualization over time |
-| Smart notifications | P1 | Configurable threshold alerts |
-| Auto-updates | P2 | Automatic updates via GitHub releases |
+| Goal                | Priority | Description                           |
+| ------------------- | -------- | ------------------------------------- |
+| Cross-platform      | P0       | Must work on macOS, Windows, Linux    |
+| Same functionality  | P0       | All features from original app        |
+| Modern UI           | P1       | Better visual design than original    |
+| System tray         | P1       | Native system tray on all platforms   |
+| Dark/Light theme    | P1       | Theme support with system detection   |
+| Usage charts        | P1       | Trend visualization over time         |
+| Smart notifications | P1       | Configurable threshold alerts         |
+| Auto-updates        | P2       | Automatic updates via GitHub releases |
 
 ### Non-Goals (Out of Scope)
 
-| Non-Goal | Reason |
-|----------|--------|
-| Mobile apps | Focus on desktop first |
-| Web version | Requires different auth approach |
-| Multiple accounts | Complexity; single account is sufficient |
-| Organization usage | Focus on individual users |
-| Historical data export | Can be added later if needed |
-| API token auth | WebView auth is more secure and user-friendly |
+| Non-Goal               | Reason                                        |
+| ---------------------- | --------------------------------------------- |
+| Mobile apps            | Focus on desktop first                        |
+| Web version            | Requires different auth approach              |
+| Multiple accounts      | Complexity; single account is sufficient      |
+| Organization usage     | Focus on individual users                     |
+| Historical data export | Can be added later if needed                  |
+| API token auth         | WebView auth is more secure and user-friendly |
 
 ---
 
@@ -81,14 +83,14 @@ Build a cross-platform Electron application that:
 
 ## Success Metrics
 
-| Metric | Target | How to Measure |
-|--------|--------|----------------|
-| Platform support | 3 platforms | macOS, Windows, Linux builds work |
-| Feature parity | 100% | All original features implemented |
-| App size | < 100MB | Final installer size |
-| Startup time | < 3s | Time from launch to showing data |
-| Memory usage | < 150MB | Runtime memory consumption |
-| Update rate | Same as original | 10s to 30min configurable |
+| Metric           | Target           | How to Measure                    |
+| ---------------- | ---------------- | --------------------------------- |
+| Platform support | 3 platforms      | macOS, Windows, Linux builds work |
+| Feature parity   | 100%             | All original features implemented |
+| App size         | < 100MB          | Final installer size              |
+| Startup time     | < 3s             | Time from launch to showing data  |
+| Memory usage     | < 150MB          | Runtime memory consumption        |
+| Update rate      | Same as original | 10s to 30min configurable         |
 
 ---
 
@@ -96,11 +98,11 @@ Build a cross-platform Electron application that:
 
 ### Existing Solutions
 
-| Solution | Platforms | Pros | Cons |
-|----------|-----------|------|------|
-| **copilot-usage-monitor (original)** | macOS only | Native, lightweight, works well | macOS only, basic UI |
-| **GitHub Billing Page** | Web | Official, accurate | Manual check, no notifications |
-| **Browser extensions** | Chrome/Firefox | Easy to install | Can't run in background |
+| Solution                             | Platforms      | Pros                            | Cons                           |
+| ------------------------------------ | -------------- | ------------------------------- | ------------------------------ |
+| **copilot-usage-monitor (original)** | macOS only     | Native, lightweight, works well | macOS only, basic UI           |
+| **GitHub Billing Page**              | Web            | Official, accurate              | Manual check, no notifications |
+| **Browser extensions**               | Chrome/Firefox | Easy to install                 | Can't run in background        |
 
 ### Our Differentiators
 
@@ -129,12 +131,12 @@ Build a cross-platform Electron application that:
 
 ### Risks & Mitigations
 
-| Risk | Impact | Probability | Mitigation |
-|------|--------|-------------|------------|
-| API changes | High | Medium | Monitor for changes, quick patch releases |
-| Session expiry | Medium | High | Graceful re-auth flow, clear messaging |
-| GitHub blocks automation | High | Low | Use realistic user-agent, respect rate limits |
-| Electron security vulnerabilities | High | Medium | Keep Electron updated, follow best practices |
+| Risk                              | Impact | Probability | Mitigation                                    |
+| --------------------------------- | ------ | ----------- | --------------------------------------------- |
+| API changes                       | High   | Medium      | Monitor for changes, quick patch releases     |
+| Session expiry                    | Medium | High        | Graceful re-auth flow, clear messaging        |
+| GitHub blocks automation          | High   | Low         | Use realistic user-agent, respect rate limits |
+| Electron security vulnerabilities | High   | Medium      | Keep Electron updated, follow best practices  |
 
 ---
 
@@ -142,17 +144,17 @@ Build a cross-platform Electron application that:
 
 ### Phase Summary
 
-| Phase | Duration | Deliverable |
-|-------|----------|-------------|
-| Phase 1: Setup | 1-2 days | Running Electron app skeleton |
-| Phase 2: Core | 1-2 days | Types and prediction algorithm |
-| Phase 3: Auth | 2-3 days | Working GitHub OAuth |
-| Phase 4: Data | 2-3 days | API fetching and caching |
-| Phase 5: UI | 3-4 days | Complete dashboard |
-| Phase 6: Tray | 2-3 days | System tray integration |
-| Phase 7: Settings | 1-2 days | Preferences panel |
-| Phase 8: Notifications | 1 day | Alert system |
-| Phase 9: Packaging | 2-3 days | Distributable builds |
+| Phase                  | Duration | Deliverable                    |
+| ---------------------- | -------- | ------------------------------ |
+| Phase 1: Setup         | 1-2 days | Running Electron app skeleton  |
+| Phase 2: Core          | 1-2 days | Types and prediction algorithm |
+| Phase 3: Auth          | 2-3 days | Working GitHub OAuth           |
+| Phase 4: Data          | 2-3 days | API fetching and caching       |
+| Phase 5: UI            | 3-4 days | Complete dashboard             |
+| Phase 6: Tray          | 2-3 days | System tray integration        |
+| Phase 7: Settings      | 1-2 days | Preferences panel              |
+| Phase 8: Notifications | 1 day    | Alert system                   |
+| Phase 9: Packaging     | 2-3 days | Distributable builds           |
 
 **Total: ~2-3 weeks of focused development**
 

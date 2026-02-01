@@ -30,6 +30,21 @@ export interface UsageFetchResult {
   error?: string;
 }
 
+// Update info
+export interface UpdateInfo {
+  version: string;
+  files: {
+    url: string;
+    sha512: string;
+    size: number;
+  }[];
+  path: string;
+  sha512: string;
+  releaseName?: string;
+  releaseNotes?: string | Array<{ version: string; note: string | null }>;
+  releaseDate: string;
+}
+
 // IPC Events from main to renderer
 export interface MainToRendererEvents {
   "auth:state-changed": (state: AuthState) => void;
@@ -38,6 +53,7 @@ export interface MainToRendererEvents {
   "usage:data": (data: UsageFetchResult) => void;
   "usage:loading": (loading: boolean) => void;
   "settings:changed": (settings: Settings) => void;
+  "update:available": (info: UpdateInfo) => void;
 }
 
 // IPC Events from renderer to main
@@ -80,10 +96,14 @@ export interface ElectronAPI {
   quit: () => void;
   showWindow: () => void;
   hideWindow: () => void;
+  openExternal: (url: string) => void;
+  checkForUpdates: () => void;
   onNavigate: (callback: (route: string) => void) => () => void;
+  onUpdateAvailable: (callback: (info: UpdateInfo) => void) => () => void;
 
   // Platform info
   platform: NodeJS.Platform;
+  getVersion: () => Promise<string>;
 }
 
 // Window API for global access

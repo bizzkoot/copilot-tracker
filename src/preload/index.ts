@@ -57,12 +57,21 @@ const electronAPI = {
   quit: (): void => ipcRenderer.send("app:quit"),
   showWindow: (): void => ipcRenderer.send("window:show"),
   hideWindow: (): void => ipcRenderer.send("window:hide"),
+  openExternal: (url: string): void => ipcRenderer.send("shell:open", url),
+  checkForUpdates: (): void => ipcRenderer.send("update:check"),
   onNavigate: (callback: (route: string) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, route: string): void =>
       callback(route);
     ipcRenderer.on("navigate", listener);
     return () => ipcRenderer.removeListener("navigate", listener);
   },
+  onUpdateAvailable: (callback: (info: unknown) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, info: unknown): void =>
+      callback(info);
+    ipcRenderer.on("update:available", listener);
+    return () => ipcRenderer.removeListener("update:available", listener);
+  },
+  getVersion: (): Promise<string> => ipcRenderer.invoke("app:get-version"),
 };
 
 // Expose APIs to renderer only if context isolation is enabled

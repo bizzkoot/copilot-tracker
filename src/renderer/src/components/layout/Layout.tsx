@@ -8,6 +8,7 @@ import { Header } from "./Header";
 import { Dashboard } from "../dashboard/Dashboard";
 import { Settings } from "../settings/Settings";
 import { LoginPrompt } from "../auth/LoginPrompt";
+import { UpdateBanner } from "../ui/UpdateBanner";
 import { useAuth } from "@renderer/hooks/useAuth";
 
 type View = "dashboard" | "settings";
@@ -69,6 +70,7 @@ export function Layout() {
           <Settings onClose={() => setCurrentView("dashboard")} />
         )}
       </main>
+      <UpdateBanner />
     </div>
   );
 }

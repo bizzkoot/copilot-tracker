@@ -15,6 +15,7 @@
 ### Tasks
 
 #### Task 1.1: Create Project Folder
+
 **Time**: 5 minutes  
 **Owner**: Developer
 
@@ -25,6 +26,7 @@ cd copilot-tracker
 ```
 
 #### Task 1.2: Initialize electron-vite Project
+
 **Time**: 10 minutes  
 **Owner**: Developer
 
@@ -37,6 +39,7 @@ npm install -D @types/react @types/react-dom @types/node typescript
 ```
 
 #### Task 1.3: Configure Tailwind CSS
+
 **Time**: 10 minutes  
 **Owner**: Developer
 
@@ -46,21 +49,21 @@ npx tailwindcss init -p
 ```
 
 **tailwind.config.js**:
+
 ```js
 /** @type {import('tailwindcss').Config} */
 export default {
-  darkMode: ['class'],
-  content: [
-    './src/**/*.{js,jsx,ts,tsx}',
-  ],
+  darkMode: ["class"],
+  content: ["./src/**/*.{js,jsx,ts,tsx}"],
   theme: {
     extend: {},
   },
   plugins: [],
-}
+};
 ```
 
 **src/styles/globals.css**:
+
 ```css
 @tailwind base;
 @tailwind components;
@@ -68,6 +71,7 @@ export default {
 ```
 
 #### Task 1.4: Install shadcn/ui
+
 **Time**: 15 minutes  
 **Owner**: Developer
 
@@ -78,6 +82,7 @@ npx shadcn-ui@latest add button card progress select tooltip
 ```
 
 #### Task 1.5: Setup Folder Structure
+
 **Time**: 10 minutes  
 **Owner**: Developer
 
@@ -89,10 +94,12 @@ mkdir -p resources/{icons,tray}
 ```
 
 #### Task 1.6: Configure TypeScript
+
 **Time**: 10 minutes  
 **Owner**: Developer
 
 **tsconfig.json**:
+
 ```json
 {
   "compilerOptions": {
@@ -120,13 +127,15 @@ mkdir -p resources/{icons,tray}
 ```
 
 #### Task 1.7: Basic Main Process
+
 **Time**: 15 minutes  
 **Owner**: Developer
 
 **electron/main/index.ts**:
+
 ```typescript
-import { app, BrowserWindow } from 'electron';
-import path from 'path';
+import { app, BrowserWindow } from "electron";
+import path from "path";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -135,28 +144,28 @@ function createWindow() {
     width: 900,
     height: 700,
     webPreferences: {
-      preload: path.join(__dirname, '../preload/index.js'),
+      preload: path.join(__dirname, "../preload/index.js"),
       nodeIntegration: false,
       contextIsolation: true,
     },
   });
 
-  if (process.env.NODE_ENV === 'development') {
-    mainWindow.loadURL('http://localhost:5173');
+  if (process.env.NODE_ENV === "development") {
+    mainWindow.loadURL("http://localhost:5173");
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+    mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
   }
 }
 
 app.whenReady().then(createWindow);
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") {
     app.quit();
   }
 });
 
-app.on('activate', () => {
+app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }
@@ -164,6 +173,7 @@ app.on('activate', () => {
 ```
 
 **Verification**:
+
 ```bash
 npm run dev
 # App should open with empty window
@@ -180,16 +190,18 @@ npm run dev
 ### Tasks
 
 #### Task 2.1: Port CopilotUsage Type
+
 **Time**: 15 minutes  
 **Owner**: Developer
 
 **src/types/usage.ts**:
+
 ```typescript
 export interface CopilotUsage {
-  netBilledAmount: number;           // Add-on cost in dollars
-  netQuantity: number;               // Net requests used
-  discountQuantity: number;          // Requests within included quota
-  userPremiumRequestEntitlement: number;  // Monthly limit
+  netBilledAmount: number; // Add-on cost in dollars
+  netQuantity: number; // Net requests used
+  discountQuantity: number; // Requests within included quota
+  userPremiumRequestEntitlement: number; // Monthly limit
   filteredUserPremiumRequestEntitlement: number;
 }
 
@@ -215,17 +227,19 @@ export function getUsagePercentage(usage: CopilotUsage): number {
 ```
 
 #### Task 2.2: Port UsageHistory Types
+
 **Time**: 15 minutes  
 **Owner**: Developer
 
 **src/types/usage.ts** (continued):
+
 ```typescript
 export interface DailyUsage {
-  date: Date;                  // UTC date
-  includedRequests: number;    // Requests within quota
-  billedRequests: number;      // Add-on billed requests
-  grossAmount: number;         // Gross amount
-  billedAmount: number;        // Add-on cost
+  date: Date; // UTC date
+  includedRequests: number; // Requests within quota
+  billedRequests: number; // Add-on billed requests
+  grossAmount: number; // Gross amount
+  billedAmount: number; // Add-on cost
 }
 
 export interface UsageHistory {
@@ -249,15 +263,17 @@ export function getDayOfWeek(date: Date): number {
 ```
 
 #### Task 2.3: Port UsagePrediction Types
+
 **Time**: 10 minutes  
 **Owner**: Developer
 
 **src/types/usage.ts** (continued):
+
 ```typescript
 export interface UsagePrediction {
   predictedMonthlyRequests: number;
   predictedBilledAmount: number;
-  confidenceLevel: 'low' | 'medium' | 'high';
+  confidenceLevel: "low" | "medium" | "high";
   daysUsedForPrediction: number;
 }
 
@@ -273,20 +289,27 @@ export const PREDICTION_PERIODS: Record<number, PredictionWeights> = {
   },
   14: {
     period: 14,
-    weights: [2.0, 1.8, 1.6, 1.4, 1.2, 1.2, 1.0, 1.0, 1.0, 1.0, 0.8, 0.8, 0.6, 0.6],
+    weights: [
+      2.0, 1.8, 1.6, 1.4, 1.2, 1.2, 1.0, 1.0, 1.0, 1.0, 0.8, 0.8, 0.6, 0.6,
+    ],
   },
   21: {
     period: 21,
-    weights: [2.5, 2.3, 2.1, 1.9, 1.7, 1.5, 1.3, 1.3, 1.2, 1.2, 1.1, 1.1, 1.0, 1.0, 0.9, 0.9, 0.8, 0.8, 0.7, 0.7, 0.6],
+    weights: [
+      2.5, 2.3, 2.1, 1.9, 1.7, 1.5, 1.3, 1.3, 1.2, 1.2, 1.1, 1.1, 1.0, 1.0, 0.9,
+      0.9, 0.8, 0.8, 0.7, 0.7, 0.6,
+    ],
   },
 };
 ```
 
 #### Task 2.4: Implement UsagePredictor
+
 **Time**: 45 minutes  
 **Owner**: Developer
 
 **src/services/predictor.ts**:
+
 ```typescript
 import {
   CopilotUsage,
@@ -298,14 +321,14 @@ import {
   isWeekend,
   getUsedRequests,
   getLimitRequests,
-} from '@/types/usage';
+} from "@/types/usage";
 
 const COST_PER_REQUEST = 0.04;
 
 export function predictUsage(
   history: UsageHistory,
   currentUsage: CopilotUsage,
-  predictionPeriod: number
+  predictionPeriod: number,
 ): UsagePrediction {
   const config = PREDICTION_PERIODS[predictionPeriod];
   if (!config) {
@@ -325,7 +348,10 @@ export function predictUsage(
   const daysInMonth = getDaysInMonth(today);
   const currentDay = today.getDate();
   const remainingDays = daysInMonth - currentDay;
-  const { remainingWeekdays, remainingWeekends } = countRemainingDays(today, remainingDays);
+  const { remainingWeekdays, remainingWeekends } = countRemainingDays(
+    today,
+    remainingDays,
+  );
 
   // 4. Predict total monthly usage
   const currentTotal = getUsedRequests(currentUsage);
@@ -350,7 +376,10 @@ export function predictUsage(
   };
 }
 
-function calculateWeightedAverage(dailyData: DailyUsage[], weights: number[]): number {
+function calculateWeightedAverage(
+  dailyData: DailyUsage[],
+  weights: number[],
+): number {
   let weightedSum = 0;
   let totalWeight = 0;
 
@@ -385,7 +414,7 @@ function getDaysInMonth(date: Date): number {
 
 function countRemainingDays(
   today: Date,
-  remaining: number
+  remaining: number,
 ): { remainingWeekdays: number; remainingWeekends: number } {
   let weekdays = 0;
   let weekends = 0;
@@ -403,18 +432,20 @@ function countRemainingDays(
   return { remainingWeekdays: weekdays, remainingWeekends: weekends };
 }
 
-function getConfidenceLevel(daysCount: number): 'low' | 'medium' | 'high' {
-  if (daysCount < 3) return 'low';
-  if (daysCount < 7) return 'medium';
-  return 'high';
+function getConfidenceLevel(daysCount: number): "low" | "medium" | "high" {
+  if (daysCount < 3) return "low";
+  if (daysCount < 7) return "medium";
+  return "high";
 }
 ```
 
 #### Task 2.5: Create API JavaScript
+
 **Time**: 30 minutes  
 **Owner**: Developer
 
 **src/services/api.ts**:
+
 ```typescript
 export const API_SCRIPTS = {
   // Method 1: Get user ID from GitHub API
@@ -508,6 +539,7 @@ export const API_SCRIPTS = {
 ```
 
 #### Task 2.6: Setup electron-store
+
 **Time**: 15 minutes  
 **Owner**: Developer
 
@@ -516,16 +548,17 @@ npm install electron-store
 ```
 
 **src/types/settings.ts**:
+
 ```typescript
 export interface Settings {
-  refreshInterval: 10 | 30 | 60 | 300 | 1800;  // seconds
-  predictionPeriod: 7 | 14 | 21;  // days
+  refreshInterval: 10 | 30 | 60 | 300 | 1800; // seconds
+  predictionPeriod: 7 | 14 | 21; // days
   launchAtLogin: boolean;
   notifications: {
     enabled: boolean;
-    thresholds: number[];  // e.g., [50, 75, 90, 100]
+    thresholds: number[]; // e.g., [50, 75, 90, 100]
   };
-  theme: 'light' | 'dark' | 'system';
+  theme: "light" | "dark" | "system";
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -536,11 +569,12 @@ export const DEFAULT_SETTINGS: Settings = {
     enabled: true,
     thresholds: [75, 90, 100],
   },
-  theme: 'system',
+  theme: "system",
 };
 ```
 
 **Verification**:
+
 ```bash
 npm run build
 # Should compile without errors
@@ -553,6 +587,7 @@ npm run build
 Due to length constraints, I'll create a comprehensive checklist document that covers all remaining phases (3-9) with similar detail.
 
 **Phases covered**:
+
 - Phase 3: Authentication System (7 tasks, ~3 hours)
 - Phase 4: Data Fetching & Caching (8 tasks, ~3.25 hours)
 - Phase 5: UI - Dashboard (10 tasks, ~5.5 hours)
@@ -607,14 +642,14 @@ npm run typecheck
 
 Use this table to track implementation progress:
 
-| Phase | Status | Start Date | End Date | Notes |
-|-------|--------|------------|----------|-------|
-| Phase 1: Setup | Not Started | - | - | - |
-| Phase 2: Core Types | Not Started | - | - | - |
-| Phase 3: Auth | Not Started | - | - | - |
-| Phase 4: Data | Not Started | - | - | - |
-| Phase 5: UI | Not Started | - | - | - |
-| Phase 6: Tray | Not Started | - | - | - |
-| Phase 7: Settings | Not Started | - | - | - |
-| Phase 8: Notifications | Not Started | - | - | - |
-| Phase 9: Packaging | Not Started | - | - | - |
+| Phase                  | Status      | Start Date | End Date | Notes |
+| ---------------------- | ----------- | ---------- | -------- | ----- |
+| Phase 1: Setup         | Not Started | -          | -        | -     |
+| Phase 2: Core Types    | Not Started | -          | -        | -     |
+| Phase 3: Auth          | Not Started | -          | -        | -     |
+| Phase 4: Data          | Not Started | -          | -        | -     |
+| Phase 5: UI            | Not Started | -          | -        | -     |
+| Phase 6: Tray          | Not Started | -          | -        | -     |
+| Phase 7: Settings      | Not Started | -          | -        | -     |
+| Phase 8: Notifications | Not Started | -          | -        | -     |
+| Phase 9: Packaging     | Not Started | -          | -        | -     |

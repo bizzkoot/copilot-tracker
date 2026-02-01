@@ -21,14 +21,14 @@
 
 The original `copilot-usage-monitor` is a **macOS-only** application built with:
 
-| Component | Technology |
-|-----------|------------|
-| Language | Swift 5.9 |
+| Component    | Technology              |
+| ------------ | ----------------------- |
+| Language     | Swift 5.9               |
 | UI Framework | SwiftUI + AppKit hybrid |
-| WebView | WKWebView |
-| Auto-updates | Sparkle 2.8.1 |
-| Persistence | UserDefaults |
-| Target OS | macOS 13.0+ |
+| WebView      | WKWebView               |
+| Auto-updates | Sparkle 2.8.1           |
+| Persistence  | UserDefaults            |
+| Target OS    | macOS 13.0+             |
 
 ### File Structure Analysis
 
@@ -101,19 +101,20 @@ customer_id=(\d+)
 
 ### Why Electron?
 
-| Criterion | Electron | Tauri | Flutter | React Native |
-|-----------|----------|-------|---------|--------------|
-| Cross-platform | Excellent | Excellent | Good | Limited |
-| WebView support | Chromium (consistent) | Native (varies) | Limited | Limited |
-| System tray | Excellent | Good | Poor | Poor |
-| Cookie persistence | Easy | Complex | Complex | Complex |
-| Ecosystem | Massive | Growing | Large | Large |
-| Bundle size | Large (~100MB) | Small (~10MB) | Medium | Medium |
-| Learning curve | Low (if know web) | Medium | Medium | Medium |
+| Criterion          | Electron              | Tauri           | Flutter | React Native |
+| ------------------ | --------------------- | --------------- | ------- | ------------ |
+| Cross-platform     | Excellent             | Excellent       | Good    | Limited      |
+| WebView support    | Chromium (consistent) | Native (varies) | Limited | Limited      |
+| System tray        | Excellent             | Good            | Poor    | Poor         |
+| Cookie persistence | Easy                  | Complex         | Complex | Complex      |
+| Ecosystem          | Massive               | Growing         | Large   | Large        |
+| Bundle size        | Large (~100MB)        | Small (~10MB)   | Medium  | Medium       |
+| Learning curve     | Low (if know web)     | Medium          | Medium  | Medium       |
 
 **Decision: Electron**
 
 Reasons:
+
 1. **Chromium WebView**: Consistent behavior across platforms for GitHub OAuth
 2. **Cookie persistence**: Built-in support via `partition` option
 3. **System tray**: Mature, well-documented Tray API
@@ -122,17 +123,18 @@ Reasons:
 
 ### Why React?
 
-| Criterion | React | Vue | Svelte | Solid |
-|-----------|-------|-----|--------|-------|
-| Ecosystem | Huge | Large | Growing | Small |
-| Electron integration | Best | Good | Good | Limited |
-| Component libraries | Many | Many | Growing | Few |
-| TypeScript support | Excellent | Excellent | Good | Excellent |
-| Learning curve | Medium | Low | Low | Medium |
+| Criterion            | React     | Vue       | Svelte  | Solid     |
+| -------------------- | --------- | --------- | ------- | --------- |
+| Ecosystem            | Huge      | Large     | Growing | Small     |
+| Electron integration | Best      | Good      | Good    | Limited   |
+| Component libraries  | Many      | Many      | Growing | Few       |
+| TypeScript support   | Excellent | Excellent | Good    | Excellent |
+| Learning curve       | Medium    | Low       | Low     | Medium    |
 
 **Decision: React**
 
 Reasons:
+
 1. **Best Electron integration**: Most Electron apps use React
 2. **shadcn/ui**: Beautiful component library for React + Tailwind
 3. **Recharts**: Best React charting library
@@ -140,16 +142,17 @@ Reasons:
 
 ### Why Tailwind + shadcn/ui?
 
-| Option | Pros | Cons |
-|--------|------|------|
+| Option               | Pros                            | Cons                        |
+| -------------------- | ------------------------------- | --------------------------- |
 | Tailwind + shadcn/ui | Beautiful, customizable, modern | Requires Tailwind knowledge |
-| Material UI | Comprehensive, well-documented | Can look generic |
-| Chakra UI | Accessible, easy to use | Less customizable |
-| Ant Design | Enterprise-ready | Complex, opinionated |
+| Material UI          | Comprehensive, well-documented  | Can look generic            |
+| Chakra UI            | Accessible, easy to use         | Less customizable           |
+| Ant Design           | Enterprise-ready                | Complex, opinionated        |
 
 **Decision: Tailwind + shadcn/ui**
 
 Reasons:
+
 1. **Modern aesthetics**: Looks great out of the box
 2. **Customizable**: Easy to adjust for dark/light themes
 3. **Not a dependency**: Components copied into project, full control
@@ -162,6 +165,7 @@ Reasons:
 ### Detailed Electron Analysis
 
 #### Pros
+
 - Chromium-based: Consistent WebView behavior
 - Mature: 10+ years of development
 - Large community: Extensive documentation
@@ -169,12 +173,14 @@ Reasons:
 - Security: Context isolation, sandbox by default
 
 #### Cons
+
 - Bundle size: ~100MB minimum
 - Memory usage: ~100-150MB typical
 - Startup time: ~2-3 seconds
 - Needs native builds per platform
 
 #### Mitigation Strategies
+
 - Use `electron-vite` for faster builds and HMR
 - Use `contextBridge` for secure IPC
 - Minimize renderer process complexity
@@ -183,6 +189,7 @@ Reasons:
 ### Tauri Evaluation (Alternative)
 
 Considered but rejected because:
+
 1. **Native WebView inconsistency**: Different engines on different platforms
 2. **Cookie handling complexity**: More manual work required
 3. **Less mature**: Fewer production examples
@@ -191,6 +198,7 @@ Considered but rejected because:
 ### Flutter Desktop Evaluation (Alternative)
 
 Considered but rejected because:
+
 1. **WebView plugin issues**: Incomplete cross-platform support
 2. **System tray plugins**: Less mature than Electron
 3. **Cookie persistence**: Requires custom implementation
@@ -221,19 +229,19 @@ The original app uses a **WebView-based session authentication**:
 // Create BrowserView with persistent partition
 const authView = new BrowserView({
   webPreferences: {
-    partition: 'persist:github',  // Persistent cookies
+    partition: "persist:github", // Persistent cookies
     nodeIntegration: false,
     contextIsolation: true,
-  }
+  },
 });
 
 // Monitor navigation
-authView.webContents.on('did-navigate', (event, url) => {
-  if (url.includes('/login') || url.includes('/session')) {
+authView.webContents.on("did-navigate", (event, url) => {
+  if (url.includes("/login") || url.includes("/session")) {
     // Show login window
     showLoginWindow();
   }
-  if (url.includes('/settings/billing')) {
+  if (url.includes("/settings/billing")) {
     // Ready to fetch data
     fetchUsageData();
   }
@@ -242,12 +250,12 @@ authView.webContents.on('did-navigate', (event, url) => {
 
 ### Session Management
 
-| Aspect | Original (macOS) | Electron |
-|--------|------------------|----------|
-| Cookie storage | WKWebsiteDataStore | Chromium partition |
-| Persistence | Automatic | Automatic with `persist:` prefix |
-| Clear session | removeData(ofTypes:) | session.clearStorageData() |
-| Cross-platform | N/A | Same API everywhere |
+| Aspect         | Original (macOS)     | Electron                         |
+| -------------- | -------------------- | -------------------------------- |
+| Cookie storage | WKWebsiteDataStore   | Chromium partition               |
+| Persistence    | Automatic            | Automatic with `persist:` prefix |
+| Clear session  | removeData(ofTypes:) | session.clearStorageData()       |
+| Cross-platform | N/A                  | Same API everywhere              |
 
 ### Security Considerations
 
@@ -262,11 +270,11 @@ authView.webContents.on('did-navigate', (event, url) => {
 
 ### Endpoints Used
 
-| Endpoint | Method | Purpose | Response |
-|----------|--------|---------|----------|
-| `/api/v3/user` | GET | Get user ID | User JSON |
-| `/settings/billing/copilot_usage_card` | GET | Current usage | Usage JSON |
-| `/settings/billing/copilot_usage_table` | GET | Usage history | Table JSON |
+| Endpoint                                | Method | Purpose       | Response   |
+| --------------------------------------- | ------ | ------------- | ---------- |
+| `/api/v3/user`                          | GET    | Get user ID   | User JSON  |
+| `/settings/billing/copilot_usage_card`  | GET    | Current usage | Usage JSON |
+| `/settings/billing/copilot_usage_table` | GET    | Usage history | Table JSON |
 
 ### Request Headers
 
@@ -283,12 +291,14 @@ Three fallback methods (in order):
 
 ```javascript
 // Method 1: API call
-const response = await fetch('/api/v3/user');
+const response = await fetch("/api/v3/user");
 const data = await response.json();
 return data.id;
 
 // Method 2: DOM extraction
-const el = document.querySelector('script[data-target="react-app.embeddedData"]');
+const el = document.querySelector(
+  'script[data-target="react-app.embeddedData"]',
+);
 const data = JSON.parse(el.textContent);
 return data.payload.customer.customerId;
 
@@ -296,7 +306,7 @@ return data.payload.customer.customerId;
 const patterns = [
   /customerId":(\d+)/,
   /customerId&quot;:(\d+)/,
-  /customer_id=(\d+)/
+  /customer_id=(\d+)/,
 ];
 const match = document.body.innerHTML.match(patterns[0]);
 return match[1];
@@ -305,9 +315,10 @@ return match[1];
 ### Response Parsing
 
 **Usage Card Response:**
+
 ```json
 {
-  "net_billed_amount": 0.00,
+  "net_billed_amount": 0.0,
   "net_quantity": 150,
   "discount_quantity": 150,
   "user_premium_request_entitlement": 500,
@@ -316,6 +327,7 @@ return match[1];
 ```
 
 **Usage Table Response:**
+
 ```json
 {
   "rows": [
@@ -343,11 +355,13 @@ return match[1];
 ### Current App UI Analysis
 
 **Strengths:**
+
 - Simple, focused interface
 - Quick access via menu bar
 - Color-coded progress indicator
 
 **Weaknesses:**
+
 - Basic visual design
 - No usage trends visualization
 - Limited customization
@@ -356,6 +370,7 @@ return match[1];
 ### Design Inspiration
 
 **Reference Applications:**
+
 1. **Raycast**: Clean, modern macOS utility design
 2. **Linear**: Beautiful dark/light themes
 3. **Figma Desktop**: Electron app with great UX
@@ -364,6 +379,7 @@ return match[1];
 ### Component Library Selection
 
 **shadcn/ui chosen for:**
+
 - Radix primitives (accessible)
 - Tailwind-based (consistent styling)
 - Copy-paste model (full control)
@@ -423,31 +439,31 @@ return match[1];
 
 ### macOS
 
-| Feature | Implementation |
-|---------|----------------|
-| System tray | Tray with template image |
-| Menu bar style | Use `Tray` with context menu |
+| Feature         | Implementation               |
+| --------------- | ---------------------------- |
+| System tray     | Tray with template image     |
+| Menu bar style  | Use `Tray` with context menu |
 | Launch at login | `app.setLoginItemSettings()` |
-| App signature | Developer ID certificate |
-| Notarization | Required for distribution |
+| App signature   | Developer ID certificate     |
+| Notarization    | Required for distribution    |
 
 ### Windows
 
-| Feature | Implementation |
-|---------|----------------|
-| System tray | Tray with icon |
-| HiDPI support | Use @2x icons |
+| Feature         | Implementation               |
+| --------------- | ---------------------------- |
+| System tray     | Tray with icon               |
+| HiDPI support   | Use @2x icons                |
 | Launch at login | `app.setLoginItemSettings()` |
-| Installer | NSIS via electron-builder |
+| Installer       | NSIS via electron-builder    |
 
 ### Linux
 
-| Feature | Implementation |
-|---------|----------------|
-| System tray | Tray (AppIndicator on Ubuntu) |
-| Launch at login | .desktop file in autostart |
-| Package format | AppImage (portable) |
-| Icon handling | Multiple PNG sizes |
+| Feature         | Implementation                |
+| --------------- | ----------------------------- |
+| System tray     | Tray (AppIndicator on Ubuntu) |
+| Launch at login | .desktop file in autostart    |
+| Package format  | AppImage (portable)           |
+| Icon handling   | Multiple PNG sizes            |
 
 ### Cross-Platform Icon Requirements
 
@@ -476,16 +492,16 @@ resources/
 
 ### Decision Log
 
-| # | Decision | Options Considered | Choice | Rationale |
-|---|----------|-------------------|--------|-----------|
-| 1 | Framework | Electron, Tauri, Flutter | Electron | Best WebView support |
-| 2 | Frontend | React, Vue, Svelte | React | Best ecosystem |
-| 3 | Language | TypeScript, JavaScript | TypeScript | Type safety |
-| 4 | Styling | Tailwind, MUI, Chakra | Tailwind + shadcn/ui | Modern, beautiful |
-| 5 | State | Redux, Zustand, Jotai | Zustand | Simple, lightweight |
-| 6 | Charts | Recharts, Chart.js, D3 | Recharts | Best React integration |
-| 7 | Build | electron-builder, electron-forge | electron-builder | More features |
-| 8 | Bundler | Vite, Webpack | electron-vite | Fast, modern |
+| #   | Decision  | Options Considered               | Choice               | Rationale              |
+| --- | --------- | -------------------------------- | -------------------- | ---------------------- |
+| 1   | Framework | Electron, Tauri, Flutter         | Electron             | Best WebView support   |
+| 2   | Frontend  | React, Vue, Svelte               | React                | Best ecosystem         |
+| 3   | Language  | TypeScript, JavaScript           | TypeScript           | Type safety            |
+| 4   | Styling   | Tailwind, MUI, Chakra            | Tailwind + shadcn/ui | Modern, beautiful      |
+| 5   | State     | Redux, Zustand, Jotai            | Zustand              | Simple, lightweight    |
+| 6   | Charts    | Recharts, Chart.js, D3           | Recharts             | Best React integration |
+| 7   | Build     | electron-builder, electron-forge | electron-builder     | More features          |
+| 8   | Bundler   | Vite, Webpack                    | electron-vite        | Fast, modern           |
 
 ### Architecture Decisions
 
@@ -496,6 +512,7 @@ resources/
 **Decision**: Use hidden BrowserView instead of BrowserWindow
 
 **Rationale**:
+
 - BrowserView can be attached to main window
 - Shares session with login window
 - Can execute JavaScript for API calls
@@ -508,6 +525,7 @@ resources/
 **Decision**: Create dedicated IPC handler modules
 
 **Rationale**:
+
 - Clean separation of concerns
 - Easy to test
 - Type-safe with TypeScript
@@ -520,6 +538,7 @@ resources/
 **Decision**: Use Zustand instead of Redux or Context
 
 **Rationale**:
+
 - Minimal boilerplate
 - Great TypeScript support
 - Works well with React
@@ -532,6 +551,7 @@ resources/
 **Decision**: Use electron-store instead of localStorage
 
 **Rationale**:
+
 - Works in main process
 - Encrypted option available
 - Schema validation
@@ -542,6 +562,7 @@ resources/
 ## References
 
 ### Documentation
+
 - [Electron Documentation](https://www.electronjs.org/docs)
 - [electron-vite](https://electron-vite.org/)
 - [shadcn/ui](https://ui.shadcn.com/)
@@ -549,10 +570,12 @@ resources/
 - [Zustand](https://zustand-demo.pmnd.rs/)
 
 ### Original App
+
 - [copilot-usage-monitor](https://github.com/hyp3rflow/copilot-usage-monitor)
 - StatusBarController.swift (main implementation reference)
 - UsagePredictor.swift (prediction algorithm reference)
 
 ### Similar Projects
+
 - [Raycast](https://www.raycast.com/) - UI inspiration
 - [Linear](https://linear.app/) - Theme inspiration

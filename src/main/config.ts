@@ -21,6 +21,16 @@ export const devLog = {
       console.log("[Dev]", ...args);
     }
   },
+  info: (...args: unknown[]) => {
+    if (isDevelopment) {
+      console.info("[Dev]", ...args);
+    }
+  },
+  warn: (...args: unknown[]) => {
+    if (isDevelopment) {
+      console.warn("[Dev]", ...args);
+    }
+  },
   error: (...args: unknown[]) => {
     if (isDevelopment) {
       console.error("[Dev]", ...args);
