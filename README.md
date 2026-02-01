@@ -354,7 +354,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgments
 
 - Inspired by [opencode-bar](https://github.com/kargnas/opencode-bar) by kargnas
-  - `Previously known as copilot-usage-monitor (by hyp3rflow)`
+  - `Previously known as copilot-usage-monitor`
 - UI components from [shadcn/ui](https://ui.shadcn.com/)
 - Built with [Electron](https://www.electronjs.org/)
 
