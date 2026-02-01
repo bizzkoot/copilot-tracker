@@ -23,6 +23,7 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",
     "@electron-toolkit/utils": "^3.0.0",
+    "canvas": "^3.2.1",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "electron-store": "^8.2.0",

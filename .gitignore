@@ -48,7 +48,6 @@ logs/
 
 # Temporary
 tmp/
-temp/
 *.tmp
 
 # Build artifacts

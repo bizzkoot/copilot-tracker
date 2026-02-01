@@ -3,10 +3,10 @@
  * Line chart showing daily usage trends
  */
 
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
-import { Skeleton } from '../ui/skeleton'
-import type { UsageHistory } from '@renderer/types/usage'
-import { getTotalRequests, isWeekend, formatDate } from '@renderer/types/usage'
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { Skeleton } from "../ui/skeleton";
+import type { UsageHistory } from "@renderer/types/usage";
+import { getTotalRequests, isWeekend, formatDate } from "@renderer/types/usage";
 import {
   LineChart,
   Line,
@@ -15,23 +15,27 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  ReferenceLine
-} from 'recharts'
+  ReferenceLine,
+} from "recharts";
 
 interface UsageChartProps {
-  history: UsageHistory | null
-  isLoading?: boolean
-  dailyAverage?: number
+  history: UsageHistory | null;
+  isLoading?: boolean;
+  dailyAverage?: number;
 }
 
 interface ChartDataPoint {
-  date: string
-  fullDate: string
-  usage: number
-  isWeekend: boolean
+  date: string;
+  fullDate: string;
+  usage: number;
+  isWeekend: boolean;
 }
 
-export function UsageChart({ history, isLoading, dailyAverage }: UsageChartProps) {
+export function UsageChart({
+  history,
+  isLoading,
+  dailyAverage,
+}: UsageChartProps) {
   if (isLoading) {
     return (
       <Card>
@@ -42,7 +46,7 @@ export function UsageChart({ history, isLoading, dailyAverage }: UsageChartProps
           <Skeleton className="h-[300px] w-full" />
         </CardContent>
       </Card>
-    )
+    );
   }
 
   if (!history || history.days.length === 0) {
@@ -55,23 +59,30 @@ export function UsageChart({ history, isLoading, dailyAverage }: UsageChartProps
           <p className="text-muted-foreground">No usage history available</p>
         </CardContent>
       </Card>
-    )
+    );
   }
 
   // Transform data for chart (reverse to show oldest first)
   const chartData: ChartDataPoint[] = [...history.days]
     .reverse()
     .slice(-14) // Last 14 days
-    .map((day) => ({
-      date: formatDate(day.date),
-      fullDate: day.date.toLocaleDateString(),
-      usage: getTotalRequests(day),
-      isWeekend: isWeekend(day.date)
-    }))
+    .map((day) => {
+      const dateObj =
+        typeof day.date === "string" ? new Date(day.date) : day.date;
+      return {
+        date: formatDate(day.date),
+        fullDate: dateObj.toLocaleDateString(),
+        usage: getTotalRequests(day),
+        isWeekend: isWeekend(day.date),
+      };
+    });
 
   // Calculate max for Y axis
-  const maxUsage = Math.max(...chartData.map((d) => d.usage), dailyAverage || 0)
-  const yAxisMax = Math.ceil(maxUsage * 1.2)
+  const maxUsage = Math.max(
+    ...chartData.map((d) => d.usage),
+    dailyAverage || 0,
+  );
+  const yAxisMax = Math.ceil(maxUsage * 1.2);
 
   return (
     <Card>
@@ -113,18 +124,18 @@ export function UsageChart({ history, isLoading, dailyAverage }: UsageChartProps
               <Tooltip
                 content={({ active, payload }) => {
                   if (active && payload && payload.length) {
-                    const data = payload[0].payload as ChartDataPoint
+                    const data = payload[0].payload as ChartDataPoint;
                     return (
                       <div className="rounded-lg border bg-background p-2 shadow-md">
                         <p className="text-sm font-medium">{data.fullDate}</p>
                         <p className="text-sm text-muted-foreground">
                           {data.usage.toLocaleString()} requests
-                          {data.isWeekend && ' (weekend)'}
+                          {data.isWeekend && " (weekend)"}
                         </p>
                       </div>
-                    )
+                    );
                   }
-                  return null
+                  return null;
                 }}
               />
               {dailyAverage && (
@@ -133,10 +144,10 @@ export function UsageChart({ history, isLoading, dailyAverage }: UsageChartProps
                   stroke="hsl(var(--muted-foreground))"
                   strokeDasharray="5 5"
                   label={{
-                    value: 'Avg',
-                    position: 'right',
-                    fill: 'hsl(var(--muted-foreground))',
-                    fontSize: 12
+                    value: "Avg",
+                    position: "right",
+                    fill: "hsl(var(--muted-foreground))",
+                    fontSize: 12,
                   }}
                 />
               )}
@@ -146,14 +157,14 @@ export function UsageChart({ history, isLoading, dailyAverage }: UsageChartProps
                 stroke="hsl(var(--primary))"
                 strokeWidth={2}
                 dot={{
-                  fill: 'hsl(var(--primary))',
+                  fill: "hsl(var(--primary))",
                   strokeWidth: 0,
-                  r: 4
+                  r: 4,
                 }}
                 activeDot={{
-                  fill: 'hsl(var(--primary))',
+                  fill: "hsl(var(--primary))",
                   strokeWidth: 0,
-                  r: 6
+                  r: 6,
                 }}
               />
             </LineChart>
@@ -161,5 +172,5 @@ export function UsageChart({ history, isLoading, dailyAverage }: UsageChartProps
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }

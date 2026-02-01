@@ -3,27 +3,32 @@
  * Table showing daily usage breakdown
  */
 
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
-import { Skeleton } from '../ui/skeleton'
-import type { UsageHistory, DailyUsage } from '@renderer/types/usage'
-import { getTotalRequests, isWeekend, formatCurrency } from '@renderer/types/usage'
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { Skeleton } from "../ui/skeleton";
+import type { UsageHistory, DailyUsage } from "@renderer/types/usage";
+import {
+  getTotalRequests,
+  isWeekend,
+  formatCurrency,
+} from "@renderer/types/usage";
 
 interface HistoryTableProps {
-  history: UsageHistory | null
-  isLoading?: boolean
+  history: UsageHistory | null;
+  isLoading?: boolean;
 }
 
-function formatDateLong(date: Date): string {
-  return new Intl.DateTimeFormat('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric'
-  }).format(date)
+function formatDateLong(date: Date | string): string {
+  const dateObj = typeof date === "string" ? new Date(date) : date;
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(dateObj);
 }
 
 function TableRow({ day }: { day: DailyUsage }) {
-  const total = getTotalRequests(day)
-  const weekend = isWeekend(day.date)
+  const total = getTotalRequests(day);
+  const weekend = isWeekend(day.date);
 
   return (
     <tr className="border-b border-border hover:bg-muted/50 transition-colors">
@@ -45,20 +50,24 @@ function TableRow({ day }: { day: DailyUsage }) {
       </td>
       <td className="py-3 px-4 text-right">
         {day.billedRequests > 0 ? (
-          <span className="text-orange-500">{day.billedRequests.toLocaleString()}</span>
+          <span className="text-orange-500">
+            {day.billedRequests.toLocaleString()}
+          </span>
         ) : (
           <span className="text-muted-foreground">0</span>
         )}
       </td>
       <td className="py-3 px-4 text-right">
         {day.billedAmount > 0 ? (
-          <span className="text-orange-500">{formatCurrency(day.billedAmount)}</span>
+          <span className="text-orange-500">
+            {formatCurrency(day.billedAmount)}
+          </span>
         ) : (
           <span className="text-muted-foreground">$0.00</span>
         )}
       </td>
     </tr>
-  )
+  );
 }
 
 export function HistoryTable({ history, isLoading }: HistoryTableProps) {
@@ -76,7 +85,7 @@ export function HistoryTable({ history, isLoading }: HistoryTableProps) {
           </div>
         </CardContent>
       </Card>
-    )
+    );
   }
 
   if (!history || history.days.length === 0) {
@@ -89,7 +98,7 @@ export function HistoryTable({ history, isLoading }: HistoryTableProps) {
           <p className="text-muted-foreground">No history data available</p>
         </CardContent>
       </Card>
-    )
+    );
   }
 
   // Calculate totals
@@ -98,10 +107,10 @@ export function HistoryTable({ history, isLoading }: HistoryTableProps) {
       total: acc.total + getTotalRequests(day),
       included: acc.included + day.includedRequests,
       billed: acc.billed + day.billedRequests,
-      amount: acc.amount + day.billedAmount
+      amount: acc.amount + day.billedAmount,
     }),
-    { total: 0, included: 0, billed: 0, amount: 0 }
-  )
+    { total: 0, included: 0, billed: 0, amount: 0 },
+  );
 
   return (
     <Card>
@@ -133,20 +142,28 @@ export function HistoryTable({ history, isLoading }: HistoryTableProps) {
             <tfoot>
               <tr className="border-t-2 border-border bg-muted/30 font-medium">
                 <td className="py-3 px-4">Total</td>
-                <td className="py-3 px-4 text-right">{totals.total.toLocaleString()}</td>
-                <td className="py-3 px-4 text-right">{totals.included.toLocaleString()}</td>
+                <td className="py-3 px-4 text-right">
+                  {totals.total.toLocaleString()}
+                </td>
+                <td className="py-3 px-4 text-right">
+                  {totals.included.toLocaleString()}
+                </td>
                 <td className="py-3 px-4 text-right">
                   {totals.billed > 0 ? (
-                    <span className="text-orange-500">{totals.billed.toLocaleString()}</span>
+                    <span className="text-orange-500">
+                      {totals.billed.toLocaleString()}
+                    </span>
                   ) : (
-                    '0'
+                    "0"
                   )}
                 </td>
                 <td className="py-3 px-4 text-right">
                   {totals.amount > 0 ? (
-                    <span className="text-orange-500">{formatCurrency(totals.amount)}</span>
+                    <span className="text-orange-500">
+                      {formatCurrency(totals.amount)}
+                    </span>
                   ) : (
-                    '$0.00'
+                    "$0.00"
                   )}
                 </td>
               </tr>
@@ -155,5 +172,5 @@ export function HistoryTable({ history, isLoading }: HistoryTableProps) {
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }

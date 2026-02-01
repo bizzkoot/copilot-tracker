@@ -7,11 +7,12 @@ import {
   Menu,
   nativeImage,
   WebContentsView,
+  globalShortcut,
 } from "electron";
 import { join } from "path";
-import { electronApp, optimizer, is } from "@electron-toolkit/utils";
-const icon = join(__dirname, "../../resources/icon.png");
 import Store from "electron-store";
+
+const icon = join(__dirname, "../../resources/icon.png");
 
 // Types
 interface Settings {
@@ -31,6 +32,26 @@ interface CopilotUsage {
   discountQuantity: number;
   userPremiumRequestEntitlement: number;
   filteredUserPremiumRequestEntitlement: number;
+}
+
+interface DailyUsage {
+  date: string;
+  includedRequests: number;
+  billedRequests: number;
+  grossAmount: number;
+  billedAmount: number;
+}
+
+interface UsageHistory {
+  fetchedAt: string;
+  days: DailyUsage[];
+}
+
+interface UsagePrediction {
+  predictedMonthlyRequests: number;
+  predictedBilledAmount: number;
+  confidenceLevel: "low" | "medium" | "high";
+  daysUsedForPrediction: number;
 }
 
 // Constants
@@ -67,6 +88,8 @@ let tray: Tray | null = null;
 let authView: WebContentsView | null = null;
 let customerId: number | null = null;
 let refreshTimer: NodeJS.Timeout | null = null;
+let usageHistory: UsageHistory | null = null;
+let usagePrediction: UsagePrediction | null = null;
 
 // ============= Window Management =============
 
@@ -106,7 +129,7 @@ function createWindow(): void {
   });
 
   // HMR for renderer
-  if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
+  if (!app.isPackaged && process.env["ELECTRON_RENDERER_URL"]) {
     mainWindow.loadURL(process.env["ELECTRON_RENDERER_URL"]);
   } else {
     mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
@@ -158,53 +181,477 @@ function createTray(): void {
 function updateTrayMenu(usage?: CopilotUsage | null): void {
   if (!tray) return;
 
+  const settings = store.get("settings") as Settings;
+  const version = app.getVersion() || "0.0.1";
+
+  // Usage label with progress
   const usageLabel = usage
     ? `Used: ${Math.round(usage.discountQuantity)} / ${usage.userPremiumRequestEntitlement} (${((usage.discountQuantity / usage.userPremiumRequestEntitlement) * 100).toFixed(1)}%)`
     : "Loading...";
 
-  const menu = Menu.buildFromTemplate([
+  // Build menu items
+  const menuItems: Electron.MenuItemConstructorOptions[] = [
     {
       label: usageLabel,
       enabled: false,
     },
     { type: "separator" },
-    {
-      label: "Open Dashboard",
-      click: (): void => {
-        mainWindow?.show();
-        mainWindow?.focus();
-      },
-    },
-    {
-      label: "Refresh",
-      click: (): void => {
-        fetchUsageData();
-      },
-    },
-    { type: "separator" },
-    {
-      label: "Settings",
-      click: (): void => {
-        mainWindow?.show();
-        mainWindow?.focus();
-        mainWindow?.webContents.send("navigate", "settings");
-      },
-    },
-    { type: "separator" },
-    {
-      label: "Quit",
-      click: (): void => {
-        app.quit();
-      },
-    },
-  ]);
+  ];
 
+  // Add Usage History submenu if we have history data
+  if (usageHistory && usageHistory.days.length > 0) {
+    const historySubmenu: Electron.MenuItemConstructorOptions[] = [];
+
+    // Add prediction if available
+    if (usagePrediction) {
+      historySubmenu.push({
+        label: `Predicted EOM: ${Math.round(usagePrediction.predictedMonthlyRequests)} requests`,
+        enabled: false,
+      });
+
+      if (usagePrediction.predictedBilledAmount > 0) {
+        historySubmenu.push({
+          label: `Predicted Add-on: $${usagePrediction.predictedBilledAmount.toFixed(2)}`,
+          enabled: false,
+        });
+      }
+
+      // Confidence level
+      const confidenceText =
+        usagePrediction.confidenceLevel === "high"
+          ? "High prediction accuracy"
+          : usagePrediction.confidenceLevel === "medium"
+            ? "Medium prediction accuracy"
+            : "Low prediction accuracy";
+
+      historySubmenu.push({
+        label: confidenceText,
+        enabled: false,
+      });
+
+      historySubmenu.push({ type: "separator" });
+    }
+
+    // Add last 7 days of history
+    const recentDays = usageHistory.days.slice(0, 7);
+    const dateFormatter = new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+
+    for (const day of recentDays) {
+      const totalRequests = day.includedRequests + day.billedRequests;
+      const dateStr = dateFormatter.format(new Date(day.date));
+      historySubmenu.push({
+        label: `${dateStr}: ${Math.round(totalRequests)} req`,
+        enabled: false,
+      });
+    }
+
+    menuItems.push({
+      label: "Usage History",
+      submenu: historySubmenu,
+    });
+  }
+
+  // Add Prediction Period submenu
+  const predictionPeriods = [
+    { label: "7 days", value: 7 },
+    { label: "14 days", value: 14 },
+    { label: "21 days", value: 21 },
+  ];
+
+  const predictionSubmenu = predictionPeriods.map((period) => ({
+    label: period.label,
+    type: "radio" as const,
+    checked: settings.predictionPeriod === period.value,
+    click: (): void => {
+      mainWindow?.webContents.send("settings:changed", {
+        predictionPeriod: period.value,
+      });
+      store.set("settings.predictionPeriod", period.value);
+    },
+  }));
+
+  menuItems.push({
+    label: "Prediction Period",
+    submenu: predictionSubmenu,
+  });
+
+  menuItems.push({ type: "separator" });
+
+  // Add Open Billing action
+  menuItems.push({
+    label: "Open Billing",
+    click: (): void => {
+      shell.openExternal(GITHUB_BILLING_URL);
+    },
+  });
+
+  // Add Refresh
+  menuItems.push({
+    label: "Refresh",
+    click: (): void => {
+      fetchUsageData();
+    },
+  });
+
+  // Add Auto-Refresh interval submenu
+  const refreshIntervals = [
+    { label: "10 seconds", value: 10 },
+    { label: "30 seconds", value: 30 },
+    { label: "1 minute", value: 60 },
+    { label: "5 minutes", value: 300 },
+    { label: "30 minutes", value: 1800 },
+  ];
+
+  const refreshSubmenu = refreshIntervals.map((interval) => ({
+    label: interval.label,
+    type: "radio" as const,
+    checked: settings.refreshInterval === interval.value,
+    click: (): void => {
+      store.set("settings.refreshInterval", interval.value);
+      startRefreshTimer();
+      mainWindow?.webContents.send("settings:changed", {
+        refreshInterval: interval.value,
+      });
+    },
+  }));
+
+  menuItems.push({
+    label: "Auto Refresh",
+    submenu: refreshSubmenu,
+  });
+
+  menuItems.push({ type: "separator" });
+
+  // Add Settings
+  menuItems.push({
+    label: "Settings",
+    click: (): void => {
+      mainWindow?.show();
+      mainWindow?.focus();
+      mainWindow?.webContents.send("navigate", "settings");
+    },
+  });
+
+  // Add Launch at Login toggle
+  menuItems.push({
+    label: "Launch at Login",
+    type: "checkbox" as const,
+    checked: settings.launchAtLogin,
+    click: (menuItem): void => {
+      const enabled = menuItem.checked;
+      store.set("settings.launchAtLogin", enabled);
+      app.setLoginItemSettings({ openAtLogin: enabled });
+      mainWindow?.webContents.send("settings:changed", {
+        launchAtLogin: enabled,
+      });
+    },
+  });
+
+  menuItems.push({ type: "separator" });
+
+  // Add version
+  menuItems.push({
+    label: `Version ${version}`,
+    enabled: false,
+  });
+
+  // Add Quit
+  menuItems.push({
+    label: "Quit",
+    click: (): void => {
+      app.quit();
+    },
+  });
+
+  const menu = Menu.buildFromTemplate(menuItems);
   tray.setContextMenu(menu);
 
   if (usage) {
     tray.setToolTip(
       `Copilot: ${Math.round(usage.discountQuantity)}/${usage.userPremiumRequestEntitlement}`,
     );
+
+    // Update tray icon with live numbers (like Swift app)
+    try {
+      const iconWithNumbers = createTrayIconWithNumbers(
+        Math.round(usage.discountQuantity),
+        usage.userPremiumRequestEntitlement,
+        usage.netBilledAmount,
+      );
+      tray.setImage(iconWithNumbers);
+    } catch (e) {
+      console.error("[Tray] Failed to create custom icon:", e);
+      // Fallback to default icon (no change)
+    }
+  }
+}
+
+// ============= Prediction Algorithm =============
+
+/**
+ * Calculates end-of-month usage prediction
+ * Ported from Swift app's UsagePredictor
+ */
+function calculatePrediction(
+  history: UsageHistory,
+  currentUsage: CopilotUsage,
+  period: number,
+): UsagePrediction {
+  const days = history.days;
+
+  // Edge case: No data
+  if (days.length === 0) {
+    return {
+      predictedMonthlyRequests: 0,
+      predictedBilledAmount: 0,
+      confidenceLevel: "low",
+      daysUsedForPrediction: 0,
+    };
+  }
+
+  // Step 1: Get weights for the period
+  const weights = getWeightsForPeriod(period);
+
+  // Step 2: Calculate weighted average daily usage
+  const sortedDays = [...days].sort(
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+  );
+  let weightedSum = 0;
+  let totalWeight = 0;
+  const daysToUse = Math.min(sortedDays.length, weights.length);
+
+  for (let i = 0; i < daysToUse; i++) {
+    const day = sortedDays[i];
+    const totalRequests = day.includedRequests + day.billedRequests;
+    const weight = weights[i];
+    weightedSum += totalRequests * weight;
+    totalWeight += weight;
+  }
+
+  const weightedAvgDailyUsage = totalWeight > 0 ? weightedSum / totalWeight : 0;
+
+  // Step 3: Calculate weekend/weekday ratio
+  let weekdaySum = 0;
+  let weekendSum = 0;
+  let weekdayCount = 0;
+  let weekendCount = 0;
+
+  for (const day of days) {
+    const date = new Date(day.date);
+    const dayOfWeek = date.getDay(); // 0 = Sunday, 6 = Saturday
+    const totalRequests = day.includedRequests + day.billedRequests;
+
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      weekendSum += totalRequests;
+      weekendCount++;
+    } else {
+      weekdaySum += totalRequests;
+      weekdayCount++;
+    }
+  }
+
+  const weekdayAvg = weekdayCount > 0 ? weekdaySum / weekdayCount : 0;
+  const weekendAvg = weekendCount > 0 ? weekendSum / weekendCount : 0;
+  const weekendRatio = weekdayAvg > 0 ? weekendAvg / weekdayAvg : 1.0;
+
+  // Step 4: Calculate remaining days
+  const today = new Date();
+  const daysInMonth = new Date(
+    today.getFullYear(),
+    today.getMonth() + 1,
+    0,
+  ).getDate();
+  const currentDay = today.getDate();
+  const remainingDays = daysInMonth - currentDay;
+
+  let remainingWeekdays = 0;
+  let remainingWeekends = 0;
+
+  for (let i = 1; i <= remainingDays; i++) {
+    const futureDate = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate() + i,
+    );
+    const dayOfWeek = futureDate.getDay();
+
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      remainingWeekends++;
+    } else {
+      remainingWeekdays++;
+    }
+  }
+
+  // Step 5: Predict total monthly usage
+  const currentTotalUsage = days.reduce(
+    (sum, day) => sum + day.includedRequests + day.billedRequests,
+    0,
+  );
+  const predictedRemainingWeekdayUsage =
+    weightedAvgDailyUsage * remainingWeekdays;
+  const predictedRemainingWeekendUsage =
+    weightedAvgDailyUsage * weekendRatio * remainingWeekends;
+  const predictedMonthlyTotal =
+    currentTotalUsage +
+    predictedRemainingWeekdayUsage +
+    predictedRemainingWeekendUsage;
+
+  // Step 6: Calculate predicted add-on cost
+  const limit = currentUsage.userPremiumRequestEntitlement;
+  const costPerRequest = 0.04;
+  const predictedBilledAmount =
+    predictedMonthlyTotal > limit
+      ? (predictedMonthlyTotal - limit) * costPerRequest
+      : 0;
+
+  // Step 7: Determine confidence level
+  let confidenceLevel: "low" | "medium" | "high";
+  if (days.length < 3) {
+    confidenceLevel = "low";
+  } else if (days.length < 7) {
+    confidenceLevel = "medium";
+  } else {
+    confidenceLevel = "high";
+  }
+
+  return {
+    predictedMonthlyRequests: predictedMonthlyTotal,
+    predictedBilledAmount,
+    confidenceLevel,
+    daysUsedForPrediction: days.length,
+  };
+}
+
+/**
+ * Get weights for prediction period
+ * Matched to Swift app's weights
+ */
+function getWeightsForPeriod(period: number): number[] {
+  switch (period) {
+    case 7:
+      return [1.5, 1.5, 1.2, 1.2, 1.2, 1.0, 1.0];
+    case 14:
+      return [
+        1.5, 1.5, 1.4, 1.4, 1.3, 1.3, 1.2, 1.2, 1.1, 1.1, 1.0, 1.0, 1.0, 1.0,
+      ];
+    case 21:
+      return [
+        1.5, 1.5, 1.4, 1.4, 1.3, 1.3, 1.2, 1.2, 1.2, 1.1, 1.1, 1.1, 1.0, 1.0,
+        1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+      ];
+    default:
+      return [1.5, 1.5, 1.2, 1.2, 1.2, 1.0, 1.0];
+  }
+}
+
+// ============= Custom Tray Icon with Numbers =============
+
+/**
+ * Creates a custom tray icon with usage numbers overlaid
+ * Similar to the Swift app's StatusBarIconView
+ */
+function createTrayIconWithNumbers(
+  used: number,
+  limit: number,
+  addOnCost: number = 0,
+): Electron.NativeImage {
+  try {
+    const size = 16;
+    const { createCanvas, loadImage } = require("canvas");
+    const canvasObj = createCanvas(size * 2, size); // Double width for icon + text
+    const ctx = canvasObj.getContext("2d");
+
+    // Clear background (transparent)
+    ctx.clearRect(0, 0, size * 2, size);
+
+    // Load base icon - use synchronous version with proper template
+    let iconLoaded = false;
+    try {
+      const basePath = join(__dirname, "../../resources/tray/trayTemplate.png");
+      console.log("[TrayIcon] Loading icon from:", basePath);
+
+      // Load and draw the icon synchronously
+      const fs = require("fs");
+      const imageBuffer = fs.readFileSync(basePath);
+      const img = new (require("canvas").Image)();
+      img.src = imageBuffer;
+
+      // Draw icon at 16x16 size
+      ctx.drawImage(img, 0, 0, size, size);
+      iconLoaded = true;
+      console.log("[TrayIcon] Base icon loaded successfully");
+    } catch (e) {
+      console.log("[TrayIcon] Failed to load base icon:", e);
+    }
+
+    // Fallback: draw a simple icon if image didn't load
+    if (!iconLoaded) {
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "12px Arial";
+      ctx.fillText("🤖", 0, 12);
+    }
+
+    // If there's add-on cost, show dollar amount
+    if (addOnCost > 0) {
+      const costText =
+        addOnCost >= 10
+          ? `$${addOnCost.toFixed(1)}`
+          : `$${addOnCost.toFixed(2)}`;
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 10px monospace";
+      ctx.fillText(costText, size + 2, 12);
+      console.log("[TrayIcon] Drawing cost text:", costText);
+    } else {
+      // Show usage count
+      const countText = used.toString();
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 11px monospace";
+      ctx.fillText(countText, size + 2, 12);
+      console.log("[TrayIcon] Drawing count text:", countText);
+
+      // Draw small progress circle
+      const percentage = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
+      const circleX = size + 2 + ctx.measureText(countText).width + 8;
+      const circleY = 8;
+      const radius = 4;
+
+      // Background circle
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(circleX, circleY, radius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Progress arc
+      const startAngle = -Math.PI / 2;
+      const endAngle = startAngle + (Math.PI * 2 * percentage) / 100;
+
+      // Color based on percentage
+      if (percentage < 50) {
+        ctx.strokeStyle = "#22c55e"; // green
+      } else if (percentage < 75) {
+        ctx.strokeStyle = "#eab308"; // yellow
+      } else if (percentage < 90) {
+        ctx.strokeStyle = "#f97316"; // orange
+      } else {
+        ctx.strokeStyle = "#ef4444"; // red
+      }
+
+      ctx.beginPath();
+      ctx.arc(circleX, circleY, radius, startAngle, endAngle);
+      ctx.stroke();
+    }
+
+    const dataUrl = canvasObj.toDataURL();
+    const nativeImg = nativeImage.createFromDataURL(dataUrl);
+    console.log("[TrayIcon] Created native image, size:", nativeImg.getSize());
+    return nativeImg;
+  } catch (e) {
+    console.error("[TrayIcon] Failed to create custom icon:", e);
+    throw e;
   }
 }
 
@@ -550,6 +997,48 @@ async function fetchUsageData(): Promise<void> {
       historyParsed.success ? "success" : "failed",
     );
 
+    // DEBUG: Log raw history data structure
+    if (historyParsed.success && historyParsed.data) {
+      const rawHistory = historyParsed.data;
+      console.log(
+        "[Usage] History data keys:",
+        Object.keys(rawHistory).join(", "),
+      );
+      console.log(
+        "[Usage] History has 'table' field?:",
+        rawHistory.hasOwnProperty("table"),
+      );
+      console.log(
+        "[Usage] History has 'rows' field?:",
+        rawHistory.hasOwnProperty("rows"),
+      );
+
+      // Check for nested table.rows structure
+      if (rawHistory.table && rawHistory.table.rows) {
+        console.log("[Usage] Found table.rows structure");
+        console.log(
+          "[Usage] Number of history rows:",
+          rawHistory.table.rows.length,
+        );
+        if (rawHistory.table.rows.length > 0) {
+          console.log(
+            "[Usage] First row sample:",
+            JSON.stringify(rawHistory.table.rows[0]).slice(0, 200),
+          );
+        }
+      } else if (rawHistory.rows) {
+        console.log("[Usage] Number of history rows:", rawHistory.rows.length);
+        if (rawHistory.rows.length > 0) {
+          console.log(
+            "[Usage] First row sample:",
+            JSON.stringify(rawHistory.rows[0]).slice(0, 200),
+          );
+        }
+      }
+    } else {
+      console.log("[Usage] History data missing or failed:", historyParsed);
+    }
+
     // Parse usage data
     const usageData = usageParsed.data;
     console.log(
@@ -584,28 +1073,75 @@ async function fetchUsageData(): Promise<void> {
     };
     console.log("[Usage] Parsed usage:", usage);
 
-    // Parse history data
+    // Parse history data - handle nested table.rows.cells structure
     const historyData = historyParsed.success
       ? historyParsed.data
-      : { rows: [] };
-    const history = {
+      : { table: { rows: [] } };
+
+    // Extract rows from either table.rows or rows directly
+    const rawRows = historyData.table?.rows || historyData.rows || [];
+
+    const history: UsageHistory = {
       fetchedAt: new Date().toISOString(),
-      days: (historyData.rows || []).map(
-        (row: {
-          date: string;
-          included_requests?: number;
-          billed_requests?: number;
-          gross_amount?: number;
-          billed_amount?: number;
-        }) => ({
-          date: row.date,
-          includedRequests: row.included_requests ?? 0,
-          billedRequests: row.billed_requests ?? 0,
-          grossAmount: row.gross_amount ?? 0,
-          billedAmount: row.billed_amount ?? 0,
-        }),
-      ),
+      days: rawRows.map((row: any) => {
+        // Handle Swift-style nested cells structure
+        if (row.cells && Array.isArray(row.cells)) {
+          const cells = row.cells;
+
+          // Helper to parse cell value
+          const parseCell = (cell: any): number => {
+            if (!cell) return 0;
+            const value = cell.value || cell.sortValue || "";
+            if (typeof value === "number") return value;
+            if (typeof value === "string") {
+              // Remove commas and currency symbols
+              const cleaned = value.replace(/[$,]/g, "");
+              return parseFloat(cleaned) || 0;
+            }
+            return 0;
+          };
+
+          // Parse date from sortValue (format: "yyyy-MM-dd HH:mm:ss Z utc")
+          const dateCell = cells[0];
+          const dateStr = dateCell?.sortValue || dateCell?.value || "";
+          const dateMatch = dateStr.match(/^(\d{4}-\d{2}-\d{2})/);
+          const date = dateMatch
+            ? dateMatch[1]
+            : new Date().toISOString().split("T")[0];
+
+          return {
+            date,
+            includedRequests: cells[1] ? parseCell(cells[1]) : 0,
+            billedRequests: cells[2] ? parseCell(cells[2]) : 0,
+            grossAmount: cells[3] ? parseCell(cells[3]) : 0,
+            billedAmount: cells[4] ? parseCell(cells[4]) : 0,
+          };
+        }
+
+        // Fallback: handle flat structure
+        return {
+          date: row.date || new Date().toISOString().split("T")[0],
+          includedRequests: row.included_requests ?? row.includedRequests ?? 0,
+          billedRequests: row.billed_requests ?? row.billedRequests ?? 0,
+          grossAmount: row.gross_amount ?? row.grossAmount ?? 0,
+          billedAmount: row.billed_amount ?? row.billedAmount ?? 0,
+        };
+      }),
     };
+
+    // Store history globally for tray menu
+    usageHistory = history;
+
+    // Calculate prediction if we have enough data
+    if (history.days.length >= 3 && usage) {
+      const settings = store.get("settings") as Settings;
+      const prediction = calculatePrediction(
+        history,
+        usage,
+        settings.predictionPeriod,
+      );
+      usagePrediction = prediction;
+    }
 
     // Update tray
     updateTrayMenu(usage);
@@ -743,13 +1279,47 @@ function setupIpcHandlers(): void {
 
 // ============= App Lifecycle =============
 
+/**
+ * Register global keyboard shortcuts
+ * Matches Swift app's keyboard shortcuts
+ */
+function registerShortcuts(): void {
+  // CommandOrControl+R: Refresh usage data
+  globalShortcut.register("CommandOrControl+R", () => {
+    console.log("[Shortcuts] Refresh triggered");
+    fetchUsageData();
+  });
+
+  // CommandOrControl+B: Open GitHub billing page
+  globalShortcut.register("CommandOrControl+B", () => {
+    console.log("[Shortcuts] Open Billing triggered");
+    shell.openExternal(GITHUB_BILLING_URL);
+  });
+
+  console.log("[Shortcuts] Registered keyboard shortcuts");
+}
+
+/**
+ * Unregister all keyboard shortcuts
+ */
+function unregisterAllShortcuts(): void {
+  globalShortcut.unregisterAll();
+  console.log("[Shortcuts] Unregistered all keyboard shortcuts");
+}
+
 app.whenReady().then(() => {
   // Set app user model id for Windows
-  electronApp.setAppUserModelId("com.copilot-tracker");
+  app.setAppUserModelId("com.copilot-tracker");
 
   // Default open or close DevTools by F12 in development
   app.on("browser-window-created", (_, window) => {
-    optimizer.watchWindowShortcuts(window);
+    // Register F12 to toggle DevTools
+    window.webContents.on("before-input-event", (event, input) => {
+      if (input.key === "F12") {
+        window.webContents.toggleDevTools();
+        event.preventDefault();
+      }
+    });
   });
 
   // Setup IPC handlers
@@ -759,6 +1329,9 @@ app.whenReady().then(() => {
   createWindow();
   createTray();
   createAuthView();
+
+  // Register keyboard shortcuts
+  registerShortcuts();
 
   // Don't start refresh timer yet - wait for auth state
   // Timer will be started when auth state becomes 'authenticated'
@@ -782,6 +1355,9 @@ app.on("window-all-closed", () => {
 
 // Cleanup on quit
 app.on("before-quit", () => {
+  // Unregister shortcuts
+  unregisterAllShortcuts();
+
   stopRefreshTimer();
 
   // Destroy auth view using the centralized function
@@ -791,7 +1367,7 @@ app.on("before-quit", () => {
   if (authWindow && !authWindow.isDestroyed()) {
     const wc = authWindow.webContents;
     if (wc && !wc.isDestroyed()) {
-      wc.removeAllListeners("did-navigate");
+      wc.removeAllListeners("did-navigated");
       wc.removeAllListeners("did-finish-load");
     }
     authWindow.destroy();
