@@ -138,6 +138,51 @@ npm run build:win      # Windows
 npm run build:linux    # Linux
 ```
 
+## Building for Production
+
+### Prerequisites
+
+For Linux builds, install canvas dependencies:
+```bash
+sudo apt-get install build-essential libcairo2-dev libpango1.0-dev \
+  libjpeg-dev libgif-dev librsvg2-dev libxi-dev
+```
+
+For macOS builds, install:
+```bash
+brew install cairo pango libjpeg giflib librsvg
+```
+
+### Build Commands
+
+```bash
+# Build for current platform (unsigned)
+npm run build
+
+# Build for specific platforms
+npm run build:mac      # macOS DMG
+npm run build:win      # Windows installer
+npm run build:linux    # Linux AppImage, snap, deb
+
+# Build without packaging (for testing)
+npm run build:unpack
+```
+
+### Environment Variables
+
+Copy `.env.example` to `.env` and configure:
+
+```bash
+cp .env.example .env
+```
+
+Available variables:
+- `APP_ID` - Application identifier
+- `PRODUCT_NAME` - Product name
+- `GITHUB_BILLING_URL` - GitHub billing page URL
+- `GITHUB_LOGIN_URL` - GitHub login page URL
+- `COST_PER_REQUEST` - Cost per Copilot request (default: 0.04)
+
 ## Tech Stack
 
 | Component | Technology               |
