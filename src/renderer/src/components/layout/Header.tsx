@@ -23,7 +23,7 @@ export function Header({ onSettingsClick }: HeaderProps) {
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center">
             <img
-              src="/icon.png"
+              src="./icon.png"
               alt="Copilot Tracker"
               className="w-full h-full object-contain"
             />
