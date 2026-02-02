@@ -163,24 +163,12 @@ When you first try to open the app, you may see:
 
 **To bypass:**
 
-**Option 1: Right-click method (GUI)**
-
-1. Right-click (or Control-click) on the app
-2. Select "Open"
-3. Click "Open" in the confirmation dialog
-
-**Option 2: Terminal method (remove quarantine)**
+**Terminal method (remove quarantine)**
 
 ```bash
 # After copying the app to Applications folder
 xattr -cr /Applications/copilot-tracker.app
 ```
-
-**Option 3: System Settings**
-
-1. Open System Settings → Privacy & Security
-2. Find the message about the app being blocked
-3. Click "Open Anyway"
 
 ### Windows
 
