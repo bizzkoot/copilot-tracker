@@ -28,6 +28,12 @@ interface SettingsProps {
 export function Settings({ onClose }: SettingsProps) {
   const { login, isAuthenticated } = useAuth();
   const [checkingForUpdate, setCheckingForUpdate] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<
+    "idle" | "checking" | "none" | "available" | "error"
+  >("idle");
+  const [updateStatusMessage, setUpdateStatusMessage] = useState<string | null>(
+    null,
+  );
   const [appVersion, setAppVersion] = useState("Loading...");
   const {
     refreshInterval,
@@ -77,6 +83,25 @@ export function Settings({ onClose }: SettingsProps) {
     window.electron.getVersion().then(setAppVersion);
   }, []);
 
+  useEffect(() => {
+    const cleanup = window.electron.onUpdateChecked((status) => {
+      setCheckingForUpdate(false);
+      setUpdateStatus(status.status);
+
+      if (status.status === "none") {
+        setUpdateStatusMessage("Up to date");
+      } else if (status.status === "available") {
+        setUpdateStatusMessage("Update available");
+      } else if (status.status === "error") {
+        setUpdateStatusMessage(status.message ?? "Update check failed");
+      } else {
+        setUpdateStatusMessage(null);
+      }
+    });
+
+    return cleanup;
+  }, []);
+
   const handleThresholdToggle = (threshold: number) => {
     const newThresholds = notifications.thresholds.includes(threshold)
       ? notifications.thresholds.filter((t) => t !== threshold)
@@ -86,11 +111,10 @@ export function Settings({ onClose }: SettingsProps) {
 
   const handleCheckForUpdate = () => {
     setCheckingForUpdate(true);
+    setUpdateStatus("checking");
+    setUpdateStatusMessage("Checking for updates...");
     // Use the exposed API to check for updates
     window.electron.checkForUpdates();
-    // Reset loading state after a timeout (since we don't have a specific 'check complete' event yet)
-    // In a real app, we'd listen for 'update-not-available' too.
-    setTimeout(() => setCheckingForUpdate(false), 3000);
   };
 
   return (
@@ -306,6 +330,19 @@ export function Settings({ onClose }: SettingsProps) {
               </Button>
             </div>
           </div>
+          {updateStatusMessage && (
+            <p
+              className={`mt-2 text-xs ${
+                updateStatus === "error"
+                  ? "text-destructive"
+                  : updateStatus === "available"
+                    ? "text-primary"
+                    : "text-muted-foreground"
+              }`}
+            >
+              {updateStatusMessage}
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>

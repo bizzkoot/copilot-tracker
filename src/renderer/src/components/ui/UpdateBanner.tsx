@@ -11,7 +11,6 @@ export function UpdateBanner() {
   useEffect(() => {
     // Listen for update available events
     const cleanup = window.electron.onUpdateAvailable((info) => {
-      console.log("Update available:", info);
       setUpdateInfo(info);
       setIsVisible(true);
     });
@@ -21,7 +20,15 @@ export function UpdateBanner() {
   const handleDownload = () => {
     if (!updateInfo) return;
 
-    // Open the specific release tag URL
+    if (updateInfo.downloadUrl || updateInfo.releaseUrl) {
+      const url = updateInfo.downloadUrl ?? updateInfo.releaseUrl;
+      if (url) {
+        window.electron.openExternal(url);
+        return;
+      }
+    }
+
+    // Fallback: Open the specific release tag URL
     // If version doesn't start with 'v', prepend it
     const version = updateInfo.version.startsWith("v")
       ? updateInfo.version

@@ -1,0 +1,42 @@
+[package]
+name = "copilot-tracker"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "copilot-tracker"
+path = "src/main.rs"
+
+[dependencies]
+# Core
+tauri = { version = "2", features = ["tray-icon", "devtools"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Tray icon rendering
+fontdue = "0.9"
+tiny-skia = "0.11"
+
+# URL parsing
+url = "2.5"
+
+# Plugins
+tauri-plugin-store = "2"
+tauri-plugin-http = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-updater = "2"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Date/time
+chrono = "0.4"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+[build-dependencies]
+tauri-build = { version = "2", features = ["codegen"] }

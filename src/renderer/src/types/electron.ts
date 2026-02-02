@@ -30,6 +30,11 @@ export interface UsageFetchResult {
   error?: string;
 }
 
+export interface UpdateCheckStatus {
+  status: "available" | "none" | "error";
+  message?: string;
+}
+
 // Update info
 export interface UpdateInfo {
   version: string;
@@ -40,6 +45,8 @@ export interface UpdateInfo {
   }[];
   path: string;
   sha512: string;
+  releaseUrl?: string;
+  downloadUrl?: string;
   releaseName?: string;
   releaseNotes?: string | Array<{ version: string; note: string | null }>;
   releaseDate: string;
@@ -54,6 +61,7 @@ export interface MainToRendererEvents {
   "usage:loading": (loading: boolean) => void;
   "settings:changed": (settings: Settings) => void;
   "update:available": (info: UpdateInfo) => void;
+  "update:checked": (status: UpdateCheckStatus) => void;
 }
 
 // IPC Events from renderer to main
@@ -100,6 +108,7 @@ export interface ElectronAPI {
   checkForUpdates: () => void;
   onNavigate: (callback: (route: string) => void) => () => void;
   onUpdateAvailable: (callback: (info: UpdateInfo) => void) => () => void;
+  onUpdateChecked: (callback: (status: UpdateCheckStatus) => void) => () => void;
 
   // Platform info
   platform: NodeJS.Platform;

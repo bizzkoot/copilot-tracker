@@ -118,6 +118,13 @@ function delay(ms: number): Promise<void> {
 async function checkForUpdatesDirectly(): Promise<void> {
   devLog.log("[Update] Checking for updates via GitHub API...");
 
+  const sendUpdateChecked = (
+    status: "available" | "none" | "error",
+    message?: string,
+  ): void => {
+    mainWindow?.webContents.send("update:checked", { status, message });
+  };
+
   try {
     const request = net.request(
       "https://api.github.com/repos/bizzkoot/copilot-tracker/releases/latest",
@@ -145,6 +152,18 @@ async function checkForUpdatesDirectly(): Promise<void> {
             if (semver.gt(latestVersion, currentVersion)) {
               devLog.log("[Update] New version available!");
 
+              const assets = Array.isArray(release.assets)
+                ? release.assets
+                : [];
+              const primaryAsset = assets.find(
+                (asset: { browser_download_url?: string }) =>
+                  typeof asset?.browser_download_url === "string",
+              );
+              const downloadUrl =
+                typeof primaryAsset?.browser_download_url === "string"
+                  ? primaryAsset.browser_download_url
+                  : undefined;
+
               // Store update info for tray menu
               availableUpdate = {
                 version: release.tag_name,
@@ -156,6 +175,8 @@ async function checkForUpdatesDirectly(): Promise<void> {
                 files: [],
                 path: "",
                 sha512: "",
+                releaseUrl: release.html_url,
+                downloadUrl,
                 releaseName: release.name,
                 releaseNotes: release.body,
                 releaseDate: release.published_at,
@@ -177,6 +198,7 @@ async function checkForUpdatesDirectly(): Promise<void> {
 
               // Send to dashboard if it's open
               mainWindow?.webContents.send("update:available", updateInfo);
+              sendUpdateChecked("available");
 
               // Update tray menu to show update available
               updateTrayMenu();
@@ -184,25 +206,30 @@ async function checkForUpdatesDirectly(): Promise<void> {
               devLog.log("[Update] App is up to date.");
               // Clear any previous update
               availableUpdate = null;
+              sendUpdateChecked("none");
             }
           } catch (e) {
             devLog.error("[Update] Failed to parse GitHub response:", e);
+            sendUpdateChecked("error", "Failed to parse update response.");
           }
         } else {
           devLog.error(
             `[Update] GitHub API returned status: ${response.statusCode}`,
           );
+          sendUpdateChecked("error", "Update check failed.");
         }
       });
     });
 
     request.on("error", (error) => {
       devLog.error("[Update] Network request failed:", error);
+      sendUpdateChecked("error", "Network request failed.");
     });
 
     request.end();
   } catch (e) {
     devLog.error("[Update] Exception during check:", e);
+    sendUpdateChecked("error", "Unexpected update check failure.");
   }
 }
 

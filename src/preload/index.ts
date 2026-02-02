@@ -71,6 +71,14 @@ const electronAPI = {
     ipcRenderer.on("update:available", listener);
     return () => ipcRenderer.removeListener("update:available", listener);
   },
+  onUpdateChecked: (callback: (status: unknown) => void): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      status: unknown,
+    ): void => callback(status);
+    ipcRenderer.on("update:checked", listener);
+    return () => ipcRenderer.removeListener("update:checked", listener);
+  },
   getVersion: (): Promise<string> => ipcRenderer.invoke("app:get-version"),
 };
 

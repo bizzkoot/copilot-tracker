@@ -1,0 +1,79 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Copilot Tracker",
+  "version": "1.0.0",
+  "identifier": "com.copilottracker",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true
+    },
+    "windows": [
+      {
+        "title": "Copilot Tracker",
+        "width": 400,
+        "height": 600,
+        "resizable": true,
+        "visible": false
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": ["icons/icon.png"],
+    "category": "Productivity",
+    "shortDescription": "Track GitHub Copilot usage",
+    "longDescription": "Monitor your GitHub Copilot usage with system tray integration and usage predictions.",
+    "macOS": {
+      "frameworks": [],
+      "minimumSystemVersion": "10.13"
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    }
+  },
+  "plugins": {
+    "store": {
+      "schema": "./gen/schemas/desktop-schema.json"
+    },
+    "http": {
+      "scope": ["https://github.com/*"]
+    },
+    "notification": {},
+    "shell": {
+      "scope": [
+        {
+          "name": "open-url",
+          "cmd": "open",
+          "args": true
+        }
+      ]
+    },
+    "autostart": {},
+    "updater": {
+      "pubkey": "YOUR_PUBLIC_KEY_HERE",
+      "endpoints": [
+        {
+          "platform": "darwin",
+          "url": "https://github.com/YOUR_USERNAME/copilot-tracker/releases/latest/download/latest-darwin.json"
+        },
+        {
+          "platform": "linux",
+          "url": "https://github.com/YOUR_USERNAME/copilot-tracker/releases/latest/download/latest-linux.json"
+        },
+        {
+          "platform": "windows-x86_64",
+          "url": "https://github.com/YOUR_USERNAME/copilot-tracker/releases/latest/download/latest-windows-x86_64.json"
+        }
+      ]
+    }
+  }
+}

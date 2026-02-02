@@ -81,6 +81,10 @@ Copilot Tracker is a desktop application that:
 
 ### 2.2 Critical Gap: WebContentsView for Authentication
 
+Reference: A reliability-first checklist for webview auth and session extraction is maintained in docs/tauri-migration/tauri-v2-auth-webview-checklist.md.
+
+Summary: Embedded webview auth reliability is most sensitive to redirect handling, HttpOnly cookie access limits, and cross-platform persistence differences. The checklist captures required safeguards (navigation stabilization, persistence verification, Rust-side cookie access when available, and recovery paths) to reduce auth failure rates during the Tauri v2 POC.
+
 **Current Electron Implementation:**
 
 ```typescript
@@ -201,10 +205,12 @@ fn create_tray_icon(used: u32, limit: u32) -> Image {
 
 **Windows WebView2 Consideration:**
 
-- Windows 11: Pre-installed
-- Windows 10 (recent): Usually installed via updates
-- Windows 10 (older): May need manual installation
-- Tauri provides installer options to bundle WebView2
+- Windows 11: Pre-installed (Evergreen runtime)
+- Windows 10 (recent): Usually installed via updates, but not guaranteed
+- Windows 10 (older/managed): May be missing; runtime detection required
+- Production should use the WebView2 Runtime (not Edge Stable)
+- Recommended flow: detect at install or first launch; if missing, run the Evergreen bootstrapper silently and provide a retry/manual install path
+- Runtime updates apply on next start; prompt for restart if a new runtime version is detected
 
 ---
 
@@ -259,7 +265,12 @@ copilot-tracker-v1.3.0-tauri-beta.dmg  (Tauri - Beta)
 - [ ] Verify JavaScript injection capabilities
 - [ ] Test session/cookie persistence
 
-**Exit Criteria:** Successfully authenticate and fetch usage data
+**Exit Criteria:**
+
+- [ ] Successfully authenticate and fetch usage data
+- [ ] Session persists across app restart on macOS/Windows/Linux
+- [ ] Navigation handling is stable across multi-step redirects and 2FA
+- [ ] Documented, working path for session/cookie access (no JS-only extraction)
 
 #### Phase 2: Core Features (3-4 weeks)
 
