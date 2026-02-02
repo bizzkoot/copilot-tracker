@@ -50,6 +50,8 @@ logs/
 # Temporary
 tmp/
 *.tmp
+.worktrees/
+.worktrees
 
 # Build artifacts
 *.dmg
