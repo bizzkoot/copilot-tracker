@@ -102,11 +102,10 @@ export function Settings({ onClose }: SettingsProps) {
     return cleanup;
   }, []);
 
-  const handleThresholdToggle = (threshold: number) => {
-    const newThresholds = notifications.thresholds.includes(threshold)
+  const getNextThresholds = (threshold: number) => {
+    return notifications.thresholds.includes(threshold)
       ? notifications.thresholds.filter((t) => t !== threshold)
       : [...notifications.thresholds, threshold].sort((a, b) => a - b);
-    setNotificationThresholds(newThresholds);
   };
 
   const handleCheckForUpdate = () => {
@@ -160,9 +159,12 @@ export function Settings({ onClose }: SettingsProps) {
                   refreshInterval === option.value ? "default" : "outline"
                 }
                 size="sm"
-                onClick={() =>
-                  setRefreshInterval(option.value as typeof refreshInterval)
-                }
+                onClick={() => {
+                  setRefreshInterval(option.value as typeof refreshInterval);
+                  window.electron.setSettings({
+                    refreshInterval: option.value as typeof refreshInterval,
+                  });
+                }}
               >
                 {option.label}
               </Button>
@@ -188,9 +190,12 @@ export function Settings({ onClose }: SettingsProps) {
                   predictionPeriod === option.value ? "default" : "outline"
                 }
                 size="sm"
-                onClick={() =>
-                  setPredictionPeriod(option.value as typeof predictionPeriod)
-                }
+                onClick={() => {
+                  setPredictionPeriod(option.value as typeof predictionPeriod);
+                  window.electron.setSettings({
+                    predictionPeriod: option.value as typeof predictionPeriod,
+                  });
+                }}
               >
                 {option.label}
               </Button>
@@ -212,7 +217,12 @@ export function Settings({ onClose }: SettingsProps) {
                 key={option.value}
                 variant={theme === option.value ? "default" : "outline"}
                 size="sm"
-                onClick={() => setTheme(option.value as typeof theme)}
+                onClick={() => {
+                  setTheme(option.value as typeof theme);
+                  window.electron.setSettings({
+                    theme: option.value as typeof theme,
+                  });
+                }}
               >
                 {option.label}
               </Button>
@@ -235,7 +245,16 @@ export function Settings({ onClose }: SettingsProps) {
             <Button
               variant={notifications.enabled ? "default" : "outline"}
               size="sm"
-              onClick={() => setNotificationsEnabled(!notifications.enabled)}
+              onClick={() => {
+                const enabled = !notifications.enabled;
+                setNotificationsEnabled(enabled);
+                window.electron.setSettings({
+                  notifications: {
+                    ...notifications,
+                    enabled,
+                  },
+                });
+              }}
             >
               {notifications.enabled ? "Enabled" : "Disabled"}
             </Button>
@@ -256,7 +275,16 @@ export function Settings({ onClose }: SettingsProps) {
                         : "outline"
                     }
                     size="sm"
-                    onClick={() => handleThresholdToggle(threshold)}
+                    onClick={() => {
+                      const newThresholds = getNextThresholds(threshold);
+                      setNotificationThresholds(newThresholds);
+                      window.electron.setSettings({
+                        notifications: {
+                          ...notifications,
+                          thresholds: newThresholds,
+                        },
+                      });
+                    }}
                   >
                     {threshold}%
                   </Button>

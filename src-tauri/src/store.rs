@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
+use crate::usage::UsageEntry;
+
 const STORE_FILENAME: &str = "settings.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -81,7 +83,7 @@ impl Default for AppSettings {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageCache {
     pub customer_id: u64,
     pub net_quantity: u64,
@@ -95,6 +97,8 @@ pub struct UsageCache {
 pub struct StoreManager {
     settings_path: PathBuf,
     settings: Mutex<AppSettings>,
+    usage_cache: Mutex<Option<UsageCache>>,
+    usage_history: Mutex<Vec<UsageEntry>>,
 }
 
 impl StoreManager {
@@ -112,6 +116,8 @@ impl StoreManager {
         Ok(Self {
             settings_path,
             settings: Mutex::new(settings),
+            usage_cache: Mutex::new(None),
+            usage_history: Mutex::new(Vec::new()),
         })
     }
 
@@ -236,6 +242,32 @@ impl StoreManager {
             net_billed_amount: 0.0,
             timestamp: settings.last_fetch_timestamp,
         })
+    }
+
+    pub fn set_usage_cache(&self, cache: UsageCache) {
+        let mut guard = self.usage_cache.lock().unwrap();
+        *guard = Some(cache);
+    }
+
+    pub fn get_usage_cache(&self) -> Option<UsageCache> {
+        self.usage_cache.lock().unwrap().clone()
+    }
+
+    pub fn set_usage_history(&self, history: Vec<UsageEntry>) {
+        let mut guard = self.usage_history.lock().unwrap();
+        *guard = history;
+    }
+
+    pub fn get_usage_history(&self) -> Vec<UsageEntry> {
+        self.usage_history.lock().unwrap().clone()
+    }
+
+    pub fn reset_settings(&self) -> Result<AppSettings, String> {
+        let defaults = AppSettings::default();
+        self.update_settings(|s| {
+            *s = defaults.clone();
+        })?;
+        Ok(defaults)
     }
 }
 

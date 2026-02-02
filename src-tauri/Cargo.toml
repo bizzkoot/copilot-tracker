@@ -22,7 +22,7 @@ url = "2.5"
 
 # Plugins
 tauri-plugin-store = "2"
-tauri-plugin-http = "2"
+tauri-plugin-http = { version = "2", features = ["cookies", "json"] }
 tauri-plugin-notification = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-autostart = "2"
@@ -36,6 +36,9 @@ chrono = "0.4"
 # Logging
 log = "0.4"
 env_logger = "0.11"
+
+# Version compare
+semver = "1.0"
 
 [build-dependencies]
 tauri-build = { version = "2", features = ["codegen"] }

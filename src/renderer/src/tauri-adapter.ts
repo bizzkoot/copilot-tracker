@@ -52,6 +52,7 @@ declare global {
 // Listener storage for manual notifications (handling race conditions)
 const authListeners: ((state: AuthState) => void)[] = [];
 const usageListeners: ((data: UsageFetchResult) => void)[] = [];
+const settingsListeners: ((settings: Settings) => void)[] = [];
 let isAuthListenerSetup = false;
 let isUsageListenerSetup = false;
 
@@ -64,6 +65,10 @@ const notifyUsageListeners = (data: UsageFetchResult) => {
   usageListeners.forEach((cb) => cb(data));
 };
 
+const notifySettingsListeners = (settings: Settings) => {
+  settingsListeners.forEach((cb) => cb(settings));
+};
+
 // Helper to convert Rust usage summary to UsageFetchResult
 const convertUsageData = (summary: RustUsageSummary): UsageFetchResult => {
   return {
@@ -71,9 +76,9 @@ const convertUsageData = (summary: RustUsageSummary): UsageFetchResult => {
     usage: {
       netQuantity: summary.used,
       netBilledAmount: 0,
-      discountQuantity: 0,
+      discountQuantity: summary.used,
       userPremiumRequestEntitlement: summary.limit,
-      filteredUserPremiumRequestEntitlement: 0,
+      filteredUserPremiumRequestEntitlement: summary.limit,
     },
   };
 };
@@ -123,7 +128,6 @@ export function initTauriAdapter() {
       isAuthListenerSetup = true;
       // Backend emits string "authenticated" | "unauthenticated"
       listen<AuthState>("auth:state-changed", (event) => {
-        console.log("[TauriAdapter] Event received: auth:state-changed", event.payload); console.log("[TauriAdapter] Notifying listeners. Count:", authListeners.length);
         notifyAuthListeners(event.payload);
       }).catch((err) => console.error("Failed to set up auth listener:", err));
     }
@@ -131,10 +135,69 @@ export function initTauriAdapter() {
     if (!isUsageListenerSetup) {
       isUsageListenerSetup = true;
       listen<RustUsageSummary>("usage:updated", (event) => {
-        console.log("Tauri event received: usage:updated", event.payload);
         const result = convertUsageData(event.payload);
         notifyUsageListeners(result);
       }).catch((err) => console.error("Failed to set up usage listener:", err));
+
+      listen<{
+        summary: RustUsageSummary;
+        history: Array<{
+          timestamp: number;
+          used: number;
+          limit: number;
+          billed_requests?: number;
+          gross_amount?: number;
+          billed_amount?: number;
+        }>;
+        prediction?: {
+          predicted_monthly_requests: number;
+          predicted_billed_amount: number;
+          confidence_level: string;
+          days_used_for_prediction: number;
+        };
+      }>("usage:data", (event) => {
+        const payload = event.payload;
+        const result: UsageFetchResult = {
+          success: true,
+          usage: {
+            netQuantity: payload.summary.used,
+            netBilledAmount: 0,
+            discountQuantity: payload.summary.used,
+            userPremiumRequestEntitlement: payload.summary.limit,
+            filteredUserPremiumRequestEntitlement: payload.summary.limit,
+          },
+          history: {
+            fetchedAt: new Date(payload.summary.timestamp * 1000),
+            days: payload.history.map((entry) => ({
+              date: new Date(entry.timestamp * 1000),
+              includedRequests:
+                entry.used - (entry.billed_requests ?? 0) < 0
+                  ? 0
+                  : entry.used - (entry.billed_requests ?? 0),
+              billedRequests: entry.billed_requests ?? 0,
+              grossAmount: entry.gross_amount ?? 0,
+              billedAmount: entry.billed_amount ?? 0,
+            })),
+          },
+          prediction: payload.prediction
+            ? {
+                predictedMonthlyRequests:
+                  payload.prediction.predicted_monthly_requests,
+                predictedBilledAmount:
+                  payload.prediction.predicted_billed_amount,
+                confidenceLevel: payload.prediction.confidence_level as
+                  | "low"
+                  | "medium"
+                  | "high",
+                daysUsedForPrediction:
+                  payload.prediction.days_used_for_prediction,
+              }
+            : undefined,
+        };
+        notifyUsageListeners(result);
+      }).catch((err) =>
+        console.error("Failed to set up usage:data listener:", err),
+      );
     }
 
     const electronAPI: ElectronAPI = {
@@ -167,8 +230,17 @@ export function initTauriAdapter() {
         };
       },
       onSessionExpired: (callback: () => void) => {
-        listen("auth:session-expired", () => callback());
-        return () => {};
+        let unlisten: (() => void) | null = null;
+        listen("auth:session-expired", () => callback())
+          .then((stop) => {
+            unlisten = stop;
+          })
+          .catch((err) =>
+            console.error("Failed to listen auth:session-expired", err),
+          );
+        return () => {
+          unlisten?.();
+        };
       },
 
       // Usage
@@ -206,8 +278,15 @@ export function initTauriAdapter() {
         };
       },
       onUsageLoading: (callback: (loading: boolean) => void) => {
-        listen<boolean>("usage:loading", (event) => callback(event.payload));
-        return () => {};
+        let unlisten: (() => void) | null = null;
+        listen<boolean>("usage:loading", (event) => callback(event.payload))
+          .then((stop) => {
+            unlisten = stop;
+          })
+          .catch((err) => console.error("Failed to listen usage:loading", err));
+        return () => {
+          unlisten?.();
+        };
       },
 
       // Settings
@@ -264,11 +343,24 @@ export function initTauriAdapter() {
           throw e;
         }
       },
-      resetSettings: () => {
-        console.warn("resetSettings not fully implemented in Tauri adapter");
-        return Promise.resolve();
+      resetSettings: async () => {
+        const rustSettings = await invoke<RustAppSettings>("reset_settings");
+        const settings: Settings = {
+          refreshInterval: rustSettings.refreshInterval,
+          predictionPeriod: rustSettings.predictionPeriod as any,
+          launchAtLogin: rustSettings.launchAtLogin,
+          startMinimized: rustSettings.startMinimized,
+          theme: rustSettings.theme as any,
+          notifications: {
+            enabled: (rustSettings as any).showNotifications,
+            thresholds: (rustSettings as any).notificationThresholds,
+          },
+        };
+        notifySettingsListeners(settings);
       },
       onSettingsChanged: (callback: (settings: Settings) => void) => {
+        settingsListeners.push(callback);
+        let unlisten: (() => void) | null = null;
         listen<RustAppSettings>("settings:changed", (event) => {
           const rustSettings = event.payload;
           const settings: Settings = {
@@ -282,9 +374,19 @@ export function initTauriAdapter() {
               thresholds: (rustSettings as any).notificationThresholds,
             },
           };
-          callback(settings);
-        });
-        return () => {};
+          notifySettingsListeners(settings);
+        })
+          .then((stop) => {
+            unlisten = stop;
+          })
+          .catch((err) =>
+            console.error("Failed to listen settings:changed", err),
+          );
+        return () => {
+          unlisten?.();
+          const idx = settingsListeners.indexOf(callback);
+          if (idx !== -1) settingsListeners.splice(idx, 1);
+        };
       },
 
       // App
@@ -294,20 +396,51 @@ export function initTauriAdapter() {
           console.error("Failed to show window", e),
         ),
       hideWindow: () =>
-        invoke("plugin:window|hide").catch((e) =>
+        invoke("hide_main_window").catch((e) =>
           console.error("Failed to hide window", e),
         ),
-      openExternal: (url: string) => invoke("plugin:shell|open", { path: url }),
-      checkForUpdates: () => console.log("Updates not implemented"),
+      openExternal: (url: string) => invoke("open_external_url", { url }),
+      checkForUpdates: () => invoke("check_for_updates"),
       onNavigate: (callback: (route: string) => void) => {
-        listen<string>("navigate", (event) => callback(event.payload));
-        return () => {};
+        let unlisten: (() => void) | null = null;
+        listen<string>("navigate", (event) => callback(event.payload))
+          .then((stop) => {
+            unlisten = stop;
+          })
+          .catch((err) => console.error("Failed to listen navigate", err));
+        return () => {
+          unlisten?.();
+        };
       },
-      onUpdateAvailable: (_callback: (info: UpdateInfo) => void) => {
-        return () => {};
+      onUpdateAvailable: (callback: (info: UpdateInfo) => void) => {
+        let unlisten: (() => void) | null = null;
+        listen<UpdateInfo>("update:available", (event) =>
+          callback(event.payload),
+        )
+          .then((stop) => {
+            unlisten = stop;
+          })
+          .catch((err) =>
+            console.error("Failed to listen update:available", err),
+          );
+        return () => {
+          unlisten?.();
+        };
       },
-      onUpdateChecked: (_callback: (status: UpdateCheckStatus) => void) => {
-        return () => {};
+      onUpdateChecked: (callback: (status: UpdateCheckStatus) => void) => {
+        let unlisten: (() => void) | null = null;
+        listen<UpdateCheckStatus>("update:checked", (event) =>
+          callback(event.payload),
+        )
+          .then((stop) => {
+            unlisten = stop;
+          })
+          .catch((err) =>
+            console.error("Failed to listen update:checked", err),
+          );
+        return () => {
+          unlisten?.();
+        };
       },
       getVersion: () => invoke("get_app_version"),
     };
