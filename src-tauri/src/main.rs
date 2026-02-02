@@ -1,16 +1,15 @@
 use std::sync::{Arc, Mutex};
 
 use serde::Deserialize;
-use tauri::menu::Menu;
-use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Listener, Manager};
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{TrayIconBuilder, TrayIconEvent};
+use tauri::{AppHandle, Emitter, Listener, Manager};
 
 use copilot_tracker::{
     init_store_manager,
     AuthManager,
     StoreManager,
     TrayIconRenderer,
-    UpdateManager,
     UsageManager,
 };
 
@@ -71,10 +70,70 @@ async fn perform_auth_extraction(
     if let Some(customer_id) = result.customer_id {
         if let Some(store) = app.try_state::<StoreManager>() {
             let _ = store.set_customer_id(customer_id);
+            // Emit auth state change
+            let _ = app.emit("auth:state-changed", "authenticated");
         }
     }
 
     Ok(result)
+}
+
+#[tauri::command]
+async fn handle_auth_redirect(
+    app: AppHandle,
+    state: tauri::State<'_, AuthManagerState>,
+) -> Result<(), String> {
+    log::info!("Auth redirect detected, starting extraction...");
+
+    // 1. Hide/Close the auth window
+    {
+        let mut auth_manager = state.auth_manager.lock().unwrap();
+        auth_manager.hide_auth_window();
+    }
+
+    // 2. Perform extraction
+    let app_clone = app.clone();
+    let auth_manager_state = state.auth_manager.clone();
+
+    // Run extraction in background so we don't block the command return
+    tokio::spawn(async move {
+        // We need to lock the mutex to call perform_extraction
+        // We wrap it in spawn_blocking because locking a std::sync::Mutex is blocking
+        let app_for_extraction = app_clone.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut auth_manager = auth_manager_state.lock().unwrap();
+            tauri::async_runtime::block_on(auth_manager.perform_extraction(&app_for_extraction))
+        }).await;
+
+        match result {
+            Ok(Ok(extraction)) => {
+                if let Some(customer_id) = extraction.customer_id {
+                    log::info!("Extraction successful, customer_id: {}", customer_id);
+                    if let Some(store) = app_clone.try_state::<StoreManager>() {
+                        let _ = store.set_customer_id(customer_id);
+                        
+                        // Show main window FIRST
+                        if let Some(window) = app_clone.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+
+                        // Wait for frontend to be ready (handle race condition)
+                        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+                        // Emit auth state change
+                        let _ = app_clone.emit("auth:state-changed", "authenticated");
+                    }
+                } else {
+                    log::warn!("Extraction returned no customer ID");
+                }
+            }
+            Ok(Err(e)) => log::error!("Extraction failed: {}", e),
+            Err(e) => log::error!("Task join error: {}", e),
+        }
+    });
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -84,17 +143,14 @@ async fn check_auth_status(
     let store = app.state::<StoreManager>();
     let customer_id = store.get_customer_id();
 
+    let is_authenticated = customer_id.is_some();
+    let state_str = if is_authenticated { "authenticated" } else { "unauthenticated" };
+    let _ = app.emit("auth:state-changed", state_str);
+
     Ok(copilot_tracker::AuthState {
-        is_authenticated: customer_id.is_some(),
+        is_authenticated,
         customer_id,
     })
-}
-
-#[tauri::command]
-async fn logout(app: AppHandle) -> Result<(), String> {
-    let store = app.state::<StoreManager>();
-    store.clear_auth()?;
-    Ok(())
 }
 
 // ============================================================================
@@ -148,14 +204,37 @@ fn get_settings(
 }
 
 #[tauri::command]
+fn get_app_version(
+    app: AppHandle,
+) -> Result<String, String> {
+    Ok(app.package_info().version.to_string())
+}
+
+#[tauri::command]
 fn update_settings(
     app: AppHandle,
     settings: copilot_tracker::AppSettings,
 ) -> Result<(), String> {
     let store = app.state::<StoreManager>();
     store.update_settings(|s| {
-        *s = settings;
-    })
+        *s = settings.clone();
+    })?;
+    
+    // Emit event to frontend
+    let _ = app.emit("settings:changed", settings);
+    
+    Ok(())
+}
+
+#[tauri::command]
+async fn logout(app: AppHandle) -> Result<(), String> {
+    let store = app.state::<StoreManager>();
+    store.clear_auth()?;
+    
+    // Emit event to frontend
+    let _ = app.emit("auth:state-changed", "unauthenticated");
+    
+    Ok(())
 }
 
 #[tauri::command]
@@ -186,24 +265,6 @@ fn update_tray_usage(
     limit: u32,
 ) -> Result<(), String> {
     update_tray_icon(&state, used, limit)
-}
-
-// ============================================================================
-// IPC Commands - Updater
-// ============================================================================
-
-#[tauri::command]
-async fn check_for_updates(
-    app: AppHandle,
-) -> Result<copilot_tracker::UpdateStatus, String> {
-    UpdateManager::check_for_updates(&app).await
-}
-
-#[tauri::command]
-async fn install_update(
-    app: AppHandle,
-) -> Result<(), String> {
-    UpdateManager::install_update(&app).await
 }
 
 // ============================================================================
@@ -253,12 +314,12 @@ fn main() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
-        .plugin(tauri_plugin_updater::Builder::new().build())
         // Register IPC commands
         .invoke_handler(tauri::generate_handler![
             // Auth commands
             show_auth_window,
             perform_auth_extraction,
+            handle_auth_redirect,
             check_auth_status,
             logout,
             // Usage commands
@@ -272,9 +333,8 @@ fn main() {
             set_launch_at_login,
             // Tray commands
             update_tray_usage,
-            // Updater commands
-            check_for_updates,
-            install_update,
+            // App commands
+            get_app_version,
         ])
         // Setup application
         .setup(move |app| {
@@ -285,13 +345,39 @@ fn main() {
             init_store_manager(&app_handle)?;
 
             // Create tray menu
-            let menu = Menu::new(app)?;
+            let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let show_i = MenuItem::with_id(app, "show", "Show Dashboard", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
+
             let initial_image = renderer.render_text("1", 16).into_tauri_image();
             let tray = TrayIconBuilder::new()
                 .icon(initial_image)
                 .menu(&menu)
                 .icon_as_template(true)
                 .tooltip("Copilot Tracker")
+                .on_menu_event(|app, event| {
+                    match event.id.as_ref() {
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        "show" => {
+                             if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click { .. } = event {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
                 .build(app)?;
 
             // Store tray icon in state
@@ -320,12 +406,9 @@ fn main() {
             }
 
             // Start background usage polling (every 15 minutes)
-            let app_clone = app_handle.clone();
-            UsageManager::start_polling(app_clone, 15);
-
-            // Start automatic update checks (every 24 hours)
-            let app_clone = app_handle.clone();
-            UpdateManager::start_auto_check(app_clone, 24);
+            // NOTE: Deferred until after startup - needs proper async runtime initialization
+            // let app_clone = app_handle.clone();
+            // UsageManager::start_polling(app_clone, 15);
 
             log::info!("Copilot Tracker initialized successfully");
 

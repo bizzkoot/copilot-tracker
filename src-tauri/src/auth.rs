@@ -72,6 +72,21 @@ impl AuthManager {
         .inner_size(900.0, 700.0)
         .resizable(true)
         .visible(true)
+        .initialization_script(r#"
+            // Poll for URL changes to detect successful login
+            setInterval(() => {
+                try {
+                    const url = window.location.href;
+                    if (url.includes('/settings/billing')) {
+                        if (window.__TAURI__) {
+                            window.__TAURI__.core.invoke('handle_auth_redirect');
+                        }
+                    }
+                } catch (e) {
+                    console.error('Auth check error:', e);
+                }
+            }, 500);
+        "#)
         .build()
         .map_err(|e| format!("Failed to create auth window: {}", e))?;
 

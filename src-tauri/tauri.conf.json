@@ -4,22 +4,26 @@
   "version": "1.0.0",
   "identifier": "com.copilottracker",
   "build": {
-    "frontendDist": "../dist",
+    "frontendDist": "../out/renderer",
     "devUrl": "http://localhost:5173"
   },
   "app": {
     "withGlobalTauri": true,
+    "security": {
+      "capabilities": ["default"]
+    },
     "trayIcon": {
       "iconPath": "icons/icon.png",
       "iconAsTemplate": true
     },
     "windows": [
       {
+        "label": "main",
         "title": "Copilot Tracker",
         "width": 400,
         "height": 600,
         "resizable": true,
-        "visible": false
+        "visible": true
       }
     ]
   },
@@ -41,36 +45,15 @@
     }
   },
   "plugins": {
-    "store": {},
-    "http": {
-      "scope": ["https://github.com/*"]
-    },
-    "notification": {},
     "shell": {
-      "scope": [
-        {
-          "name": "open-url",
-          "cmd": "open",
-          "args": true
-        }
-      ]
+      "open": true
     },
-    "autostart": {},
     "updater": {
       "pubkey": "YOUR_PUBLIC_KEY_HERE",
       "endpoints": [
-        {
-          "platform": "darwin",
-          "url": "https://github.com/YOUR_USERNAME/copilot-tracker/releases/latest/download/latest-darwin.json"
-        },
-        {
-          "platform": "linux",
-          "url": "https://github.com/YOUR_USERNAME/copilot-tracker/releases/latest/download/latest-linux.json"
-        },
-        {
-          "platform": "windows-x86_64",
-          "url": "https://github.com/YOUR_USERNAME/copilot-tracker/releases/latest/download/latest-windows-x86_64.json"
-        }
+        "https://github.com/YOUR_USERNAME/copilot-tracker/releases/latest/download/latest-darwin.json",
+        "https://github.com/YOUR_USERNAME/copilot-tracker/releases/latest/download/latest-linux.json",
+        "https://github.com/YOUR_USERNAME/copilot-tracker/releases/latest/download/latest-windows-x86_64.json"
       ]
     }
   }

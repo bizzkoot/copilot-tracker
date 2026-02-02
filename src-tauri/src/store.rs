@@ -6,6 +6,7 @@ use tauri::{AppHandle, Manager};
 const STORE_FILENAME: &str = "settings.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     /// Customer ID from GitHub
     pub customer_id: Option<u64>,
@@ -19,10 +20,45 @@ pub struct AppSettings {
     pub launch_at_login: bool,
     /// Whether to show notifications
     pub show_notifications: bool,
+    /// Notification thresholds
+    #[serde(default = "default_thresholds")]
+    pub notification_thresholds: Vec<u32>,
     /// Update channel (stable, beta)
     pub update_channel: String,
     /// Authenticated state
     pub is_authenticated: bool,
+    /// Refresh interval in seconds
+    #[serde(default = "default_refresh_interval")]
+    pub refresh_interval: u32,
+    /// Prediction period in days
+    #[serde(default = "default_prediction_period")]
+    pub prediction_period: u32,
+    /// Start minimized
+    #[serde(default = "default_start_minimized")]
+    pub start_minimized: bool,
+    /// Theme
+    #[serde(default = "default_theme")]
+    pub theme: String,
+}
+
+fn default_thresholds() -> Vec<u32> {
+    vec![75, 90, 100]
+}
+
+fn default_refresh_interval() -> u32 {
+    60
+}
+
+fn default_prediction_period() -> u32 {
+    7
+}
+
+fn default_start_minimized() -> bool {
+    true
+}
+
+fn default_theme() -> String {
+    "system".to_string()
 }
 
 impl Default for AppSettings {
@@ -34,8 +70,13 @@ impl Default for AppSettings {
             last_fetch_timestamp: 0,
             launch_at_login: false,
             show_notifications: true,
+            notification_thresholds: default_thresholds(),
             update_channel: "stable".to_string(),
             is_authenticated: false,
+            refresh_interval: default_refresh_interval(),
+            prediction_period: default_prediction_period(),
+            start_minimized: default_start_minimized(),
+            theme: default_theme(),
         }
     }
 }
@@ -184,8 +225,7 @@ impl StoreManager {
     pub fn export_usage_cache(&self) -> Result<UsageCache, String> {
         let settings = self.settings.lock().unwrap();
 
-        let customer_id = settings.customer_id
-            .ok_or("No customer ID available")?;
+        let customer_id = settings.customer_id.ok_or("No customer ID available")?;
 
         Ok(UsageCache {
             customer_id,
@@ -201,7 +241,9 @@ impl StoreManager {
 
 /// Initialize the store manager and attach to app
 pub fn init_store_manager(app: &AppHandle) -> Result<(), String> {
-    let app_dir = app.path().app_data_dir()
+    let app_dir = app
+        .path()
+        .app_data_dir()
         .map_err(|e| format!("Failed to get app data dir: {}", e))?;
 
     // Ensure directory exists

@@ -15,7 +15,7 @@
     "start": "electron-vite preview",
     "dev": "cross-env-shell NODE_ENV=development electron-vite dev",
     "tauri": "cargo tauri",
-    "tauri:build": "cd src-tauri && cargo build --release && cargo tauri bundle",
+    "tauri:build": "npm run build && cargo tauri build",
     "build": "npm run validate:assets && npm run typecheck && electron-vite build",
     "postinstall": "electron-builder install-app-deps",
     "build:unpack": "npm run build && electron-builder --dir",

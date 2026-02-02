@@ -1,0 +1,33 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capability for the main window",
+  "windows": ["main", "auth", "hidden-auth"],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:window:allow-center",
+    "core:window:allow-close",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-minimize",
+    "core:window:allow-unminimize",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-set-ignore-cursor-events",
+    "core:window:allow-set-always-on-top",
+    "core:window:allow-set-skip-taskbar",
+    "core:app:default",
+    "core:app:allow-app-show",
+    "core:app:allow-app-hide",
+    "core:resources:default",
+    "core:menu:default",
+    "core:tray:default",
+    "store:default",
+    "http:default",
+    "notification:default",
+    "shell:allow-execute",
+    "shell:allow-open",
+    "autostart:default"
+  ]
+}

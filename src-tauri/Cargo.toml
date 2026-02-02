@@ -26,7 +26,6 @@ tauri-plugin-http = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-autostart = "2"
-tauri-plugin-updater = "2"
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }

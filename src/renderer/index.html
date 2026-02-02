@@ -5,12 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: tauri: http://ipc.localhost"
     />
+    <base href="./" />
     <title>Copilot Tracker</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div style="padding: 20px; font-family: system-ui">
+        Loading application...
+      </div>
+    </div>
     <script type="module" src="./src/main.tsx"></script>
   </body>
 </html>
