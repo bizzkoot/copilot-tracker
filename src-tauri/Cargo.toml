@@ -40,3 +40,10 @@ env_logger = "0.11"
 
 [build-dependencies]
 tauri-build = { version = "2", features = ["codegen"] }
+
+[profile.release]
+codegen-units = 1  # Allows LLVM to perform better optimization
+lto = true         # Enables link-time-optimizations
+opt-level = "s"    # Prioritizes small binary size
+panic = "abort"    # Higher performance by disabling panic handlers
+strip = true       # Ensures debug symbols are removed

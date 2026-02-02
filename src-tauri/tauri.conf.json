@@ -41,9 +41,7 @@
     }
   },
   "plugins": {
-    "store": {
-      "schema": "./gen/schemas/desktop-schema.json"
-    },
+    "store": {},
     "http": {
       "scope": ["https://github.com/*"]
     },
