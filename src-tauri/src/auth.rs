@@ -84,12 +84,14 @@ impl AuthManager {
         .on_navigation(move |url| {
             let url_str = url.as_str();
 
-            // Check for custom protocol redirect
-            if url.scheme() == "copilot-tracker" {
+            // Check for HTTPS interception redirect
+            if url_str.contains("copilot-auth-success.local") {
+                log::info!("Intercepted auth success URL: {}", url_str);
                 if let Some((_, id_str)) = url.query_pairs().find(|(key, _)| key == "id") {
                     if let Ok(id) = id_str.parse::<u64>() {
                          let store = app_handle.state::<StoreManager>();
                          if store.set_customer_id(id).is_ok() {
+                             log::info!("Successfully authenticated with Customer ID: {}", id);
                              let _ = app_handle.emit("auth:state-changed", "authenticated");
                              
                              // Close auth window
@@ -102,13 +104,20 @@ impl AuthManager {
                                  let _ = main_window.show();
                                  let _ = main_window.set_focus();
                              }
+                         } else {
+                             log::error!("Failed to save customer ID to store");
                          }
+                    } else {
+                        log::error!("Failed to parse customer ID from URL: {}", url_str);
                     }
+                } else {
+                    log::error!("No customer ID found in URL: {}", url_str);
                 }
                 return false;
             }
 
             if url_str.contains("/settings/billing") {
+                log::info!("Billing page detected: {}", url_str);
                 let _ = app_handle.emit("auth:redirect-detected", url_str);
             }
             true
@@ -119,14 +128,24 @@ impl AuthManager {
         .visible(true)
         .initialization_script(r#"
             (function() {
+              console.log('[AuthInjector] Script loaded');
+
               // Monitor URL changes for billing page detection
               let currentUrl = location.href;
+              console.log('[AuthInjector] Initial URL:', currentUrl);
               
               function checkUrl() {
                 const newUrl = location.href;
+                if (newUrl === 'https://github.com/' || newUrl === 'https://github.com') {
+                  console.log('[AuthInjector] Detected homepage, redirecting to billing...');
+                  window.location.href = 'https://github.com/settings/billing';
+                }
+
                 if (newUrl !== currentUrl) {
                   currentUrl = newUrl;
+                  console.log('[AuthInjector] URL changed to:', currentUrl);
                   if (currentUrl.includes('/settings/billing')) {
+                    console.log('[AuthInjector] Billing page detected, starting extraction in 1.5s');
                     // Page changed to billing - start extraction
                     setTimeout(extractAndSend, 1500);
                   }
@@ -145,44 +164,61 @@ impl AuthManager {
               window.addEventListener('popstate', checkUrl);
               window.addEventListener('hashchange', checkUrl);
               
+              if (location.href === 'https://github.com/' || location.href === 'https://github.com') {
+                console.log('[AuthInjector] Detected homepage, redirecting to billing...');
+                window.location.href = 'https://github.com/settings/billing';
+              }
+
               // Check immediately if already on billing page
               if (location.href.includes('/settings/billing')) {
+                console.log('[AuthInjector] Already on billing page, starting extraction in 1.5s');
                 setTimeout(extractAndSend, 1500);
               }
               
               async function getUserId() {
+                console.log('[AuthInjector] Attempting to get User ID via API...');
                 try {
                   const response = await fetch('/api/v3/user', {
                     headers: { 'Accept': 'application/json' }
                   });
+                  console.log('[AuthInjector] API Response Status:', response.status);
                   if (!response.ok) {
+                    console.error('[AuthInjector] API request failed:', response.status);
                     return { success: false, error: 'API request failed: ' + response.status };
                   }
                   const data = await response.json();
+                  console.log('[AuthInjector] User ID retrieved:', data.id);
                   return { success: true, id: data.id };
                 } catch (error) {
+                  console.error('[AuthInjector] API request error:', error);
                   return { success: false, error: error.message };
                 }
               }
               
               function getCustomerIdFromDOM() {
+                console.log('[AuthInjector] Attempting to get Customer ID from DOM...');
                 try {
                   const el = document.querySelector('script[data-target="react-app.embeddedData"]');
                   if (!el) {
+                    console.log('[AuthInjector] Embedded data element not found');
                     return { success: false, error: 'Embedded data element not found' };
                   }
                   const data = JSON.parse(el.textContent);
                   const customerId = data?.payload?.customer?.customerId;
                   if (!customerId) {
+                    console.log('[AuthInjector] Customer ID not found in embedded data');
                     return { success: false, error: 'Customer ID not found in embedded data' };
                   }
+                  console.log('[AuthInjector] Customer ID found in DOM:', customerId);
                   return { success: true, id: customerId };
                 } catch (error) {
+                  console.error('[AuthInjector] DOM extraction error:', error);
                   return { success: false, error: error.message };
                 }
               }
               
               function getCustomerIdFromHTML() {
+                console.log('[AuthInjector] Attempting to get Customer ID from HTML regex...');
                 try {
                   const html = document.body.innerHTML;
                   const patterns = [
@@ -195,16 +231,20 @@ impl AuthManager {
                   for (const pattern of patterns) {
                     const match = html.match(pattern);
                     if (match && match[1]) {
+                      console.log('[AuthInjector] Customer ID matched pattern:', pattern);
                       return { success: true, id: parseInt(match[1]) };
                     }
                   }
+                  console.log('[AuthInjector] No customer ID pattern matched');
                   return { success: false, error: 'No customer ID pattern matched' };
                 } catch (error) {
+                  console.error('[AuthInjector] HTML extraction error:', error);
                   return { success: false, error: error.message };
                 }
               }
               
               async function extractCustomerId() {
+                console.log('[AuthInjector] Starting extraction chain...');
                 let result = await getUserId();
                 if (!result.success) {
                   result = getCustomerIdFromDOM();
@@ -216,11 +256,13 @@ impl AuthManager {
               }
               
               async function extractAndSend() {
+                console.log('[AuthInjector] Running extractAndSend...');
                 const result = await extractCustomerId();
                 if (result.success && result.id) {
-                  window.location.href = "copilot-tracker://success?id=" + result.id;
+                  console.log('[AuthInjector] Extraction success, redirecting to success page...');
+                  window.location.href = "https://copilot-auth-success.local/success?id=" + result.id;
                 } else {
-                  console.error('Failed to extract customer ID:', result.error);
+                  console.error('[AuthInjector] Failed to extract customer ID:', result.error);
                 }
               }
             })();
