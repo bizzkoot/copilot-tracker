@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/bizzkoot/copilot-tracker/compare/v1.3.0...v1.3.1) (2026-02-03)
+
+
+### Bug Fixes
+
+* **auth:** prevent invisible Re-Login window on Windows and stop unauthenticated GitHub polling - release ([b744aac](https://github.com/bizzkoot/copilot-tracker/commit/b744aacae9e276727195f2f75e1b13aab4450118))
+
 ## [1.3.0](https://github.com/bizzkoot/copilot-tracker/compare/v1.2.0...v1.3.0) (2026-02-01)
 
 
