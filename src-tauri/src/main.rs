@@ -13,7 +13,6 @@ use copilot_tracker::{
     StoreManager,
     TrayIconRenderer,
     UsageManager,
-    UsagePayload,
 };
 
 // ============================================================================
@@ -811,22 +810,25 @@ fn main() {
             let listener_handle = app_handle.clone();
             app_handle.listen("usage:updated", move |event| {
                 let payload = event.payload();
-                log::info!("[TrayListener] Received usage:updated event");
-                let parsed: UsagePayload = match serde_json::from_str(payload) {
+                log::info!("[TrayListener] Received usage:updated event, payload: {}", payload);
+                
+                // usage:updated emits UsageSummary, not UsagePayload
+                let parsed: copilot_tracker::UsageSummary = match serde_json::from_str(payload) {
                     Ok(parsed) => parsed,
                     Err(e) => {
                         log::error!("[TrayListener] Failed to parse usage:updated event: {}", e);
                         return;
                     }
                 };
-                log::info!("[TrayListener] Updating tray icon to: {}", parsed.summary.used);
+                log::info!("[TrayListener] Updating tray icon to: {} / {} ({}%)", 
+                    parsed.used, parsed.limit, parsed.percentage);
                 let state = listener_handle.state::<TrayState>();
-                let _ = update_tray_icon(&state, parsed.summary.used, parsed.summary.limit);
+                let _ = update_tray_icon(&state, parsed.used, parsed.limit);
                 // Rebuild menu with fresh data from store (not using update state)
                 let update_state = listener_handle.state::<UpdateState>();
                 let latest = update_state.latest.lock().unwrap();
                 let _ = rebuild_tray_menu(&listener_handle, latest.as_ref());
-                log::info!("[TrayListener] Tray icon and menu updated");
+                log::info!("[TrayListener] Tray icon and menu updated successfully");
             });
 
             // Prevent app from quitting when main window is closed (hide instead)

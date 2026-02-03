@@ -76,6 +76,7 @@ impl UsageManager {
                     log::warn!("Hidden extraction completed with error: {}", error);
                     // Fall back to cached data on error
                     let summary = Self::get_cached_usage(app)?;
+                    log::info!("Fallback: Emitting usage:updated with cached data: used={}, limit={}", summary.used, summary.limit);
                     let _ = app.emit("usage:updated", &summary);
                     return Ok(summary);
                 }
@@ -130,7 +131,9 @@ impl UsageManager {
                             prediction,
                         };
                         
+                        log::info!("Emitting usage:data event with used={}, limit={}", used, limit);
                         let _ = app.emit("usage:data", payload);
+                        log::info!("Emitting usage:updated event with used={}, limit={} (tray should update)", used, limit);
                         let _ = app.emit("usage:updated", &summary);
                         
                         return Ok(summary);
@@ -139,6 +142,7 @@ impl UsageManager {
 
                 // No data extracted, use cache
                 let summary = Self::get_cached_usage(app)?;
+                log::info!("No data extracted: Emitting usage:updated with cached data: used={}, limit={}", summary.used, summary.limit);
                 let _ = app.emit("usage:updated", &summary);
                 Ok(summary)
             }
@@ -146,6 +150,7 @@ impl UsageManager {
                 log::error!("Hidden extraction failed: {}", e);
                 // Fall back to cached data
                 let summary = Self::get_cached_usage(app)?;
+                log::info!("Extraction failed: Emitting usage:updated with cached data: used={}, limit={}", summary.used, summary.limit);
                 let _ = app.emit("usage:updated", &summary);
                 Ok(summary)
             }
