@@ -430,6 +430,26 @@ fn reset_settings(app: AppHandle) -> Result<copilot_tracker::AppSettings, String
     let _ = app.emit("settings:changed", defaults.clone());
     log::info!("Emitted settings:changed with defaults");
 
+    // CRITICAL: Emit usage:updated with empty data to reset tray icon
+    let (used, limit) = store.get_usage();
+    log::info!("Reset usage values: used={}, limit={}", used, limit);
+    
+    let summary = copilot_tracker::UsageSummary {
+        used,
+        limit,
+        remaining: limit.saturating_sub(used),
+        percentage: if limit > 0 { (used as f32 / limit as f32) * 100.0 } else { 0.0 },
+        timestamp: chrono::Utc::now().timestamp(),
+    };
+    let _ = app.emit("usage:updated", &summary);
+    log::info!("Emitted usage:updated to reset tray icon");
+
+    // Update tray icon directly to "1" (unauthenticated state)
+    let tray_state = app.state::<TrayState>();
+    let _ = update_tray_icon(&tray_state, 1, 0);
+    log::info!("Updated tray icon to default '1' for unauthenticated state");
+
+    // Rebuild tray menu
     let update_state = app.state::<UpdateState>();
     let latest = update_state.latest.lock().unwrap();
     let _ = rebuild_tray_menu(&app, latest.as_ref());
@@ -791,16 +811,22 @@ fn main() {
             let listener_handle = app_handle.clone();
             app_handle.listen("usage:updated", move |event| {
                 let payload = event.payload();
+                log::info!("[TrayListener] Received usage:updated event");
                 let parsed: UsagePayload = match serde_json::from_str(payload) {
                     Ok(parsed) => parsed,
-                    Err(_) => return,
+                    Err(e) => {
+                        log::error!("[TrayListener] Failed to parse usage:updated event: {}", e);
+                        return;
+                    }
                 };
+                log::info!("[TrayListener] Updating tray icon to: {}", parsed.summary.used);
                 let state = listener_handle.state::<TrayState>();
                 let _ = update_tray_icon(&state, parsed.summary.used, parsed.summary.limit);
                 // Rebuild menu with fresh data from store (not using update state)
                 let update_state = listener_handle.state::<UpdateState>();
                 let latest = update_state.latest.lock().unwrap();
                 let _ = rebuild_tray_menu(&listener_handle, latest.as_ref());
+                log::info!("[TrayListener] Tray icon and menu updated");
             });
 
             // Prevent app from quitting when main window is closed (hide instead)

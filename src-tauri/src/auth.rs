@@ -286,8 +286,14 @@ impl AuthManager {
                          tauri::async_runtime::spawn(async move {
                              log::info!("Auto-refreshing usage data after authentication...");
                              let mut usage_manager = crate::usage::UsageManager::new();
-                             if let Err(e) = usage_manager.fetch_usage(&app_handle_refresh).await {
-                                 log::error!("Auto-refresh after auth failed: {}", e);
+                             match usage_manager.fetch_usage(&app_handle_refresh).await {
+                                 Ok(summary) => {
+                                     log::info!("Auto-refresh after auth succeeded: {}/{} (tray should update via usage:updated event)", 
+                                         summary.used, summary.limit);
+                                 }
+                                 Err(e) => {
+                                     log::error!("Auto-refresh after auth failed: {}", e);
+                                 }
                              }
                          });
                          
