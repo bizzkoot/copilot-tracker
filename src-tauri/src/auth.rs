@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Listener, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Listener, Manager, WebviewUrl, WebviewWindowBuilder};
 use tokio::time::{sleep, Duration};
 use url::Url;
+
+use crate::StoreManager;
 
 const GITHUB_BILLING_URL: &str = "https://github.com/settings/billing";
 const GITHUB_LOGIN_URL: &str = "https://github.com/login";
@@ -81,6 +83,31 @@ impl AuthManager {
         let window = WebviewWindowBuilder::new(app, "auth", WebviewUrl::External(url))
         .on_navigation(move |url| {
             let url_str = url.as_str();
+
+            // Check for custom protocol redirect
+            if url.scheme() == "copilot-tracker" {
+                if let Some((_, id_str)) = url.query_pairs().find(|(key, _)| key == "id") {
+                    if let Ok(id) = id_str.parse::<u64>() {
+                         let store = app_handle.state::<StoreManager>();
+                         if store.set_customer_id(id).is_ok() {
+                             let _ = app_handle.emit("auth:state-changed", "authenticated");
+                             
+                             // Close auth window
+                             if let Some(auth_window) = app_handle.get_webview_window("auth") {
+                                 let _ = auth_window.close();
+                             }
+
+                             // Show main window
+                             if let Some(main_window) = app_handle.get_webview_window("main") {
+                                 let _ = main_window.show();
+                                 let _ = main_window.set_focus();
+                             }
+                         }
+                    }
+                }
+                return false;
+            }
+
             if url_str.contains("/settings/billing") {
                 let _ = app_handle.emit("auth:redirect-detected", url_str);
             }
@@ -90,6 +117,114 @@ impl AuthManager {
         .inner_size(900.0, 700.0)
         .resizable(true)
         .visible(true)
+        .initialization_script(r#"
+            (function() {
+              // Monitor URL changes for billing page detection
+              let currentUrl = location.href;
+              
+              function checkUrl() {
+                const newUrl = location.href;
+                if (newUrl !== currentUrl) {
+                  currentUrl = newUrl;
+                  if (currentUrl.includes('/settings/billing')) {
+                    // Page changed to billing - start extraction
+                    setTimeout(extractAndSend, 1500);
+                  }
+                }
+              }
+              
+              // Monitor URL changes using MutationObserver
+              const urlObserver = new MutationObserver(function() {
+                checkUrl();
+              });
+              
+              // Observe changes to the document
+              urlObserver.observe(document, { subtree: true, childList: true });
+              
+              // Also check on popstate events
+              window.addEventListener('popstate', checkUrl);
+              window.addEventListener('hashchange', checkUrl);
+              
+              // Check immediately if already on billing page
+              if (location.href.includes('/settings/billing')) {
+                setTimeout(extractAndSend, 1500);
+              }
+              
+              async function getUserId() {
+                try {
+                  const response = await fetch('/api/v3/user', {
+                    headers: { 'Accept': 'application/json' }
+                  });
+                  if (!response.ok) {
+                    return { success: false, error: 'API request failed: ' + response.status };
+                  }
+                  const data = await response.json();
+                  return { success: true, id: data.id };
+                } catch (error) {
+                  return { success: false, error: error.message };
+                }
+              }
+              
+              function getCustomerIdFromDOM() {
+                try {
+                  const el = document.querySelector('script[data-target="react-app.embeddedData"]');
+                  if (!el) {
+                    return { success: false, error: 'Embedded data element not found' };
+                  }
+                  const data = JSON.parse(el.textContent);
+                  const customerId = data?.payload?.customer?.customerId;
+                  if (!customerId) {
+                    return { success: false, error: 'Customer ID not found in embedded data' };
+                  }
+                  return { success: true, id: customerId };
+                } catch (error) {
+                  return { success: false, error: error.message };
+                }
+              }
+              
+              function getCustomerIdFromHTML() {
+                try {
+                  const html = document.body.innerHTML;
+                  const patterns = [
+                    /customerId":(\d+)/,
+                    /customerId&quot;:(\d+)/,
+                    /customer_id=(\d+)/,
+                    /"customerId":(\d+)/,
+                    /data-customer-id="(\d+)"/
+                  ];
+                  for (const pattern of patterns) {
+                    const match = html.match(pattern);
+                    if (match && match[1]) {
+                      return { success: true, id: parseInt(match[1]) };
+                    }
+                  }
+                  return { success: false, error: 'No customer ID pattern matched' };
+                } catch (error) {
+                  return { success: false, error: error.message };
+                }
+              }
+              
+              async function extractCustomerId() {
+                let result = await getUserId();
+                if (!result.success) {
+                  result = getCustomerIdFromDOM();
+                }
+                if (!result.success) {
+                  result = getCustomerIdFromHTML();
+                }
+                return result;
+              }
+              
+              async function extractAndSend() {
+                const result = await extractCustomerId();
+                if (result.success && result.id) {
+                  window.location.href = "copilot-tracker://success?id=" + result.id;
+                } else {
+                  console.error('Failed to extract customer ID:', result.error);
+                }
+              }
+            })();
+        "#)
         .build()
         .map_err(|e| format!("Failed to create auth window: {}", e))?;
 

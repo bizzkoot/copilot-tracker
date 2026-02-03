@@ -2,7 +2,7 @@ use serde::Deserialize;
 use std::sync::{Arc, Mutex};
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, Listener, Manager, WindowEvent};
+use tauri::{AppHandle, Emitter, Listener, Manager};
 use tauri_plugin_http::reqwest;
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
@@ -265,65 +265,6 @@ fn rebuild_tray_menu(app: &AppHandle, update: Option<&UpdateInfo>) -> Result<(),
     tray.set_menu(Some(menu)).map_err(|e| e.to_string())
 }
 
-async fn run_auth_extraction(
-    app: AppHandle,
-    auth_state: Arc<Mutex<AuthManager>>,
-    close_auth_on_success: bool,
-) -> bool {
-    let should_start = {
-        let mut manager = auth_state.lock().unwrap();
-        manager.start_extraction()
-    };
-
-    if !should_start {
-        return false;
-    }
-
-    let extraction_result = {
-        let mut manager = AuthManager::new();
-        manager.perform_extraction(&app).await
-    };
-
-    {
-        let mut manager = auth_state.lock().unwrap();
-        manager.finish_extraction();
-    }
-
-    match extraction_result {
-        Ok(extraction) => {
-            if let Some(customer_id) = extraction.customer_id {
-                if let Some(store) = app.try_state::<StoreManager>() {
-                    let _ = store.set_customer_id(customer_id);
-
-                    if close_auth_on_success {
-                        let mut manager = auth_state.lock().unwrap();
-                        manager.hide_auth_window();
-                    }
-
-                    if let Some(window) = app.get_webview_window("main") {
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                    }
-
-                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-                    let _ = app.emit("auth:state-changed", "authenticated");
-                    return true;
-                }
-            } else {
-                log::warn!("Extraction returned no customer ID");
-            }
-        }
-        Err(e) => log::error!("Extraction failed: {}", e),
-    }
-
-    false
-}
-
-// ============================================================================
-// IPC Commands - Authentication
-// ============================================================================
-
 #[tauri::command]
 async fn show_auth_window(
     app: AppHandle,
@@ -331,39 +272,6 @@ async fn show_auth_window(
 ) -> Result<bool, String> {
     let mut auth_manager = state.auth_manager.lock().unwrap();
     auth_manager.show_auth_window(&app)?;
-
-    if auth_manager.mark_auth_window_listener_attached() {
-        if let Some(window) = app.get_webview_window("auth") {
-            let app_handle = app.clone();
-            let auth_state = state.auth_manager.clone();
-            window.on_window_event(move |event| {
-                if matches!(event, WindowEvent::CloseRequested { .. }) {
-                    if let Ok(mut manager) = auth_state.lock() {
-                        manager.clear_auth_window();
-                    }
-                    let app_clone = app_handle.clone();
-                    let auth_state_clone = auth_state.clone();
-                    tauri::async_runtime::spawn(async move {
-                        let _ = run_auth_extraction(app_clone, auth_state_clone, false).await;
-                    });
-                }
-            });
-        }
-    }
-
-    let app_clone = app.clone();
-    let auth_state = state.auth_manager.clone();
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-        for _ in 0..3 {
-            let success = run_auth_extraction(app_clone.clone(), auth_state.clone(), true).await;
-            if success {
-                return;
-            }
-
-            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-        }
-    });
     Ok(true)
 }
 
@@ -392,23 +300,6 @@ async fn perform_auth_extraction(
     }
 
     Ok(result)
-}
-
-#[tauri::command]
-async fn handle_auth_redirect(
-    app: AppHandle,
-    state: tauri::State<'_, AuthManagerState>,
-) -> Result<(), String> {
-    log::info!("Auth redirect detected, starting extraction...");
-
-    let app_clone = app.clone();
-    let auth_manager_state = state.auth_manager.clone();
-
-    tauri::async_runtime::spawn(async move {
-        let _ = run_auth_extraction(app_clone, auth_manager_state, true).await;
-    });
-
-    Ok(())
 }
 
 #[tauri::command]
@@ -756,7 +647,6 @@ fn main() {
             // Auth commands
             show_auth_window,
             perform_auth_extraction,
-            handle_auth_redirect,
             check_auth_status,
             logout,
             // Usage commands
