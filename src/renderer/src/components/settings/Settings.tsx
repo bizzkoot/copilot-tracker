@@ -50,7 +50,6 @@ export function Settings({ onClose }: SettingsProps) {
     setNotificationsEnabled,
     setNotificationThresholds,
     updateSettings,
-    resetSettings,
   } = useSettingsStore();
 
   const handleLaunchAtLoginToggle = async () => {
@@ -135,7 +134,11 @@ export function Settings({ onClose }: SettingsProps) {
           <Button variant="outline" size="sm" onClick={login}>
             {isAuthenticated ? "Re-Login" : "Login"}
           </Button>
-          <Button variant="outline" size="sm" onClick={resetSettings}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.electron.resetSettings()}
+          >
             <RotateCcw className="h-4 w-4 mr-2" />
             Reset
           </Button>
