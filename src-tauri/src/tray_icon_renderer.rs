@@ -1,4 +1,5 @@
 use tiny_skia::Pixmap;
+use tiny_skia::{Color, Paint, PathBuilder, Stroke, Transform};
 
 #[derive(Clone, Debug)]
 pub struct GlyphBitmap {
@@ -67,7 +68,11 @@ pub struct TrayImage {
 
 impl TrayImage {
     pub fn new(rgba: Vec<u8>, width: u32, height: u32) -> Self {
-        Self { rgba, width, height }
+        Self {
+            rgba,
+            width,
+            height,
+        }
     }
 
     pub fn rgba(&self) -> &[u8] {
@@ -154,4 +159,141 @@ impl TrayIconRenderer {
 
         TrayImage::new(pixmap.data().to_vec(), size_px, size_px)
     }
+
+    pub fn render_with_icon(
+        &self,
+        text: &str,
+        icon_rgba: &[u8],
+        icon_width: u32,
+        icon_height: u32,
+        percentage: f32,
+    ) -> TrayImage {
+        // Canvas: icon (16px) + text + circle (8px padding + 8px circle)
+        let icon_size: u32 = 16;
+        let circle_size: u32 = 8;
+        let padding: u32 = 2;
+        let text_width = estimate_text_width(text);
+        let total_width = icon_size + padding + text_width + padding + circle_size;
+        let height = icon_size;
+
+        let mut pixmap = Pixmap::new(total_width, height).expect("pixmap");
+        let rgba = pixmap.data_mut();
+
+        // Clear to transparent
+        for px in rgba.chunks_exact_mut(4) {
+            px[0] = 0;
+            px[1] = 0;
+            px[2] = 0;
+            px[3] = 0;
+        }
+
+        // Draw icon on the left (simple copy since icon should already be 16x16)
+        for y in 0..icon_height.min(16) {
+            for x in 0..icon_width.min(16) {
+                let src_idx = ((y * icon_width + x) * 4) as usize;
+                let dst_idx = ((y * total_width + x) * 4) as usize;
+
+                if src_idx + 4 <= icon_rgba.len() && dst_idx + 4 <= rgba.len() {
+                    // Only copy non-transparent pixels
+                    let alpha = icon_rgba[src_idx + 3];
+                    if alpha > 0 {
+                        rgba[dst_idx..dst_idx + 4]
+                            .copy_from_slice(&icon_rgba[src_idx..src_idx + 4]);
+                    }
+                }
+            }
+        }
+
+        // Draw text
+        let mut text_x = icon_size + padding;
+        let baseline = height as i32 - 3;
+
+        for ch in text.chars() {
+            let digit = match ch.to_digit(10) {
+                Some(d) => d as usize,
+                None => continue,
+            };
+
+            let glyph = &self.atlas.glyphs[digit];
+            let glyph_w = glyph.width as i32;
+            let glyph_h = glyph.height as i32;
+            let glyph_x = text_x as i32 + glyph.xmin;
+            let glyph_y = baseline - glyph.ymin - glyph_h;
+
+            for y in 0..glyph_h {
+                let dst_y = glyph_y + y;
+                if dst_y < 0 || dst_y >= height as i32 {
+                    continue;
+                }
+                for x in 0..glyph_w {
+                    let dst_x = glyph_x + x;
+                    if dst_x < 0 || dst_x >= total_width as i32 {
+                        continue;
+                    }
+                    let src_index = (y as usize * glyph.width) + x as usize;
+                    let a = *glyph.alpha.get(src_index).unwrap_or(&0);
+                    let dst_index = ((dst_y as u32 * total_width + dst_x as u32) * 4) as usize;
+                    rgba[dst_index] = a;
+                    rgba[dst_index + 1] = a;
+                    rgba[dst_index + 2] = a;
+                    rgba[dst_index + 3] = a;
+                }
+            }
+
+            text_x += glyph.advance.round() as u32;
+        }
+
+        // Draw progress circle
+        let circle_center_x = (total_width - circle_size / 2) as f32;
+        let circle_center_y = (height / 2) as f32;
+        let radius = circle_size as f32 / 2.0 - 1.0;
+
+        // Progress arc (color based on percentage) - NO background circle
+        let progress_color = if percentage < 50.0 {
+            Color::from_rgba8(34, 197, 94, 255) // green
+        } else if percentage < 75.0 {
+            Color::from_rgba8(234, 179, 8, 255) // yellow
+        } else if percentage < 90.0 {
+            Color::from_rgba8(249, 115, 22, 255) // orange
+        } else {
+            Color::from_rgba8(239, 68, 68, 255) // red
+        };
+
+        let mut paint = Paint::default();
+        paint.set_color(progress_color);
+        paint.anti_alias = true;
+
+        let stroke = Stroke {
+            width: 1.5,
+            ..Default::default()
+        };
+
+        let start_angle = -std::f32::consts::FRAC_PI_2; // -90 degrees (top)
+        let end_angle = start_angle + (std::f32::consts::TAU * percentage / 100.0);
+
+        let mut path = PathBuilder::new();
+        // Create arc
+        let steps = 20;
+        for i in 0..=steps {
+            let t = i as f32 / steps as f32;
+            let angle = start_angle + (end_angle - start_angle) * t;
+            let x = circle_center_x + radius * angle.cos();
+            let y = circle_center_y + radius * angle.sin();
+            if i == 0 {
+                path.move_to(x, y);
+            } else {
+                path.line_to(x, y);
+            }
+        }
+        if let Some(path) = path.finish() {
+            pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
+        }
+
+        TrayImage::new(pixmap.data().to_vec(), total_width, height)
+    }
+}
+
+fn estimate_text_width(text: &str) -> u32 {
+    // Rough estimate: ~7 pixels per digit
+    text.len() as u32 * 7
 }

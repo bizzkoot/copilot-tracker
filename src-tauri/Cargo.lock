@@ -614,6 +614,7 @@ dependencies = [
  "env_logger",
  "fontdue",
  "log",
+ "png",
  "semver",
  "serde",
  "serde_json",

@@ -108,7 +108,9 @@ export interface ElectronAPI {
   checkForUpdates: () => void;
   onNavigate: (callback: (route: string) => void) => () => void;
   onUpdateAvailable: (callback: (info: UpdateInfo) => void) => () => void;
-  onUpdateChecked: (callback: (status: UpdateCheckStatus) => void) => () => void;
+  onUpdateChecked: (
+    callback: (status: UpdateCheckStatus) => void,
+  ) => () => void;
 
   // Platform info
   platform: NodeJS.Platform;
