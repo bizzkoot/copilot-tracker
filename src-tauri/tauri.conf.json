@@ -20,8 +20,10 @@
       {
         "label": "main",
         "title": "Copilot Tracker",
-        "width": 400,
-        "height": 600,
+        "width": 900,
+        "height": 700,
+        "minWidth": 600,
+        "minHeight": 500,
         "resizable": true,
         "visible": true
       }

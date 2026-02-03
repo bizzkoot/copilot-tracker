@@ -281,6 +281,16 @@ impl AuthManager {
 
                          let _ = app_handle.emit("auth:state-changed", "authenticated");
                          
+                         // Trigger refresh to get fresh usage data (same as tray menu refresh)
+                         let app_handle_refresh = app_handle.clone();
+                         tauri::async_runtime::spawn(async move {
+                             log::info!("Auto-refreshing usage data after authentication...");
+                             let mut usage_manager = crate::usage::UsageManager::new();
+                             if let Err(e) = usage_manager.fetch_usage(&app_handle_refresh).await {
+                                 log::error!("Auto-refresh after auth failed: {}", e);
+                             }
+                         });
+                         
                          // Close auth window
                          if let Some(auth_window) = app_handle.get_webview_window("auth") {
                              let _ = auth_window.close();

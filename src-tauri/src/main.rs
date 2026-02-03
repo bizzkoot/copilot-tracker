@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use std::sync::{Arc, Mutex};
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::tray::{TrayIconBuilder, TrayIconEvent};
+use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Listener, Manager};
 use tauri_plugin_http::reqwest;
 use tauri_plugin_notification::NotificationExt;
@@ -763,15 +763,8 @@ fn main() {
                     }
                     _ => {}
                 })
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click { .. } = event {
-                        let app = tray.app_handle();
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
-                    }
-                })
+                // Note: Tray icon click intentionally does NOT show dashboard
+                // Dashboard only opens via "Open Dashboard" menu item
                 .build(app)?;
 
             // Store tray icon in state
@@ -789,9 +782,25 @@ fn main() {
                 };
                 let state = listener_handle.state::<TrayState>();
                 let _ = update_tray_icon(&state, parsed.summary.used, parsed.summary.limit);
+                // Rebuild menu with fresh data from store (not using update state)
                 let update_state = listener_handle.state::<UpdateState>();
                 let latest = update_state.latest.lock().unwrap();
                 let _ = rebuild_tray_menu(&listener_handle, latest.as_ref());
+            });
+
+            // Prevent app from quitting when main window is closed (hide instead)
+            let main_window = app.get_webview_window("main").ok_or("Main window not found")?;
+            let app_handle_close = app.handle().clone();
+            main_window.on_window_event(move |event| {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    // Prevent the window from actually closing
+                    api.prevent_close();
+                    // Just hide the window instead
+                    let app_handle = app_handle_close.clone();
+                    if let Some(window) = app_handle.get_webview_window("main") {
+                        let _ = window.hide();
+                    }
+                }
             });
 
             // Load initial usage and update tray
