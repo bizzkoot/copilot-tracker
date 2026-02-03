@@ -412,15 +412,23 @@ fn update_settings(
 #[tauri::command]
 fn reset_settings(app: AppHandle) -> Result<copilot_tracker::AppSettings, String> {
     log::info!("Resetting all settings and data...");
+    
     let store = app.state::<StoreManager>();
     let defaults = store.reset_settings()?;
     
-    // Emit settings changed event
-    let _ = app.emit("settings:changed", defaults.clone());
+    log::info!("Store reset complete, customer_id is now: {:?}", store.get_customer_id());
     
-    // Emit auth state changed to unauthenticated to clear frontend state
+    // IMPORTANT: Emit auth state changed FIRST before settings changed
+    // This ensures frontend clears auth state before any other events
     let _ = app.emit("auth:state-changed", "unauthenticated");
-    log::info!("Reset complete: emitted auth:state-changed = unauthenticated");
+    log::info!("Emitted auth:state-changed = unauthenticated");
+    
+    // Small delay to ensure auth event is processed before settings event
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    
+    // Then emit settings changed
+    let _ = app.emit("settings:changed", defaults.clone());
+    log::info!("Emitted settings:changed with defaults");
 
     let update_state = app.state::<UpdateState>();
     let latest = update_state.latest.lock().unwrap();
