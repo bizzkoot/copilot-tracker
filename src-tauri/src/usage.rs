@@ -59,20 +59,97 @@ impl UsageManager {
         Self {}
     }
 
-    /// Fetch and update usage data
+    /// Fetch and update usage data using hidden webview extraction
     pub async fn fetch_usage(
         &mut self,
         app: &AppHandle,
     ) -> Result<UsageSummary, String> {
-        // Extraction skipped (hidden window not supported). Returning cached data.
-        log::info!("Extraction skipped (hidden window not supported). Returning cached data.");
+        log::info!("Starting usage fetch with hidden webview extraction...");
 
-        let summary = Self::get_cached_usage(app)?;
+        // Create auth manager for extraction
+        let mut auth_manager = crate::auth::AuthManager::new();
+        
+        // Perform hidden extraction
+        match auth_manager.perform_extraction(app).await {
+            Ok(result) => {
+                if let Some(error) = result.error {
+                    log::warn!("Hidden extraction completed with error: {}", error);
+                    // Fall back to cached data on error
+                    let summary = Self::get_cached_usage(app)?;
+                    let _ = app.emit("usage:updated", &summary);
+                    return Ok(summary);
+                }
 
-        // Emit event to frontend
-        let _ = app.emit("usage:updated", &summary);
+                // Process extracted data
+                if let Some(customer_id) = result.customer_id {
+                    let store = app.state::<crate::store::StoreManager>();
+                    let _ = store.set_customer_id(customer_id);
 
-        Ok(summary)
+                    if let Some(usage) = result.usage_data {
+                        let used = usage.discount_quantity as u32;
+                        let limit = usage.user_premium_request_entitlement as u32;
+                        
+                        log::info!("Extracted usage: {}/{} ({}%)", used, limit, 
+                            if limit > 0 { (used as f32 / limit as f32) * 100.0 } else { 0.0 });
+                        
+                        let _ = store.set_usage(used, limit);
+
+                        // Update cache
+                        let cache = crate::store::UsageCache {
+                            customer_id,
+                            net_quantity: usage.net_quantity,
+                            discount_quantity: usage.discount_quantity,
+                            user_premium_request_entitlement: usage.user_premium_request_entitlement,
+                            filtered_user_premium_request_entitlement: usage.filtered_user_premium_request_entitlement,
+                            net_billed_amount: usage.net_billed_amount,
+                            timestamp: chrono::Utc::now().timestamp(),
+                        };
+                        store.set_usage_cache(cache);
+
+                        // Save history if available
+                        if let Some(rows) = result.usage_history {
+                            let entries = Self::map_history_rows(&rows);
+                            store.set_usage_history(entries);
+                        }
+
+                        let summary = UsageSummary {
+                            used,
+                            limit,
+                            remaining: limit.saturating_sub(used),
+                            percentage: if limit > 0 { (used as f32 / limit as f32) * 100.0 } else { 0.0 },
+                            timestamp: chrono::Utc::now().timestamp(),
+                        };
+
+                        // Emit full payload
+                        let history = Self::get_cached_history(app);
+                        let prediction = Self::predict_usage_from_history(&history, used, limit);
+                        
+                        let payload = UsagePayload {
+                            summary: summary.clone(),
+                            history,
+                            prediction,
+                        };
+                        
+                        let _ = app.emit("usage:data", payload);
+                        let _ = app.emit("usage:updated", &summary);
+                        
+                        return Ok(summary);
+                    }
+                }
+
+                // No data extracted, use cache
+                let summary = Self::get_cached_usage(app)?;
+                let _ = app.emit("usage:updated", &summary);
+                Ok(summary)
+            }
+            Err(e) => {
+                log::error!("Hidden extraction failed: {}", e);
+                // Fall back to cached data
+                let summary = Self::get_cached_usage(app)?;
+                let _ = app.emit("usage:updated", &summary);
+                Ok(summary)
+            }
+        }
     }
 
     /// Get cached usage from store

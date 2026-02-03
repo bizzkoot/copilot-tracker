@@ -645,6 +645,7 @@ fn main() {
             perform_auth_extraction,
             check_auth_status,
             logout,
+            copilot_tracker::hidden_webview_event,
             // Usage commands
             fetch_usage,
             get_cached_usage,
@@ -697,13 +698,27 @@ fn main() {
                         );
                     }
                     "refresh" => {
-                        // Trigger re-authentication to fetch fresh usage data
-                        log::info!("Refresh triggered - opening auth window to fetch fresh data");
+                        // Use hidden webview to silently fetch fresh usage data
+                        log::info!("Refresh triggered - using hidden webview to fetch fresh data");
                         let app_handle = app.clone();
                         tauri::async_runtime::spawn(async move {
-                            let auth_state = app_handle.state::<AuthManagerState>();
-                            let mut auth_manager = auth_state.auth_manager.lock().unwrap();
-                            let _ = auth_manager.show_auth_window(&app_handle);
+                            let mut usage_manager = UsageManager::new();
+                            match usage_manager.fetch_usage(&app_handle).await {
+                                Ok(summary) => {
+                                    log::info!("Refresh successful: {}/{} ({}%)", 
+                                        summary.used, summary.limit, summary.percentage);
+                                    // Show notification on success
+                                    let _ = app_handle
+                                        .notification()
+                                        .builder()
+                                        .title("Copilot Tracker")
+                                        .body(format!("Usage updated: {} / {} requests", summary.used, summary.limit))
+                                        .show();
+                                }
+                                Err(e) => {
+                                    log::error!("Refresh failed: {}", e);
+                                }
+                            }
                         });
                     }
                     "settings" => {

@@ -1,9 +1,19 @@
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Listener, Manager, WebviewUrl, WebviewWindowBuilder};
-use tokio::time::{sleep, Duration};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+use tokio::sync::{mpsc, Mutex as TokioMutex};
+use tokio::time::Duration;
 use url::Url;
 
 use crate::StoreManager;
+
+/// Global channel for hidden webview events
+static HIDDEN_WEBVIEW_EVENTS: TokioMutex<Option<mpsc::Sender<HiddenWebviewEvent>>> = TokioMutex::const_new(None);
+
+#[derive(Debug, Clone)]
+pub struct HiddenWebviewEvent {
+    pub event: String,
+    pub payload: String,
+}
 
 const GITHUB_BILLING_URL: &str = "https://github.com/settings/billing";
 const GITHUB_LOGIN_URL: &str = "https://github.com/login";
@@ -545,6 +555,7 @@ impl AuthManager {
     }
 
     /// Create a hidden webview for data extraction
+    /// Uses an off-screen visible window to avoid macOS throttling
     pub fn create_hidden_webview(
         &mut self,
         app: &AppHandle,
@@ -558,17 +569,30 @@ impl AuthManager {
             WebviewUrl::External(url),
         )
         .title("Hidden Auth")
-        .inner_size(900.0, 700.0)
-        .visible(false)
+        .inner_size(10.0, 10.0)
+        .position(-100.0, -100.0) // Off-screen to avoid being visible
+        .visible(true) // Must be visible to avoid throttling, but off-screen
+        .skip_taskbar(true)
         .initialization_script(r#"
             (function() {
+              console.log('[HiddenAuth] Script initialized');
+              
               async function sendResult(kind, payload) {
                 try {
-                  if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.emit) {
-                    await window.__TAURI__.core.emit(kind, payload);
+                  // Tauri v2 event emission via core invoke
+                  if (window.__TAURI__ && window.__TAURI__.core) {
+                    await window.__TAURI__.core.invoke('hidden_webview_event', { 
+                      event: kind, 
+                      payload: JSON.stringify(payload) 
+                    });
+                    console.log('[HiddenAuth] Sent event:', kind);
+                  } else {
+                    console.error('[HiddenAuth] Tauri not available');
+                    // Fallback: store in localStorage for parent window to pick up
+                    localStorage.setItem('tauri_hidden_webview_' + kind, JSON.stringify(payload));
                   }
                 } catch (e) {
-                  console.error('emit failed', e);
+                  console.error('[HiddenAuth] Failed to send:', e);
                 }
               }
 
@@ -612,7 +636,7 @@ impl AuthManager {
                     /customerId&quot;:(\d+)/,
                     /customer_id=(\d+)/,
                     /"customerId":(\d+)/,
-                    /data-customer-id="(\d+)"/
+                    /data-customer-id=\"(\d+)\"/
                   ];
                   for (const pattern of patterns) {
                     const match = html.match(pattern);
@@ -674,17 +698,36 @@ impl AuthManager {
               }
 
               async function runExtraction() {
+                console.log('[HiddenAuth] Starting extraction...');
                 const customerResult = await extractCustomerId();
+                console.log('[HiddenAuth] Customer result:', customerResult);
                 await sendResult('auth:extraction:customer', customerResult);
 
-                if (!customerResult.success) return;
+                if (!customerResult.success) {
+                  await sendResult('auth:extraction:complete', { success: false });
+                  return;
+                }
 
+                console.log('[HiddenAuth] Fetching usage data...');
                 const usageCard = await fetchUsageCard(customerResult.id);
                 const usageTable = await fetchUsageTable(customerResult.id);
-                await sendResult('auth:extraction:usage', { usageCard, usageTable });
+                
+                await sendResult('auth:extraction:usage', { 
+                  customerId: customerResult.id,
+                  usageCard, 
+                  usageTable 
+                });
+                
+                await sendResult('auth:extraction:complete', { success: true });
+                console.log('[HiddenAuth] Extraction complete');
               }
 
-              setTimeout(runExtraction, 1500);
+              // Run extraction when page is ready
+              if (document.readyState === 'complete') {
+                setTimeout(runExtraction, 1500);
+              } else {
+                window.addEventListener('load', () => setTimeout(runExtraction, 1500));
+              }
             })();
         "#)
         .build()
@@ -693,154 +736,145 @@ impl AuthManager {
         Ok(window)
     }
 
-    /// Extract customer ID from the billing page
-    pub async fn extract_customer_id(
-        &self,
-        window: &tauri::WebviewWindow,
-    ) -> Result<Option<u64>, String> {
-        let (tx, rx) = tokio::sync::oneshot::channel::<Option<u64>>();
-        window.once("auth:extraction:customer", move |event| {
-            let payload = event.payload();
-            let result: serde_json::Value = match serde_json::from_str(payload) {
-                Ok(value) => value,
-                Err(_) => return,
-            };
-            let success = result.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
-            if !success {
-                let _ = tx.send(None);
-                return;
-            }
-            let id = result.get("id").and_then(|v| v.as_u64());
-            let _ = tx.send(id);
-        });
-
-        let result = tokio::time::timeout(Duration::from_secs(10), rx)
-            .await
-            .map_err(|_| "Timed out waiting for customer ID".to_string())?
-            .unwrap_or(None);
-
-        Ok(result)
-    }
-
-    /// Extract usage data from the billing page
-    pub async fn extract_usage_data(
-        &self,
-        window: &tauri::WebviewWindow,
-    ) -> Result<(Option<UsageData>, Option<Vec<UsageHistoryRow>>), String> {
-        let (tx, rx) = tokio::sync::oneshot::channel::<(Option<UsageData>, Option<Vec<UsageHistoryRow>>)>();
-        window.once("auth:extraction:usage", move |event| {
-            let payload = event.payload();
-            let result: serde_json::Value = match serde_json::from_str(payload) {
-                Ok(value) => value,
-                Err(_) => return,
-            };
-
-            let usage_card = result.get("usageCard");
-            let usage_card_data = usage_card.and_then(|v| v.get("data"));
-            let usage = usage_card_data.map(|data| UsageData {
-                net_billed_amount: data.get("net_billed_amount").and_then(|v| v.as_f64()).unwrap_or(0.0),
-                net_quantity: data.get("net_quantity").and_then(|v| v.as_u64()).unwrap_or(0),
-                discount_quantity: data.get("discount_quantity").and_then(|v| v.as_u64()).unwrap_or(0),
-                user_premium_request_entitlement: data.get("user_premium_request_entitlement").and_then(|v| v.as_u64()).unwrap_or(0),
-                filtered_user_premium_request_entitlement: data.get("filtered_user_premium_request_entitlement").and_then(|v| v.as_u64()).unwrap_or(0),
-            });
-
-            let history_rows = result
-                .get("usageTable")
-                .and_then(|v| v.get("data"))
-                .and_then(|v| v.get("rows"))
-                .and_then(|v| v.as_array())
-                .map(|rows| {
-                    rows.iter()
-                        .filter_map(|row| {
-                            let date = row.get("date").and_then(|v| v.as_str())?.to_string();
-                            let included_requests = row
-                                .get("included_requests")
-                                .and_then(|v| v.as_u64())
-                                .unwrap_or(0) as u32;
-                            let billed_requests = row
-                                .get("billed_requests")
-                                .and_then(|v| v.as_u64())
-                                .unwrap_or(0) as u32;
-                            let gross_amount = row
-                                .get("gross_amount")
-                                .and_then(|v| v.as_f64())
-                                .unwrap_or(0.0);
-                            let billed_amount = row
-                                .get("billed_amount")
-                                .and_then(|v| v.as_f64())
-                                .unwrap_or(0.0);
-
-                            Some(UsageHistoryRow {
-                                date,
-                                included_requests,
-                                billed_requests,
-                                gross_amount,
-                                billed_amount,
-                            })
-                        })
-                        .collect::<Vec<_>>()
-                });
-
-            let _ = tx.send((usage, history_rows));
-        });
-
-        let result = tokio::time::timeout(Duration::from_secs(10), rx)
-            .await
-            .map_err(|_| "Timed out waiting for usage data".to_string())?
-            .unwrap_or((None, None));
-
-        Ok(result)
-    }
-
-    /// Complete extraction flow: get customer ID and usage data
+    /// Complete extraction flow using channel-based communication
     pub async fn perform_extraction(
         &mut self,
         app: &AppHandle,
     ) -> Result<ExtractionResult, String> {
+        // Create event channel
+        let (tx, mut rx) = mpsc::channel::<HiddenWebviewEvent>(10);
+        
+        // Store channel for command handler to use
+        {
+            let mut global_tx = HIDDEN_WEBVIEW_EVENTS.lock().await;
+            *global_tx = Some(tx);
+        }
+
         // Create hidden webview
         let window = self.create_hidden_webview(app)?;
 
-        // Wait for page load
-        sleep(Duration::from_secs(3)).await;
+        // Wait for extraction events
+        let timeout = tokio::time::timeout(Duration::from_secs(30), async {
+            let mut customer_id: Option<u64> = None;
+            let mut usage_data: Option<UsageData> = None;
+            let mut usage_history: Option<Vec<UsageHistoryRow>> = None;
+            let mut error: Option<String> = None;
 
-        // Extract customer ID
-        let customer_id = match self.extract_customer_id(&window).await {
-            Ok(id) => id,
-            Err(e) => {
-                let _ = window.close();
-                return Ok(ExtractionResult {
-                    customer_id: None,
-                    usage_data: None,
-                    usage_history: None,
-                    error: Some(format!("Customer ID extraction failed: {}", e)),
-                });
-            }
-        };
+            while let Some(event) = rx.recv().await {
+                log::info!("Received hidden webview event: {}", event.event);
+                
+                match event.event.as_str() {
+                    "auth:extraction:customer" => {
+                        if let Ok(result) = serde_json::from_str::<serde_json::Value>(&event.payload) {
+                            if result.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
+                                customer_id = result.get("id").and_then(|v| v.as_u64());
+                            } else {
+                                error = result.get("error").and_then(|v| v.as_str()).map(|s| s.to_string());
+                            }
+                        }
+                    }
+                    "auth:extraction:usage" => {
+                        if let Ok(result) = serde_json::from_str::<serde_json::Value>(&event.payload) {
+                            // Parse usage card
+                            if let Some(usage_card) = result.get("usageCard").and_then(|v| v.get("data")) {
+                                usage_data = Some(UsageData {
+                                    net_billed_amount: usage_card.get("netBilledAmount").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                                    net_quantity: usage_card.get("netQuantity").and_then(|v| v.as_u64()).unwrap_or(0),
+                                    discount_quantity: usage_card.get("discountQuantity").and_then(|v| v.as_u64()).unwrap_or(0),
+                                    user_premium_request_entitlement: usage_card.get("userPremiumRequestEntitlement").and_then(|v| v.as_u64()).unwrap_or(0),
+                                    filtered_user_premium_request_entitlement: usage_card.get("filteredUserPremiumRequestEntitlement").and_then(|v| v.as_u64()).unwrap_or(0),
+                                });
+                            }
 
-        // Extract usage data
-        let (usage_data, usage_history) = match self.extract_usage_data(&window).await {
-            Ok(data) => data,
-            Err(e) => {
-                let _ = window.close();
-                return Ok(ExtractionResult {
-                    customer_id,
-                    usage_data: None,
-                    usage_history: None,
-                    error: Some(format!("Usage extraction failed: {}", e)),
-                });
+                            // Parse usage table
+                            if let Some(rows) = result
+                                .get("usageTable")
+                                .and_then(|v| v.get("data"))
+                                .and_then(|v| v.get("table"))
+                                .and_then(|v| v.get("rows"))
+                                .and_then(|v| v.as_array()) 
+                            {
+                                let history: Vec<UsageHistoryRow> = rows.iter().filter_map(|row| {
+                                    let id = row.get("id").and_then(|v| v.as_str())?.to_string();
+                                    let cells = row.get("cells").and_then(|v| v.as_array())?;
+                                    
+                                    if cells.len() < 5 {
+                                        return None;
+                                    }
+                                    
+                                    let included_requests = cells.get(1)?
+                                        .get("value")?
+                                        .as_str()?
+                                        .parse::<u32>()
+                                        .ok()?;
+                                    
+                                    let billed_requests = cells.get(2)?
+                                        .get("value")?
+                                        .as_str()?
+                                        .parse::<u32>()
+                                        .ok()?;
+                                    
+                                    let gross_amount = cells.get(3)?
+                                        .get("value")?
+                                        .as_str()?
+                                        .trim_start_matches('$')
+                                        .parse::<f64>()
+                                        .ok()?;
+                                    
+                                    let billed_amount = cells.get(4)?
+                                        .get("value")?
+                                        .as_str()?
+                                        .trim_start_matches('$')
+                                        .parse::<f64>()
+                                        .ok()?;
+                                    
+                                    Some(UsageHistoryRow {
+                                        date: id,
+                                        included_requests,
+                                        billed_requests,
+                                        gross_amount,
+                                        billed_amount,
+                                    })
+                                }).collect();
+                                
+                                usage_history = Some(history);
+                            }
+                        }
+                    }
+                    "auth:extraction:complete" => {
+                        // Extraction is complete, break the loop
+                        break;
+                    }
+                    _ => {}
+                }
             }
-        };
+
+            ExtractionResult {
+                customer_id,
+                usage_data,
+                usage_history,
+                error,
+            }
+        }).await;
 
         // Clean up
         let _ = window.close();
+        
+        // Clear the global channel
+        {
+            let mut global_tx = HIDDEN_WEBVIEW_EVENTS.lock().await;
+            *global_tx = None;
+        }
 
-        Ok(ExtractionResult {
-            customer_id,
-            usage_data,
-            usage_history,
-            error: None,
-        })
+        match timeout {
+            Ok(result) => Ok(result),
+            Err(_) => Ok(ExtractionResult {
+                customer_id: None,
+                usage_data: None,
+                usage_history: None,
+                error: Some("Extraction timed out".to_string()),
+            }),
+        }
     }
 
     pub fn get_customer_id(&self) -> Option<u64> {
@@ -860,4 +894,15 @@ impl Default for AuthManager {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Command handler for hidden webview events
+/// This receives data from the injected JavaScript in the hidden webview
+#[tauri::command]
+pub async fn hidden_webview_event(event: String, payload: String) -> Result<(), String> {
+    let sender = HIDDEN_WEBVIEW_EVENTS.lock().await;
+    if let Some(tx) = sender.as_ref() {
+        let _ = tx.send(HiddenWebviewEvent { event, payload }).await;
+    }
+    Ok(())
 }
