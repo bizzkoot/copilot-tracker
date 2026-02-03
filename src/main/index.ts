@@ -99,6 +99,9 @@ let usagePrediction: UsagePrediction | null = null;
 let trayBaseIconBuffer: Buffer | null = null;
 let availableUpdate: { version: string; url: string } | null = null;
 let isInitialStartup = true; // Track if this is the first app launch
+let currentAuthState: "authenticated" | "unauthenticated" | "checking" | "unknown" = "unknown";
+let failedAuthAttempts = 0;
+const MAX_FAILED_AUTH_ATTEMPTS = 3;
 
 // ============= Utility Functions =============
 
@@ -936,11 +939,13 @@ function createAuthView(): void {
     devLog.log("[Auth] Navigated to:", url);
     if (url.includes("/login") || url.includes("/session")) {
       devLog.log("[Auth] Detected login page");
+      currentAuthState = "unauthenticated";
       mainWindow?.webContents.send("auth:state-changed", "unauthenticated");
       stopRefreshTimer(); // Stop timer when logged out
       // Don't auto-show login window here - let the explicit login request handle it
     } else if (url.includes("/settings/billing")) {
       devLog.log("[Auth] Detected billing page - user is authenticated");
+      currentAuthState = "authenticated";
       mainWindow?.webContents.send("auth:state-changed", "authenticated");
       hideLoginWindow();
       startRefreshTimer(); // Start timer when authenticated
@@ -972,7 +977,9 @@ function createAuthView(): void {
   // Also check for redirects
   authView.webContents.on("will-redirect", (_event, url) => {
     if (url.includes("/login")) {
+      currentAuthState = "unauthenticated";
       mainWindow?.webContents.send("auth:state-changed", "unauthenticated");
+      stopRefreshTimer();
     }
   });
 
@@ -982,10 +989,12 @@ function createAuthView(): void {
     devLog.log("[Auth] Page finished loading:", url);
     if (url.includes("/login") || url.includes("/session")) {
       devLog.log("[Auth] Login page loaded");
+      currentAuthState = "unauthenticated";
       mainWindow?.webContents.send("auth:state-changed", "unauthenticated");
       stopRefreshTimer(); // Ensure timer is stopped when logged out
     } else if (url.includes("/settings/billing")) {
       devLog.log("[Auth] Billing page loaded - authenticated");
+      currentAuthState = "authenticated";
       mainWindow?.webContents.send("auth:state-changed", "authenticated");
       hideLoginWindow();
       // Only start timer if not already running
@@ -1039,10 +1048,13 @@ function showLoginWindow(): void {
     }
   }
 
-  authWindow = new BrowserWindow({
+  // Build options for the auth window and only set a parent when the main window is visible.
+  // Creating a child of a hidden window on Windows can result in the auth window being hidden
+  // (user clicks "Re-Login" and nothing appears). When the main window is hidden, make the
+  // auth window top-level and bring it to the front.
+  const authWindowOptions: any = {
     width: 900,
     height: 700,
-    parent: mainWindow,
     show: false,
     autoHideMenuBar: true,
     title: "GitHub Login",
@@ -1051,10 +1063,20 @@ function showLoginWindow(): void {
       nodeIntegration: false,
       contextIsolation: true,
     },
-  });
+  };
+
+  if (mainWindow && mainWindow.isVisible()) {
+    authWindowOptions.parent = mainWindow;
+  } else {
+    // Ensure it appears on top when there is no visible parent
+    authWindowOptions.alwaysOnTop = true;
+  }
+
+  authWindow = new BrowserWindow(authWindowOptions);
 
   authWindow.on("ready-to-show", () => {
     authWindow?.show();
+    authWindow?.focus();
   });
 
   authWindow.on("closed", () => {
@@ -1238,6 +1260,16 @@ async function getCustomerId(): Promise<number | null> {
 
 async function fetchUsageData(): Promise<void> {
   if (!authView || !mainWindow) return;
+
+  // Prevent aggressive unauthenticated fetch loops by requiring an authenticated state
+  if (currentAuthState !== "authenticated") {
+    devLog.log("[Usage] Skipping fetchUsageData - not authenticated");
+    mainWindow.webContents.send("usage:data", {
+      success: false,
+      error: "Not authenticated",
+    });
+    return;
+  }
 
   devLog.log("[Usage] Starting fetchUsageData");
   mainWindow.webContents.send("usage:loading", true);
@@ -1639,6 +1671,20 @@ app.whenReady().then(async () => {
       "[App] macOS initial startup detected, waiting for system ready...",
     );
     await delay(3000); // Wait 3 seconds on cold startup
+  }
+
+  // Apply a short delay on Windows too — some systems start apps before network is fully ready
+  // which can trigger aggressive retries and cause rate-limiting on external APIs.
+  if (isInitialStartup && process.platform === "win32") {
+    devLog.log("[App] Windows initial startup detected, waiting briefly for network...");
+    await delay(1500); // Wait 1.5 seconds
+  }
+
+  // Apply a short delay on Linux as extra hardening for systems that restore apps quickly
+  // This reduces chance of early network failures leading to repeated unauthenticated polling
+  if (isInitialStartup && process.platform === "linux") {
+    devLog.log("[App] Linux initial startup detected, waiting briefly for network...");
+    await delay(1500); // Wait 1.5 seconds
   }
 
   // Create authView - navigation handlers will detect auth status
