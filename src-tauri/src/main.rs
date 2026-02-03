@@ -697,13 +697,13 @@ fn main() {
                         );
                     }
                     "refresh" => {
+                        // Trigger re-authentication to fetch fresh usage data
+                        log::info!("Refresh triggered - opening auth window to fetch fresh data");
                         let app_handle = app.clone();
                         tauri::async_runtime::spawn(async move {
-                            let _ = fetch_usage(
-                                app_handle.clone(),
-                                app_handle.state::<AuthManagerState>(),
-                            )
-                            .await;
+                            let auth_state = app_handle.state::<AuthManagerState>();
+                            let mut auth_manager = auth_state.auth_manager.lock().unwrap();
+                            let _ = auth_manager.show_auth_window(&app_handle);
                         });
                     }
                     "settings" => {
