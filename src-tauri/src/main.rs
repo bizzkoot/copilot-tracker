@@ -782,9 +782,63 @@ fn main() {
             // Load initial usage and update tray
             let store = app.state::<StoreManager>();
             let (used, limit) = store.get_usage();
-            if used > 0 {
-                let state = app.state::<TrayState>();
-                let _ = update_tray_icon(&state, used, limit);
+            let is_authenticated = store.is_authenticated();
+            
+            log::info!("Startup: used={}, limit={}, authenticated={}", used, limit, is_authenticated);
+            
+            // Always emit if authenticated, even if used=0 (might have zero usage but still have history)
+            if is_authenticated {
+                if used > 0 {
+                    let state = app.state::<TrayState>();
+                    let _ = update_tray_icon(&state, used, limit);
+                }
+                
+                // Emit initial usage data to frontend (delayed to allow frontend listeners to attach)
+                let app_handle_for_emit = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    // Wait for frontend to initialize listeners
+                    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+                    
+                    let store = app_handle_for_emit.state::<StoreManager>();
+                    let (used, limit) = store.get_usage();
+                    
+                    log::info!("About to emit startup data: used={}, limit={}", used, limit);
+                    
+                    let remaining = limit.saturating_sub(used);
+                    let percentage = if limit > 0 {
+                        (used as f32 / limit as f32) * 100.0
+                    } else {
+                        0.0
+                    };
+                    let summary = copilot_tracker::UsageSummary {
+                        used,
+                        limit,
+                        remaining,
+                        percentage,
+                        timestamp: chrono::Utc::now().timestamp(),
+                    };
+                    
+                    let history = UsageManager::get_cached_history(&app_handle_for_emit);
+                    let prediction = UsageManager::predict_usage_from_history(
+                        &history,
+                        used,
+                        limit,
+                    );
+                    
+                    log::info!("History entries: {}", history.len());
+                    
+                    let payload = copilot_tracker::UsagePayload {
+                        summary,
+                        history,
+                        prediction,
+                    };
+                    
+                    log::info!("Emitting initial usage:data on startup");
+                    match app_handle_for_emit.emit("usage:data", payload) {
+                        Ok(_) => log::info!("Successfully emitted startup usage:data"),
+                        Err(e) => log::error!("Failed to emit startup usage:data: {:?}", e),
+                    }
+                });
             }
 
             // Update tray menu at startup

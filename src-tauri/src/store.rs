@@ -6,6 +6,7 @@ use tauri::{AppHandle, Manager};
 use crate::usage::UsageEntry;
 
 const STORE_FILENAME: &str = "settings.json";
+const HISTORY_FILENAME: &str = "usage_history.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -96,6 +97,7 @@ pub struct UsageCache {
 
 pub struct StoreManager {
     settings_path: PathBuf,
+    history_path: PathBuf,
     settings: Mutex<AppSettings>,
     usage_cache: Mutex<Option<UsageCache>>,
     usage_history: Mutex<Vec<UsageEntry>>,
@@ -105,6 +107,7 @@ impl StoreManager {
     /// Create a new store manager with the given app directory
     pub fn new(app_dir: PathBuf) -> Result<Self, String> {
         let settings_path = app_dir.join(STORE_FILENAME);
+        let history_path = app_dir.join(HISTORY_FILENAME);
 
         // Load existing settings or create defaults
         let settings = if settings_path.exists() {
@@ -113,11 +116,19 @@ impl StoreManager {
             AppSettings::default()
         };
 
+        // Load existing history or create empty
+        let history = if history_path.exists() {
+            Self::load_history_from_disk(&history_path)?
+        } else {
+            Vec::new()
+        };
+
         Ok(Self {
             settings_path,
+            history_path,
             settings: Mutex::new(settings),
             usage_cache: Mutex::new(None),
-            usage_history: Mutex::new(Vec::new()),
+            usage_history: Mutex::new(history),
         })
     }
 
@@ -139,6 +150,28 @@ impl StoreManager {
 
         std::fs::write(path, content)
             .map_err(|e| format!("Failed to write settings file: {}", e))?;
+
+        Ok(())
+    }
+
+    /// Load history from disk
+    fn load_history_from_disk(path: &PathBuf) -> Result<Vec<UsageEntry>, String> {
+        let content = std::fs::read_to_string(path)
+            .map_err(|e| format!("Failed to read history file: {}", e))?;
+
+        let history: Vec<UsageEntry> = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse history file: {}", e))?;
+
+        Ok(history)
+    }
+
+    /// Save history to disk
+    fn save_history_to_disk(path: &PathBuf, history: &Vec<UsageEntry>) -> Result<(), String> {
+        let content = serde_json::to_string_pretty(history)
+            .map_err(|e| format!("Failed to serialize history: {}", e))?;
+
+        std::fs::write(path, content)
+            .map_err(|e| format!("Failed to write history file: {}", e))?;
 
         Ok(())
     }
@@ -255,7 +288,18 @@ impl StoreManager {
 
     pub fn set_usage_history(&self, history: Vec<UsageEntry>) {
         let mut guard = self.usage_history.lock().unwrap();
-        *guard = history;
+        *guard = history.clone();
+        drop(guard); // Release lock before disk I/O
+
+        // Persist to disk
+        if let Err(e) = Self::save_history_to_disk(&self.history_path, &history) {
+            log::error!("Failed to save usage history to disk: {}", e);
+        } else {
+            log::info!(
+                "Successfully saved {} history entries to disk",
+                history.len()
+            );
+        }
     }
 
     pub fn get_usage_history(&self) -> Vec<UsageEntry> {

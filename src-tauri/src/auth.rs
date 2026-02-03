@@ -103,30 +103,69 @@ impl AuthManager {
                                     
                                     // Extract Usage Data
                                     if let Some(usage_card) = json.get("usageCard").and_then(|v| v.get("data")) {
+                                        log::info!("Raw usage card data: {:?}", usage_card);
                                         extracted_usage_data = Some(UsageData {
-                                            net_billed_amount: usage_card.get("net_billed_amount").and_then(|v| v.as_f64()).unwrap_or(0.0),
-                                            net_quantity: usage_card.get("net_quantity").and_then(|v| v.as_u64()).unwrap_or(0),
-                                            discount_quantity: usage_card.get("discount_quantity").and_then(|v| v.as_u64()).unwrap_or(0),
-                                            user_premium_request_entitlement: usage_card.get("user_premium_request_entitlement").and_then(|v| v.as_u64()).unwrap_or(0),
-                                            filtered_user_premium_request_entitlement: usage_card.get("filtered_user_premium_request_entitlement").and_then(|v| v.as_u64()).unwrap_or(0),
+                                            net_billed_amount: usage_card.get("netBilledAmount").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                                            net_quantity: usage_card.get("netQuantity").and_then(|v| v.as_u64()).unwrap_or(0),
+                                            discount_quantity: usage_card.get("discountQuantity").and_then(|v| v.as_u64()).unwrap_or(0),
+                                            user_premium_request_entitlement: usage_card.get("userPremiumRequestEntitlement").and_then(|v| v.as_u64()).unwrap_or(0),
+                                            filtered_user_premium_request_entitlement: usage_card.get("filteredUserPremiumRequestEntitlement").and_then(|v| v.as_u64()).unwrap_or(0),
                                         });
                                     }
 
                                     // Extract Usage History
                                     if let Some(rows) = json.get("usageTable")
                                         .and_then(|v| v.get("data"))
+                                        .and_then(|v| v.get("table"))
                                         .and_then(|v| v.get("rows"))
                                         .and_then(|v| v.as_array()) 
                                     {
+                                        log::info!("Parsing usage history, found {} rows", rows.len());
                                         let history: Vec<UsageHistoryRow> = rows.iter().filter_map(|row| {
+                                            let id = row.get("id").and_then(|v| v.as_str())?.to_string();
+                                            let cells = row.get("cells").and_then(|v| v.as_array())?;
+                                            
+                                            // Parse cells: [date, included_requests, billed_requests, gross_amount, billed_amount]
+                                            if cells.len() < 5 {
+                                                return None;
+                                            }
+                                            
+                                            let included_requests = cells.get(1)?
+                                                .get("value")?
+                                                .as_str()?
+                                                .parse::<u32>()
+                                                .ok()?;
+                                            
+                                            let billed_requests = cells.get(2)?
+                                                .get("value")?
+                                                .as_str()?
+                                                .parse::<u32>()
+                                                .ok()?;
+                                            
+                                            let gross_amount = cells.get(3)?
+                                                .get("value")?
+                                                .as_str()?
+                                                .trim_start_matches('$')
+                                                .parse::<f64>()
+                                                .ok()?;
+                                            
+                                            let billed_amount = cells.get(4)?
+                                                .get("value")?
+                                                .as_str()?
+                                                .trim_start_matches('$')
+                                                .parse::<f64>()
+                                                .ok()?;
+                                            
                                             Some(UsageHistoryRow {
-                                                date: row.get("date").and_then(|v| v.as_str())?.to_string(),
-                                                included_requests: row.get("included_requests").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
-                                                billed_requests: row.get("billed_requests").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
-                                                gross_amount: row.get("gross_amount").and_then(|v| v.as_f64()).unwrap_or(0.0),
-                                                billed_amount: row.get("billed_amount").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                                                date: id,
+                                                included_requests,
+                                                billed_requests,
+                                                gross_amount,
+                                                billed_amount,
                                             })
                                         }).collect();
+                                        
+                                        log::info!("Successfully parsed {} history rows", history.len());
                                         extracted_usage_history = Some(history);
                                     }
                                 }
@@ -149,42 +188,86 @@ impl AuthManager {
                      if store.set_customer_id(id).is_ok() {
                          log::info!("Successfully authenticated with Customer ID: {}", id);
                          
-                         // Save usage data
-                         if let Some(usage) = extracted_usage_data {
-                             let used = usage.discount_quantity as u32;
-                             let limit = usage.user_premium_request_entitlement as u32;
-                             let _ = store.set_usage(used, limit);
+                         // Save usage data and history
+                          let mut usage_summary = None;
+                          let mut usage_entries = vec![];
 
-                             // Update cache
-                             let cache = crate::store::UsageCache {
-                                 customer_id: id,
-                                 net_quantity: usage.net_quantity,
-                                 discount_quantity: usage.discount_quantity,
-                                 user_premium_request_entitlement: usage.user_premium_request_entitlement,
-                                 filtered_user_premium_request_entitlement: usage.filtered_user_premium_request_entitlement,
-                                 net_billed_amount: usage.net_billed_amount,
-                                 timestamp: chrono::Utc::now().timestamp(),
-                             };
-                             store.set_usage_cache(cache);
-                             
-                             // Emit summary
-                             let remaining = limit.saturating_sub(used);
-                             let percentage = if limit > 0 { (used as f32 / limit as f32) * 100.0 } else { 0.0 };
-                             let summary = crate::usage::UsageSummary {
-                                 used,
-                                 limit,
-                                 remaining,
-                                 percentage,
-                                 timestamp: chrono::Utc::now().timestamp(),
-                             };
-                             let _ = app_handle.emit("usage:updated", &summary);
-                         }
+                          if let Some(usage) = extracted_usage_data {
+                              log::info!("Extracted usage data: net_quantity={}, discount_quantity={}, entitlement={}", 
+                                  usage.net_quantity, usage.discount_quantity, usage.user_premium_request_entitlement);
+                              
+                              let used = usage.discount_quantity as u32;
+                              let limit = usage.user_premium_request_entitlement as u32;
+                              
+                              if used == 0 && limit == 0 {
+                                  log::warn!("Usage data shows 0/0 - API may have returned empty data");
+                              }
+                              
+                              let _ = store.set_usage(used, limit);
 
-                         // Save history
-                         if let Some(rows) = extracted_usage_history {
-                             let entries = crate::usage::UsageManager::map_history_rows(&rows);
-                             store.set_usage_history(entries);
-                         }
+                              // Update cache
+                              let cache = crate::store::UsageCache {
+                                  customer_id: id,
+                                  net_quantity: usage.net_quantity,
+                                  discount_quantity: usage.discount_quantity,
+                                  user_premium_request_entitlement: usage.user_premium_request_entitlement,
+                                  filtered_user_premium_request_entitlement: usage.filtered_user_premium_request_entitlement,
+                                  net_billed_amount: usage.net_billed_amount,
+                                  timestamp: chrono::Utc::now().timestamp(),
+                              };
+                              store.set_usage_cache(cache);
+                              
+                              // Create summary
+                              let remaining = limit.saturating_sub(used);
+                              let percentage = if limit > 0 { (used as f32 / limit as f32) * 100.0 } else { 0.0 };
+                              usage_summary = Some(crate::usage::UsageSummary {
+                                  used,
+                                  limit,
+                                  remaining,
+                                  percentage,
+                                  timestamp: chrono::Utc::now().timestamp(),
+                              });
+                          } else {
+                              log::warn!("No usage data was extracted from GitHub API");
+                          }
+
+                          // Save history
+                          if let Some(rows) = extracted_usage_history {
+                              log::info!("Extracted {} usage history rows", rows.len());
+                              usage_entries = crate::usage::UsageManager::map_history_rows(&rows);
+                              store.set_usage_history(usage_entries.clone());
+                          } else {
+                              log::warn!("No usage history was extracted from GitHub API");
+                          }
+
+                          // Emit full usage:data payload with prediction
+                          if let Some(summary) = usage_summary {
+                              let history = if !usage_entries.is_empty() {
+                                  usage_entries
+                              } else {
+                                  crate::usage::UsageManager::get_cached_history(&app_handle)
+                              };
+                              
+                              let prediction = crate::usage::UsageManager::predict_usage_from_history(
+                                  &history,
+                                  summary.used,
+                                  summary.limit,
+                              );
+                              
+                              log::info!("Emitting usage:data event - used: {}, limit: {}, history entries: {}", 
+                                  summary.used, summary.limit, history.len());
+                              
+                              let payload = crate::usage::UsagePayload {
+                                  summary: summary.clone(),
+                                  history,
+                                  prediction,
+                              };
+                              
+                              let _ = app_handle.emit("usage:data", payload);
+                              let _ = app_handle.emit("usage:updated", &summary);
+                          } else {
+                              log::warn!("No usage summary to emit - authentication succeeded but no usage data available");
+                          }
 
                          let _ = app_handle.emit("auth:state-changed", "authenticated");
                          
@@ -348,36 +431,46 @@ impl AuthManager {
 
               async function fetchUsageCard(customerId) {
                 try {
+                  console.log('[AuthInjector] Fetching usage card for customer:', customerId);
                   const res = await fetch(`/settings/billing/copilot_usage_card?customer_id=${customerId}&period=3`, {
                     headers: {
                       'Accept': 'application/json',
                       'x-requested-with': 'XMLHttpRequest'
                     }
                   });
+                  console.log('[AuthInjector] Usage card response status:', res.status);
                   if (!res.ok) {
+                    console.error('[AuthInjector] Usage card request failed:', res.status);
                     return { success: false, error: 'Usage card request failed: ' + res.status };
                   }
                   const data = await res.json();
+                  console.log('[AuthInjector] Usage card data received:', data ? 'YES' : 'NO', 'Keys:', data ? Object.keys(data) : []);
                   return { success: true, data };
                 } catch (error) {
+                  console.error('[AuthInjector] Usage card fetch error:', error);
                   return { success: false, error: error.message };
                 }
               }
 
               async function fetchUsageTable(customerId) {
                 try {
+                  console.log('[AuthInjector] Fetching usage table for customer:', customerId);
                   const res = await fetch(`/settings/billing/copilot_usage_table?customer_id=${customerId}&group=0&period=3&query=&page=1`, {
                     headers: {
                       'Accept': 'application/json',
                       'x-requested-with': 'XMLHttpRequest'
                     }
                   });
+                  console.log('[AuthInjector] Usage table response status:', res.status);
                   if (!res.ok) {
+                    console.error('[AuthInjector] Usage table request failed:', res.status);
                     return { success: false, error: 'Usage table request failed: ' + res.status };
                   }
                   const data = await res.json();
+                  console.log('[AuthInjector] Usage table data received:', data ? 'YES' : 'NO', 'Rows:', data?.data?.rows?.length || 0);
                   return { success: true, data };
                 } catch (error) {
+                  console.error('[AuthInjector] Usage table fetch error:', error);
                   return { success: false, error: error.message };
                 }
               }
@@ -386,17 +479,19 @@ impl AuthManager {
                 console.log('[AuthInjector] Running extractAndSend...');
                 const result = await extractCustomerId();
                 if (result.success && result.id) {
-                  console.log('[AuthInjector] Extraction success, fetching usage data...');
+                  console.log('[AuthInjector] Extraction success, ID:', result.id, 'fetching usage data...');
                   
                   const usageCard = await fetchUsageCard(result.id);
                   const usageTable = await fetchUsageTable(result.id);
                   
+                  console.log('[AuthInjector] Creating payload...');
                   const payload = {
                       id: result.id,
                       usageCard: usageCard,
                       usageTable: usageTable
                   };
                   
+                  console.log('[AuthInjector] Redirecting with payload...');
                   const hash = encodeURIComponent(JSON.stringify(payload));
                   window.location.href = "https://copilot-auth-success.local/success#payload=" + hash;
                 } else {
