@@ -1,5 +1,4 @@
 use tiny_skia::Pixmap;
-use tiny_skia::{Color, Paint, PathBuilder, Stroke, Transform};
 
 #[derive(Clone, Debug)]
 pub struct GlyphBitmap {
@@ -166,14 +165,13 @@ impl TrayIconRenderer {
         icon_rgba: &[u8],
         icon_width: u32,
         icon_height: u32,
-        percentage: f32,
+        _percentage: f32, // Unused but kept for API compatibility
     ) -> TrayImage {
-        // Canvas: icon (16px) + text + circle (8px padding + 8px circle)
+        // Canvas: icon (16px) + text (no circle)
         let icon_size: u32 = 16;
-        let circle_size: u32 = 8;
         let padding: u32 = 2;
         let text_width = estimate_text_width(text);
-        let total_width = icon_size + padding + text_width + padding + circle_size;
+        let total_width = icon_size + padding + text_width;
         let height = icon_size;
 
         let mut pixmap = Pixmap::new(total_width, height).expect("pixmap");
@@ -241,52 +239,6 @@ impl TrayIconRenderer {
             }
 
             text_x += glyph.advance.round() as u32;
-        }
-
-        // Draw progress circle
-        let circle_center_x = (total_width - circle_size / 2) as f32;
-        let circle_center_y = (height / 2) as f32;
-        let radius = circle_size as f32 / 2.0 - 1.0;
-
-        // Progress arc (color based on percentage) - NO background circle
-        let progress_color = if percentage < 50.0 {
-            Color::from_rgba8(34, 197, 94, 255) // green
-        } else if percentage < 75.0 {
-            Color::from_rgba8(234, 179, 8, 255) // yellow
-        } else if percentage < 90.0 {
-            Color::from_rgba8(249, 115, 22, 255) // orange
-        } else {
-            Color::from_rgba8(239, 68, 68, 255) // red
-        };
-
-        let mut paint = Paint::default();
-        paint.set_color(progress_color);
-        paint.anti_alias = true;
-
-        let stroke = Stroke {
-            width: 1.5,
-            ..Default::default()
-        };
-
-        let start_angle = -std::f32::consts::FRAC_PI_2; // -90 degrees (top)
-        let end_angle = start_angle + (std::f32::consts::TAU * percentage / 100.0);
-
-        let mut path = PathBuilder::new();
-        // Create arc
-        let steps = 20;
-        for i in 0..=steps {
-            let t = i as f32 / steps as f32;
-            let angle = start_angle + (end_angle - start_angle) * t;
-            let x = circle_center_x + radius * angle.cos();
-            let y = circle_center_y + radius * angle.sin();
-            if i == 0 {
-                path.move_to(x, y);
-            } else {
-                path.line_to(x, y);
-            }
-        }
-        if let Some(path) = path.finish() {
-            pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
         }
 
         TrayImage::new(pixmap.data().to_vec(), total_width, height)
