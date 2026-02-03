@@ -1,4 +1,3 @@
-use crate::auth::AuthManager;
 use crate::store::StoreManager;
 use crate::auth::UsageHistoryRow;
 use chrono::Datelike;
@@ -47,12 +46,17 @@ pub struct UsagePrediction {
 }
 
 pub struct UsageManager {
-    auth_manager: AuthManager,
+}
+
+impl Default for UsageManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl UsageManager {
-    pub fn new(auth_manager: AuthManager) -> Self {
-        Self { auth_manager }
+    pub fn new() -> Self {
+        Self {}
     }
 
     /// Fetch and update usage data
@@ -151,8 +155,7 @@ impl UsageManager {
                 if let Some(store) = app.try_state::<StoreManager>() {
                     if store.is_authenticated() {
                         // Create a new auth manager for this poll
-                        let auth_manager = AuthManager::new();
-                        let mut usage_manager = UsageManager::new(auth_manager);
+                        let mut usage_manager = UsageManager::new();
 
                         if let Ok(summary) = usage_manager.fetch_usage(&app).await {
             log::info!(

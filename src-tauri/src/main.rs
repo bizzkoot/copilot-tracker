@@ -326,14 +326,10 @@ async fn check_auth_status(
 #[tauri::command]
 async fn fetch_usage(
     app: AppHandle,
-    state: tauri::State<'_, AuthManagerState>,
+    _state: tauri::State<'_, AuthManagerState>,
 ) -> Result<copilot_tracker::UsageSummary, String> {
     let _ = app.emit("usage:loading", true);
-    let auth_manager = {
-        let guard = state.auth_manager.lock().unwrap();
-        (*guard).clone()
-    };
-    let mut usage_manager = UsageManager::new(auth_manager);
+    let mut usage_manager = UsageManager::new();
     let result = usage_manager.fetch_usage(&app).await;
     let _ = app.emit("usage:loading", false);
 

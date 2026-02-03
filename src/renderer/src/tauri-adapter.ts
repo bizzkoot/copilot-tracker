@@ -130,14 +130,6 @@ export function initTauriAdapter() {
       listen<AuthState>("auth:state-changed", (event) => {
         notifyAuthListeners(event.payload);
       }).catch((err) => console.error("Failed to set up auth listener:", err));
-
-      listen<string>("auth:redirect-detected", () => {
-        invoke("handle_auth_redirect").catch((err) =>
-          console.error("Failed to handle auth redirect:", err),
-        );
-      }).catch((err) =>
-        console.error("Failed to listen auth:redirect-detected", err),
-      );
     }
 
     if (!isUsageListenerSetup) {

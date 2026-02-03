@@ -94,8 +94,7 @@ impl AuthManager {
 
                 // Try to parse from hash payload first (new method)
                 if let Some(fragment) = url.fragment() {
-                    if fragment.starts_with("payload=") {
-                        let encoded = &fragment["payload=".len()..];
+                    if let Some(encoded) = fragment.strip_prefix("payload=") {
                         if let Ok(decoded) = urlencoding::decode(encoded) {
                             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&decoded) {
                                 // Extract ID
