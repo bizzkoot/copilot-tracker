@@ -311,6 +311,25 @@ impl StoreManager {
         self.update_settings(|s| {
             *s = defaults.clone();
         })?;
+
+        // Clear usage cache
+        {
+            let mut cache = self.usage_cache.lock().unwrap();
+            *cache = None;
+        }
+
+        // Clear usage history
+        {
+            let mut history = self.usage_history.lock().unwrap();
+            history.clear();
+        }
+
+        // Delete history file from disk
+        if self.history_path.exists() {
+            std::fs::remove_file(&self.history_path)
+                .map_err(|e| format!("Failed to delete history file: {}", e))?;
+        }
+
         Ok(defaults)
     }
 }

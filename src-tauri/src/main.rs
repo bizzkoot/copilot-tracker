@@ -411,9 +411,16 @@ fn update_settings(
 
 #[tauri::command]
 fn reset_settings(app: AppHandle) -> Result<copilot_tracker::AppSettings, String> {
+    log::info!("Resetting all settings and data...");
     let store = app.state::<StoreManager>();
     let defaults = store.reset_settings()?;
+    
+    // Emit settings changed event
     let _ = app.emit("settings:changed", defaults.clone());
+    
+    // Emit auth state changed to unauthenticated to clear frontend state
+    let _ = app.emit("auth:state-changed", "unauthenticated");
+    log::info!("Reset complete: emitted auth:state-changed = unauthenticated");
 
     let update_state = app.state::<UpdateState>();
     let latest = update_state.latest.lock().unwrap();

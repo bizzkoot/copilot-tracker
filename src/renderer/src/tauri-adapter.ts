@@ -344,7 +344,12 @@ export function initTauriAdapter() {
         }
       },
       resetSettings: async () => {
+        console.log("[TauriAdapter] Resetting all settings and data...");
         const rustSettings = await invoke<RustAppSettings>("reset_settings");
+        console.log(
+          "[TauriAdapter] Backend reset complete, clearing frontend state...",
+        );
+
         const settings: Settings = {
           refreshInterval: rustSettings.refreshInterval,
           predictionPeriod: rustSettings.predictionPeriod as any,
@@ -357,6 +362,12 @@ export function initTauriAdapter() {
           },
         };
         notifySettingsListeners(settings);
+
+        // Backend emits auth:state-changed to "unauthenticated"
+        // which will clear all frontend usage data via useAuth hook
+        console.log(
+          "[TauriAdapter] Reset complete - frontend will clear on auth:state-changed event",
+        );
       },
       onSettingsChanged: (callback: (settings: Settings) => void) => {
         settingsListeners.push(callback);
