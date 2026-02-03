@@ -87,29 +87,121 @@ impl AuthManager {
             // Check for HTTPS interception redirect
             if url_str.contains("copilot-auth-success.local") {
                 log::info!("Intercepted auth success URL: {}", url_str);
-                if let Some((_, id_str)) = url.query_pairs().find(|(key, _)| key == "id") {
-                    if let Ok(id) = id_str.parse::<u64>() {
-                         let store = app_handle.state::<StoreManager>();
-                         if store.set_customer_id(id).is_ok() {
-                             log::info!("Successfully authenticated with Customer ID: {}", id);
-                             let _ = app_handle.emit("auth:state-changed", "authenticated");
-                             
-                             // Close auth window
-                             if let Some(auth_window) = app_handle.get_webview_window("auth") {
-                                 let _ = auth_window.close();
-                             }
+                
+                let mut extracted_id = None;
+                let mut extracted_usage_data = None;
+                let mut extracted_usage_history = None;
 
-                             // Show main window
-                             if let Some(main_window) = app_handle.get_webview_window("main") {
-                                 let _ = main_window.show();
-                                 let _ = main_window.set_focus();
-                             }
-                         } else {
-                             log::error!("Failed to save customer ID to store");
-                         }
-                    } else {
-                        log::error!("Failed to parse customer ID from URL: {}", url_str);
+                // Try to parse from hash payload first (new method)
+                if let Some(fragment) = url.fragment() {
+                    if fragment.starts_with("payload=") {
+                        let encoded = &fragment["payload=".len()..];
+                        if let Ok(decoded) = urlencoding::decode(encoded) {
+                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&decoded) {
+                                // Extract ID
+                                if let Some(id) = json.get("id").and_then(|v| v.as_u64()) {
+                                    extracted_id = Some(id);
+                                    
+                                    // Extract Usage Data
+                                    if let Some(usage_card) = json.get("usageCard").and_then(|v| v.get("data")) {
+                                        extracted_usage_data = Some(UsageData {
+                                            net_billed_amount: usage_card.get("net_billed_amount").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                                            net_quantity: usage_card.get("net_quantity").and_then(|v| v.as_u64()).unwrap_or(0),
+                                            discount_quantity: usage_card.get("discount_quantity").and_then(|v| v.as_u64()).unwrap_or(0),
+                                            user_premium_request_entitlement: usage_card.get("user_premium_request_entitlement").and_then(|v| v.as_u64()).unwrap_or(0),
+                                            filtered_user_premium_request_entitlement: usage_card.get("filtered_user_premium_request_entitlement").and_then(|v| v.as_u64()).unwrap_or(0),
+                                        });
+                                    }
+
+                                    // Extract Usage History
+                                    if let Some(rows) = json.get("usageTable")
+                                        .and_then(|v| v.get("data"))
+                                        .and_then(|v| v.get("rows"))
+                                        .and_then(|v| v.as_array()) 
+                                    {
+                                        let history: Vec<UsageHistoryRow> = rows.iter().filter_map(|row| {
+                                            Some(UsageHistoryRow {
+                                                date: row.get("date").and_then(|v| v.as_str())?.to_string(),
+                                                included_requests: row.get("included_requests").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
+                                                billed_requests: row.get("billed_requests").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
+                                                gross_amount: row.get("gross_amount").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                                                billed_amount: row.get("billed_amount").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                                            })
+                                        }).collect();
+                                        extracted_usage_history = Some(history);
+                                    }
+                                }
+                            }
+                        }
                     }
+                }
+
+                // Fallback to query param
+                if extracted_id.is_none() {
+                    if let Some((_, id_str)) = url.query_pairs().find(|(key, _)| key == "id") {
+                        if let Ok(id) = id_str.parse::<u64>() {
+                            extracted_id = Some(id);
+                        }
+                    }
+                }
+
+                if let Some(id) = extracted_id {
+                     let store = app_handle.state::<StoreManager>();
+                     if store.set_customer_id(id).is_ok() {
+                         log::info!("Successfully authenticated with Customer ID: {}", id);
+                         
+                         // Save usage data
+                         if let Some(usage) = extracted_usage_data {
+                             let used = usage.discount_quantity as u32;
+                             let limit = usage.user_premium_request_entitlement as u32;
+                             let _ = store.set_usage(used, limit);
+
+                             // Update cache
+                             let cache = crate::store::UsageCache {
+                                 customer_id: id,
+                                 net_quantity: usage.net_quantity,
+                                 discount_quantity: usage.discount_quantity,
+                                 user_premium_request_entitlement: usage.user_premium_request_entitlement,
+                                 filtered_user_premium_request_entitlement: usage.filtered_user_premium_request_entitlement,
+                                 net_billed_amount: usage.net_billed_amount,
+                                 timestamp: chrono::Utc::now().timestamp(),
+                             };
+                             store.set_usage_cache(cache);
+                             
+                             // Emit summary
+                             let remaining = limit.saturating_sub(used);
+                             let percentage = if limit > 0 { (used as f32 / limit as f32) * 100.0 } else { 0.0 };
+                             let summary = crate::usage::UsageSummary {
+                                 used,
+                                 limit,
+                                 remaining,
+                                 percentage,
+                                 timestamp: chrono::Utc::now().timestamp(),
+                             };
+                             let _ = app_handle.emit("usage:updated", &summary);
+                         }
+
+                         // Save history
+                         if let Some(rows) = extracted_usage_history {
+                             let entries = crate::usage::UsageManager::map_history_rows(&rows);
+                             store.set_usage_history(entries);
+                         }
+
+                         let _ = app_handle.emit("auth:state-changed", "authenticated");
+                         
+                         // Close auth window
+                         if let Some(auth_window) = app_handle.get_webview_window("auth") {
+                             let _ = auth_window.close();
+                         }
+
+                         // Show main window
+                         if let Some(main_window) = app_handle.get_webview_window("main") {
+                             let _ = main_window.show();
+                             let _ = main_window.set_focus();
+                         }
+                     } else {
+                         log::error!("Failed to save customer ID to store");
+                     }
                 } else {
                     log::error!("No customer ID found in URL: {}", url_str);
                 }
@@ -254,13 +346,60 @@ impl AuthManager {
                 }
                 return result;
               }
+
+              async function fetchUsageCard(customerId) {
+                try {
+                  const res = await fetch(`/settings/billing/copilot_usage_card?customer_id=${customerId}&period=3`, {
+                    headers: {
+                      'Accept': 'application/json',
+                      'x-requested-with': 'XMLHttpRequest'
+                    }
+                  });
+                  if (!res.ok) {
+                    return { success: false, error: 'Usage card request failed: ' + res.status };
+                  }
+                  const data = await res.json();
+                  return { success: true, data };
+                } catch (error) {
+                  return { success: false, error: error.message };
+                }
+              }
+
+              async function fetchUsageTable(customerId) {
+                try {
+                  const res = await fetch(`/settings/billing/copilot_usage_table?customer_id=${customerId}&group=0&period=3&query=&page=1`, {
+                    headers: {
+                      'Accept': 'application/json',
+                      'x-requested-with': 'XMLHttpRequest'
+                    }
+                  });
+                  if (!res.ok) {
+                    return { success: false, error: 'Usage table request failed: ' + res.status };
+                  }
+                  const data = await res.json();
+                  return { success: true, data };
+                } catch (error) {
+                  return { success: false, error: error.message };
+                }
+              }
               
               async function extractAndSend() {
                 console.log('[AuthInjector] Running extractAndSend...');
                 const result = await extractCustomerId();
                 if (result.success && result.id) {
-                  console.log('[AuthInjector] Extraction success, redirecting to success page...');
-                  window.location.href = "https://copilot-auth-success.local/success?id=" + result.id;
+                  console.log('[AuthInjector] Extraction success, fetching usage data...');
+                  
+                  const usageCard = await fetchUsageCard(result.id);
+                  const usageTable = await fetchUsageTable(result.id);
+                  
+                  const payload = {
+                      id: result.id,
+                      usageCard: usageCard,
+                      usageTable: usageTable
+                  };
+                  
+                  const hash = encodeURIComponent(JSON.stringify(payload));
+                  window.location.href = "https://copilot-auth-success.local/success#payload=" + hash;
                 } else {
                   console.error('[AuthInjector] Failed to extract customer ID:', result.error);
                 }

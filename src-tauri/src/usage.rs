@@ -60,68 +60,13 @@ impl UsageManager {
         &mut self,
         app: &AppHandle,
     ) -> Result<UsageSummary, String> {
-        // Perform extraction using auth manager
-        let result = self.auth_manager.perform_extraction(app).await?;
+        // Extraction skipped (hidden window not supported). Returning cached data.
+        log::info!("Extraction skipped (hidden window not supported). Returning cached data.");
 
-        if let Some(error) = result.error {
-            return Err(error);
-        }
-
-        // Get usage data
-        let usage_data = result
-            .usage_data
-            .ok_or("No usage data available")?;
-        let usage_history = result.usage_history.unwrap_or_default();
-        let history_entries = if usage_history.is_empty() {
-            Vec::new()
-        } else {
-            Self::map_history_rows(&usage_history)
-        };
-
-        // Calculate usage summary
-        let used = usage_data.discount_quantity as u32;
-        let limit: u32 = usage_data.user_premium_request_entitlement as u32;
-        let remaining = limit.saturating_sub(used);
-        let percentage = if limit > 0 {
-            (used as f32 / limit as f32) * 100.0
-        } else {
-            0.0
-        };
-
-        let summary = UsageSummary {
-            used,
-            limit,
-            remaining,
-            percentage,
-            timestamp: chrono::Utc::now().timestamp(),
-        };
-
-        // Update store
-        if let Some(store) = app.try_state::<StoreManager>() {
-            let _ = store.set_usage(used, limit);
-        }
+        let summary = Self::get_cached_usage(app)?;
 
         // Emit event to frontend
         let _ = app.emit("usage:updated", &summary);
-
-        // Persist history into cache if available (keep latest 7 entries)
-        if let Some(store) = app.try_state::<StoreManager>() {
-            if !history_entries.is_empty() {
-                store.set_usage_history(history_entries.clone());
-            }
-            if let Some(latest) = history_entries.first() {
-                let cache = crate::store::UsageCache {
-                    customer_id: store.get_customer_id().unwrap_or_default(),
-                    net_quantity: usage_data.net_quantity,
-                    discount_quantity: usage_data.discount_quantity,
-                    user_premium_request_entitlement: usage_data.user_premium_request_entitlement,
-                    filtered_user_premium_request_entitlement: usage_data.filtered_user_premium_request_entitlement,
-                    net_billed_amount: usage_data.net_billed_amount,
-                    timestamp: latest.timestamp,
-                };
-                store.set_usage_cache(cache);
-            }
-        }
 
         Ok(summary)
     }
