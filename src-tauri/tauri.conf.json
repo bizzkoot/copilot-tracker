@@ -10,7 +10,7 @@
   "app": {
     "withGlobalTauri": true,
     "security": {
-      "capabilities": ["default"]
+      "capabilities": ["default", "remote-github"]
     },
     "trayIcon": {
       "iconPath": "icons/icon.png",

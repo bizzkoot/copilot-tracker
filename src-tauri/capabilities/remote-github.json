@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "remote-github",
+  "description": "Allow GitHub auth windows to invoke Tauri IPC for auth redirect handling",
+  "windows": ["auth", "hidden-auth"],
+  "remote": {
+    "urls": ["https://github.com/*"]
+  },
+  "permissions": ["core:default"]
+}

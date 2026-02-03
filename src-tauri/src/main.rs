@@ -2,11 +2,10 @@ use serde::Deserialize;
 use std::sync::{Arc, Mutex};
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, Listener, Manager};
+use tauri::{AppHandle, Emitter, Listener, Manager, WindowEvent};
 use tauri_plugin_http::reqwest;
 use tauri_plugin_notification::NotificationExt;
-use tauri_plugin_shell::open::open;
-use chrono::NaiveDateTime;
+use tauri_plugin_opener::OpenerExt;
 
 use copilot_tracker::{
     init_store_manager,
@@ -146,8 +145,8 @@ fn build_tray_menu(
         Submenu::with_id(app, "usage_history", "Usage History", true).map_err(|e| e.to_string())?;
     if !usage_history.is_empty() {
         for entry in usage_history.iter().take(7) {
-            let date = NaiveDateTime::from_timestamp_opt(entry.timestamp, 0)
-                .map(|dt| dt.date())
+            let date = chrono::DateTime::from_timestamp(entry.timestamp, 0)
+                .map(|dt| dt.date_naive())
                 .unwrap_or_else(|| chrono::Utc::now().date_naive());
             let label = format!("{}: {} req", date.format("%b %d"), entry.used);
             let item = MenuItem::new(app, label, false, None::<&str>).map_err(|e| e.to_string())?;
@@ -266,6 +265,61 @@ fn rebuild_tray_menu(app: &AppHandle, update: Option<&UpdateInfo>) -> Result<(),
     tray.set_menu(Some(menu)).map_err(|e| e.to_string())
 }
 
+async fn run_auth_extraction(
+    app: AppHandle,
+    auth_state: Arc<Mutex<AuthManager>>,
+    close_auth_on_success: bool,
+) -> bool {
+    let should_start = {
+        let mut manager = auth_state.lock().unwrap();
+        manager.start_extraction()
+    };
+
+    if !should_start {
+        return false;
+    }
+
+    let extraction_result = {
+        let mut manager = AuthManager::new();
+        manager.perform_extraction(&app).await
+    };
+
+    {
+        let mut manager = auth_state.lock().unwrap();
+        manager.finish_extraction();
+    }
+
+    match extraction_result {
+        Ok(extraction) => {
+            if let Some(customer_id) = extraction.customer_id {
+                if let Some(store) = app.try_state::<StoreManager>() {
+                    let _ = store.set_customer_id(customer_id);
+
+                    if close_auth_on_success {
+                        let mut manager = auth_state.lock().unwrap();
+                        manager.hide_auth_window();
+                    }
+
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+
+                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+                    let _ = app.emit("auth:state-changed", "authenticated");
+                    return true;
+                }
+            } else {
+                log::warn!("Extraction returned no customer ID");
+            }
+        }
+        Err(e) => log::error!("Extraction failed: {}", e),
+    }
+
+    false
+}
+
 // ============================================================================
 // IPC Commands - Authentication
 // ============================================================================
@@ -277,6 +331,39 @@ async fn show_auth_window(
 ) -> Result<bool, String> {
     let mut auth_manager = state.auth_manager.lock().unwrap();
     auth_manager.show_auth_window(&app)?;
+
+    if auth_manager.mark_auth_window_listener_attached() {
+        if let Some(window) = app.get_webview_window("auth") {
+            let app_handle = app.clone();
+            let auth_state = state.auth_manager.clone();
+            window.on_window_event(move |event| {
+                if matches!(event, WindowEvent::CloseRequested { .. }) {
+                    if let Ok(mut manager) = auth_state.lock() {
+                        manager.clear_auth_window();
+                    }
+                    let app_clone = app_handle.clone();
+                    let auth_state_clone = auth_state.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let _ = run_auth_extraction(app_clone, auth_state_clone, false).await;
+                    });
+                }
+            });
+        }
+    }
+
+    let app_clone = app.clone();
+    let auth_state = state.auth_manager.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        for _ in 0..3 {
+            let success = run_auth_extraction(app_clone.clone(), auth_state.clone(), true).await;
+            if success {
+                return;
+            }
+
+            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        }
+    });
     Ok(true)
 }
 
@@ -287,20 +374,21 @@ async fn perform_auth_extraction(
 ) -> Result<copilot_tracker::ExtractionResult, String> {
     let app_clone = app.clone();
     let auth_manager_state = state.auth_manager.clone();
-    let result = tokio::task::spawn_blocking(move || {
-        let mut auth_manager = auth_manager_state.lock().unwrap();
-        tauri::async_runtime::block_on(auth_manager.perform_extraction(&app_clone))
-    })
-    .await
-    .map_err(|err| format!("Auth extraction task failed: {}", err))??;
+    let result = {
+        let mut manager = AuthManager::new();
+        manager.perform_extraction(&app_clone).await
+    }?;
 
-    // Update store if successful
     if let Some(customer_id) = result.customer_id {
         if let Some(store) = app.try_state::<StoreManager>() {
             let _ = store.set_customer_id(customer_id);
-            // Emit auth state change
             let _ = app.emit("auth:state-changed", "authenticated");
         }
+    }
+
+    {
+        let mut manager = auth_manager_state.lock().unwrap();
+        manager.finish_extraction();
     }
 
     Ok(result)
@@ -313,52 +401,11 @@ async fn handle_auth_redirect(
 ) -> Result<(), String> {
     log::info!("Auth redirect detected, starting extraction...");
 
-    // 1. Hide/Close the auth window
-    {
-        let mut auth_manager = state.auth_manager.lock().unwrap();
-        auth_manager.hide_auth_window();
-    }
-
-    // 2. Perform extraction
     let app_clone = app.clone();
     let auth_manager_state = state.auth_manager.clone();
 
-    // Run extraction in background so we don't block the command return
-    tokio::spawn(async move {
-        // We need to lock the mutex to call perform_extraction
-        // We wrap it in spawn_blocking because locking a std::sync::Mutex is blocking
-        let app_for_extraction = app_clone.clone();
-        let result = tokio::task::spawn_blocking(move || {
-            let mut auth_manager = auth_manager_state.lock().unwrap();
-            tauri::async_runtime::block_on(auth_manager.perform_extraction(&app_for_extraction))
-        }).await;
-
-        match result {
-            Ok(Ok(extraction)) => {
-                if let Some(customer_id) = extraction.customer_id {
-                    log::info!("Extraction successful, customer_id: {}", customer_id);
-                    if let Some(store) = app_clone.try_state::<StoreManager>() {
-                        let _ = store.set_customer_id(customer_id);
-                        
-                        // Show main window FIRST
-                        if let Some(window) = app_clone.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
-
-                        // Wait for frontend to be ready (handle race condition)
-                        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-                        // Emit auth state change
-                        let _ = app_clone.emit("auth:state-changed", "authenticated");
-                    }
-                } else {
-                    log::warn!("Extraction returned no customer ID");
-                }
-            }
-            Ok(Err(e)) => log::error!("Extraction failed: {}", e),
-            Err(e) => log::error!("Task join error: {}", e),
-        }
+    tauri::async_runtime::spawn(async move {
+        let _ = run_auth_extraction(app_clone, auth_manager_state, true).await;
     });
 
     Ok(())
@@ -529,8 +576,8 @@ fn hide_main_window(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn open_external_url(_app: AppHandle, url: String) -> Result<(), String> {
-    open(None, url, None).map_err(|e| e.to_string())
+fn open_external_url(app: AppHandle, url: String) -> Result<(), String> {
+    app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -699,6 +746,7 @@ fn main() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
@@ -735,10 +783,10 @@ fn main() {
 
             // Initialize store manager
             let app_handle = app.handle();
-            init_store_manager(&app_handle)?;
+            init_store_manager(app_handle)?;
 
             // Create tray menu
-            let menu = build_tray_menu(&app.handle(), None)?;
+            let menu = build_tray_menu(app.handle(), None)?;
 
             let initial_image = renderer.render_text("1", 16).into_tauri_image();
             let tray = TrayIconBuilder::new()
@@ -757,10 +805,9 @@ fn main() {
                         }
                     }
                     "open_billing" => {
-                        let _ = open(
-                            None,
-                            "https://github.com/settings/billing/premium_requests_usage".to_string(),
-                            None,
+                        let _ = app.opener().open_url(
+                            "https://github.com/settings/billing/premium_requests_usage",
+                            None::<&str>,
                         );
                     }
                     "refresh" => {
@@ -783,7 +830,7 @@ fn main() {
                     "update_check" => {
                         let info = app.state::<UpdateState>().latest.lock().unwrap().clone();
                         if let Some(info) = info {
-                            let _ = open(None, info.release_url, None);
+                            let _ = app.opener().open_url(info.release_url, None::<&str>);
                         } else {
                             let app_handle = app.clone();
                             tauri::async_runtime::spawn(async move {
@@ -857,7 +904,7 @@ fn main() {
             // Update tray menu at startup
             let update_state = app.state::<UpdateState>();
             let latest = update_state.latest.lock().unwrap();
-            let _ = rebuild_tray_menu(&app.handle(), latest.as_ref());
+            let _ = rebuild_tray_menu(app.handle(), latest.as_ref());
 
             // Start background usage polling (every 15 minutes)
             // NOTE: Deferred until after startup - needs proper async runtime initialization

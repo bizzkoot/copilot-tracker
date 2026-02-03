@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Listener, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Listener, WebviewUrl, WebviewWindowBuilder};
 use tokio::time::{sleep, Duration};
 use url::Url;
 
@@ -42,6 +42,8 @@ pub struct UsageData {
 pub struct AuthManager {
     auth_window: Option<tauri::WebviewWindow>,
     customer_id: Option<u64>,
+    extraction_in_progress: bool,
+    auth_window_listener_attached: bool,
 }
 
 impl AuthManager {
@@ -49,6 +51,8 @@ impl AuthManager {
         Self {
             auth_window: None,
             customer_id: None,
+            extraction_in_progress: false,
+            auth_window_listener_attached: false,
         }
     }
 
@@ -73,30 +77,19 @@ impl AuthManager {
         let url = Url::parse(GITHUB_LOGIN_URL)
             .map_err(|e| format!("Failed to parse URL: {}", e))?;
 
-        let window = WebviewWindowBuilder::new(
-            app,
-            "auth",
-            WebviewUrl::External(url),
-        )
+        let app_handle = app.clone();
+        let window = WebviewWindowBuilder::new(app, "auth", WebviewUrl::External(url))
+        .on_navigation(move |url| {
+            let url_str = url.as_str();
+            if url_str.contains("/settings/billing") {
+                let _ = app_handle.emit("auth:redirect-detected", url_str);
+            }
+            true
+        })
         .title("GitHub Login")
         .inner_size(900.0, 700.0)
         .resizable(true)
         .visible(true)
-        .initialization_script(r#"
-            // Poll for URL changes to detect successful login
-            setInterval(() => {
-                try {
-                    const url = window.location.href;
-                    if (url.includes('/settings/billing')) {
-                        if (window.__TAURI__) {
-                            window.__TAURI__.core.invoke('handle_auth_redirect');
-                        }
-                    }
-                } catch (e) {
-                    console.error('Auth check error:', e);
-                }
-            }, 500);
-        "#)
         .build()
         .map_err(|e| format!("Failed to create auth window: {}", e))?;
 
@@ -111,7 +104,34 @@ impl AuthManager {
                 let _ = window.close();
             }
         }
+        self.clear_auth_window();
+    }
+
+    pub fn clear_auth_window(&mut self) {
         self.auth_window = None;
+        self.auth_window_listener_attached = false;
+    }
+
+    pub fn mark_auth_window_listener_attached(&mut self) -> bool {
+        if self.auth_window_listener_attached {
+            false
+        } else {
+            self.auth_window_listener_attached = true;
+            true
+        }
+    }
+
+    pub fn start_extraction(&mut self) -> bool {
+        if self.extraction_in_progress {
+            false
+        } else {
+            self.extraction_in_progress = true;
+            true
+        }
+    }
+
+    pub fn finish_extraction(&mut self) {
+        self.extraction_in_progress = false;
     }
 
     /// Create a hidden webview for data extraction
@@ -423,5 +443,11 @@ impl AuthManager {
 
     pub fn is_authenticated(&self) -> bool {
         self.customer_id.is_some()
+    }
+}
+
+impl Default for AuthManager {
+    fn default() -> Self {
+        Self::new()
     }
 }

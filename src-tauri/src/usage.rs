@@ -175,11 +175,11 @@ impl UsageManager {
     pub fn map_history_rows(rows: &[UsageHistoryRow]) -> Vec<UsageEntry> {
         let mut entries: Vec<UsageEntry> = rows
             .iter()
-            .filter_map(|row| {
+            .map(|row| {
                 let timestamp = chrono::DateTime::parse_from_rfc3339(&row.date)
                     .map(|dt| dt.timestamp())
                     .unwrap_or_else(|_| chrono::Utc::now().timestamp());
-                Some(UsageEntry {
+                UsageEntry {
                     timestamp,
                     used: row.included_requests + row.billed_requests,
                     limit: 0,
@@ -187,7 +187,7 @@ impl UsageManager {
                     billed_requests: row.billed_requests,
                     gross_amount: row.gross_amount,
                     billed_amount: row.billed_amount,
-                })
+                }
             })
             .collect();
         entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
@@ -240,14 +240,10 @@ impl UsageManager {
             31
         } else {
             // First day of next month minus first day of current month
-            let next_month = chrono::NaiveDate::from_ymd_opt(
-                now.year() as i32,
-                now.month() + 1,
-                1,
-            )
-            .unwrap_or_else(|| chrono::NaiveDate::from_ymd_opt(now.year() as i32 + 1, 1, 1).unwrap());
+            let next_month = chrono::NaiveDate::from_ymd_opt(now.year(), now.month() + 1, 1)
+                .unwrap_or_else(|| chrono::NaiveDate::from_ymd_opt(now.year() + 1, 1, 1).unwrap());
             let current_month =
-                chrono::NaiveDate::from_ymd_opt(now.year() as i32, now.month(), 1).unwrap();
+                chrono::NaiveDate::from_ymd_opt(now.year(), now.month(), 1).unwrap();
             (next_month - current_month).num_days() as u32
         };
 
@@ -276,14 +272,10 @@ impl UsageManager {
         let days_in_month = if now.month() == 12 {
             31
         } else {
-            let next_month = chrono::NaiveDate::from_ymd_opt(
-                now.year() as i32,
-                now.month() + 1,
-                1,
-            )
-            .unwrap_or_else(|| chrono::NaiveDate::from_ymd_opt(now.year() as i32 + 1, 1, 1).unwrap());
+            let next_month = chrono::NaiveDate::from_ymd_opt(now.year(), now.month() + 1, 1)
+                .unwrap_or_else(|| chrono::NaiveDate::from_ymd_opt(now.year() + 1, 1, 1).unwrap());
             let current_month =
-                chrono::NaiveDate::from_ymd_opt(now.year() as i32, now.month(), 1).unwrap();
+                chrono::NaiveDate::from_ymd_opt(now.year(), now.month(), 1).unwrap();
             (next_month - current_month).num_days() as u32
         };
 
