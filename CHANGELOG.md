@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.2](https://github.com/bizzkoot/copilot-tracker/compare/v1.4.1...v1.4.2) (2026-02-04)
+
+
+### Bug Fixes
+
+* **electron:** prevent auth window flash and reload loop on Windows ([891e29a](https://github.com/bizzkoot/copilot-tracker/commit/891e29acef7304d45fc3740c263401c42ed047d0))
+* **tauri:** resolve Windows and Linux build failures ([d4fd9b2](https://github.com/bizzkoot/copilot-tracker/commit/d4fd9b22afa604433137470a9ddac979e953cf00))
+
 ## [1.4.1](https://github.com/bizzkoot/copilot-tracker/compare/v1.4.0...v1.4.1) (2026-02-04)
 
 ### Bug Fixes
