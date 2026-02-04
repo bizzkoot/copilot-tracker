@@ -99,8 +99,12 @@ let usagePrediction: UsagePrediction | null = null;
 let trayBaseIconBuffer: Buffer | null = null;
 let availableUpdate: { version: string; url: string } | null = null;
 let isInitialStartup = true; // Track if this is the first app launch
-let currentAuthState: "authenticated" | "unauthenticated" | "checking" | "unknown" = "unknown";
-let failedAuthAttempts = 0;
+let currentAuthState:
+  | "authenticated"
+  | "unauthenticated"
+  | "checking"
+  | "unknown" = "unknown";
+const failedAuthAttempts = 0;
 const MAX_FAILED_AUTH_ATTEMPTS = 3;
 
 // ============= Utility Functions =============
@@ -1703,14 +1707,18 @@ app.whenReady().then(async () => {
   // Apply a short delay on Windows too — some systems start apps before network is fully ready
   // which can trigger aggressive retries and cause rate-limiting on external APIs.
   if (isInitialStartup && process.platform === "win32") {
-    devLog.log("[App] Windows initial startup detected, waiting briefly for network...");
+    devLog.log(
+      "[App] Windows initial startup detected, waiting briefly for network...",
+    );
     await delay(1500); // Wait 1.5 seconds
   }
 
   // Apply a short delay on Linux as extra hardening for systems that restore apps quickly
   // This reduces chance of early network failures leading to repeated unauthenticated polling
   if (isInitialStartup && process.platform === "linux") {
-    devLog.log("[App] Linux initial startup detected, waiting briefly for network...");
+    devLog.log(
+      "[App] Linux initial startup detected, waiting briefly for network...",
+    );
     await delay(1500); // Wait 1.5 seconds
   }
 

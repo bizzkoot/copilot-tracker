@@ -22,12 +22,13 @@ png = "0.17"
 url = "2.5"
 
 # Plugins
-tauri-plugin-store = "2"
-tauri-plugin-http = { version = "2", features = ["cookies", "json"] }
-tauri-plugin-notification = "2"
-tauri-plugin-shell = "2"
-tauri-plugin-opener = "2"
-tauri-plugin-autostart = "2"
+# Pin to minor version (2.x) to allow compatible updates but prevent breaking changes
+tauri-plugin-store = "2.0"
+tauri-plugin-http = { version = "2.0", features = ["cookies", "json"] }
+tauri-plugin-notification = "2.0"
+tauri-plugin-shell = "2.0"
+tauri-plugin-opener = "2.0"
+tauri-plugin-autostart = "2.0"
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }

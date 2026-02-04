@@ -445,7 +445,9 @@ fn reset_settings(app: AppHandle) -> Result<copilot_tracker::AppSettings, String
     let _ = app.emit("auth:state-changed", "unauthenticated");
     log::info!("Emitted auth:state-changed = unauthenticated");
     
-    // Small delay to ensure auth event is processed before settings event
+    // Small delay to ensure auth event is processed before settings event.
+    // Note: This is a synchronous command, so blocking sleep is acceptable here.
+    // The Tauri runtime handles this in a thread pool.
     std::thread::sleep(std::time::Duration::from_millis(50));
     
     // Then emit settings changed
@@ -498,10 +500,17 @@ fn set_launch_at_login(
     let store = app.state::<StoreManager>();
     store.set_launch_at_login(enabled)?;
 
-    #[cfg(target_os = "macos")]
-    {
-        use tauri_plugin_autostart::ManagerExt;
-        let _ = app.autolaunch().enable();
+    // Enable/disable autostart using the plugin
+    use tauri_plugin_autostart::ManagerExt;
+    let result = if enabled {
+        app.autolaunch().enable()
+    } else {
+        app.autolaunch().disable()
+    };
+
+    if let Err(e) = result {
+        log::error!("Failed to set launch at login: {}", e);
+        return Err(format!("Failed to set launch at login: {}", e));
     }
 
     let update_state = app.state::<UpdateState>();
@@ -753,7 +762,7 @@ fn main() {
             let tray = TrayIconBuilder::new()
                 .icon(initial_image)
                 .menu(&menu)
-                .icon_as_template(true)
+                // .icon_as_template(true) // Disabled to prevent system overlays on tray icon
                 .tooltip("Copilot Tracker")
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "quit" => {

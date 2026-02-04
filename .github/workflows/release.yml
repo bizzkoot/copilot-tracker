@@ -25,7 +25,10 @@ jobs:
           release-type: node
           config-file: .release-please.json
 
-  build-release:
+  # ============================================================================
+  # Electron Builds (Existing)
+  # ============================================================================
+  build-electron:
     needs: release-please
     if: ${{ needs.release-please.outputs.release_created }}
     runs-on: ${{ matrix.os }}
@@ -73,7 +76,7 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Build & Release
+      - name: Build & Release (Electron)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -88,7 +91,7 @@ jobs:
           fi
         shell: bash
 
-      - name: Upload Release Assets
+      - name: Upload Electron Release Assets
         uses: softprops/action-gh-release@v1
         if: ${{ needs.release-please.outputs.release_created }}
         with:
@@ -97,4 +100,122 @@ jobs:
             dist/*.exe
             dist/*.AppImage
             dist/*.deb
+          tag_name: ${{ needs.release-please.outputs.tag_name }}
+
+  # ============================================================================
+  # Tauri Builds (New - Unsigned)
+  # ============================================================================
+  build-tauri:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+        include:
+          - os: macos-latest
+            target: universal-apple-darwin
+            rust_target: aarch64-apple-darwin,x86_64-apple-darwin
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            rust_target: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            rust_target: x86_64-pc-windows-msvc
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install Rust (macOS/Linux)
+        if: runner.os != 'Windows'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Install Rust (Windows)
+        if: runner.os == 'Windows'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Install System Dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Install System Dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          # Note: Rust targets are already installed by dtolnay/rust-toolchain action above
+          # No need to manually add targets here
+
+      - name: Install Frontend Dependencies
+        run: npm ci
+
+      - name: Build Frontend for Tauri
+        run: npm run build
+
+      - name: Build Tauri App (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          # Build universal macOS binary (Apple Silicon + Intel)
+          npm run tauri:build:mac
+        env:
+          TAURI_BUNDLE_SKIP_SIGNING: "true"
+
+      - name: Build Tauri App (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          npm run tauri:build:linux
+        env:
+          TAURI_BUNDLE_SKIP_SIGNING: "true"
+
+      - name: Build Tauri App (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          npm run tauri:build:win
+        env:
+          TAURI_BUNDLE_SKIP_SIGNING: "true"
+
+      - name: Upload Tauri Release Assets (macOS)
+        if: runner.os == 'macOS'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz
+          tag_name: ${{ needs.release-please.outputs.tag_name }}
+
+      - name: Upload Tauri Release Assets (Linux)
+        if: runner.os == 'Linux'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb
+            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
+          tag_name: ${{ needs.release-please.outputs.tag_name }}
+
+      - name: Upload Tauri Release Assets (Windows)
+        if: runner.os == 'Windows'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
           tag_name: ${{ needs.release-please.outputs.tag_name }}
