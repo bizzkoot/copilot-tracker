@@ -22,6 +22,7 @@
 ### 1) Authentication via webview (highest risk)
 
 **Why risky**
+
 - Electron uses `WebContentsView.executeJavaScript` and persistent sessions via partitions
 - Tauri uses native webview engines with different behavior per OS
 - JS injection limitations and timing issues can break data extraction
@@ -42,17 +43,20 @@
    - Not viable due to lack of official GitHub OAuth for these endpoints
 
 **Reliability notes**
+
 - Tauri supports `on_navigation` for webview navigation allowlisting
 - `initialization_script` runs before page scripts; guard by `window.location.origin`
 - Add a watchdog loop to re-run extraction if DOM is not ready
 - Add a fallback path that shows the auth window if extraction fails
 
 **Recommended approach**
+
 - Hidden auth webview + visible fallback
 - Event-based data exfiltration from injected script
 - Allowlist GitHub domains via `on_navigation`
 
 **Open questions**
+
 - Exact DOM selectors and stability across GitHub UI changes
 - Best signal for "page ready" in each platform webview
 
@@ -61,6 +65,7 @@
 ### 2) Session persistence and shared cookies
 
 **Why risky**
+
 - Electron uses `partition: persist:github` to guarantee persistence
 - Tauri uses native webviews with different profile handling
 
@@ -74,10 +79,12 @@
    - Create and reuse a single WebView2 environment to share cookies
 
 **Reliability notes**
+
 - Windows is the most sensitive due to WebView2 runtime profile handling
 - macOS WKWebView default data store is persistent
 
 **Recommended approach**
+
 - Use default persistent storage everywhere
 - On Windows, explicitly reuse the WebView2 environment across windows
 
@@ -86,6 +93,7 @@
 ### 3) JavaScript injection and CSP
 
 **Why risky**
+
 - External pages often use strict CSP
 - Injection timing can fail on native webviews
 
@@ -99,6 +107,7 @@
    - More likely to be blocked or too late
 
 **Reliability notes**
+
 - Keep injected script minimal and defensive
 - Use retries, timeouts, and structured errors
 
@@ -107,26 +116,29 @@
 ### 4) Dynamic tray icon rendering
 
 **Why risky**
+
 - Current Electron version uses node-canvas for text drawing
 - Tauri has no built-in canvas; tiny-skia has no text layout or font rasterization
 - Glyph metrics and baseline positioning must be handled manually for tiny icons
 
 **Options matrix**
 
-| Option | What it does | Text quality | Complexity | Dependency risk | Notes |
-| --- | --- | --- | --- | --- | --- |
-| fontdue | Rasterize digits from TTF at startup, cache glyph alpha in a digit atlas | Good for digits; no shaping | Low | Low | Fast, small API; matches current approach.
-| ab_glyph | Rasterize digits from TTF via ab_glyph and cache | Good for digits; no shaping | Low | Low | Lightweight; similar flow to fontdue.
-| rusttype | Rasterize digits from TTF via rusttype and cache | OK for digits; no shaping | Medium | Medium | Heavier and less active; not ideal unless already used.
-| Digit atlas (pre-rendered) | Pre-bake 0-9 bitmap glyphs at build time; blit only | Stable, predictable | Lowest | Lowest | Best runtime stability; requires build-time asset generation.
-| Text-less tray icon | Remove text rendering and show a static icon | N/A | Lowest | Lowest | Lowest risk but degrades UX.
+| Option                     | What it does                                                             | Text quality                | Complexity | Dependency risk | Notes                                                         |
+| -------------------------- | ------------------------------------------------------------------------ | --------------------------- | ---------- | --------------- | ------------------------------------------------------------- |
+| fontdue                    | Rasterize digits from TTF at startup, cache glyph alpha in a digit atlas | Good for digits; no shaping | Low        | Low             | Fast, small API; matches current approach.                    |
+| ab_glyph                   | Rasterize digits from TTF via ab_glyph and cache                         | Good for digits; no shaping | Low        | Low             | Lightweight; similar flow to fontdue.                         |
+| rusttype                   | Rasterize digits from TTF via rusttype and cache                         | OK for digits; no shaping   | Medium     | Medium          | Heavier and less active; not ideal unless already used.       |
+| Digit atlas (pre-rendered) | Pre-bake 0-9 bitmap glyphs at build time; blit only                      | Stable, predictable         | Lowest     | Lowest          | Best runtime stability; requires build-time asset generation. |
+| Text-less tray icon        | Remove text rendering and show a static icon                             | N/A                         | Lowest     | Lowest          | Lowest risk but degrades UX.                                  |
 
 **Reliability notes**
+
 - tiny-skia provides direct RGBA pixel buffers for tray icons
 - No shaping or kerning; plan for digits-only and manual baselines
 - Tauri tray APIs support setting an icon dynamically
 
 **Recommended approach**
+
 - Use tiny-skia for composition and a cached digit atlas generated at startup (fontdue or ab_glyph)
 - If you want maximum runtime determinism, switch to a pre-rendered digit atlas asset
 - Keep sizes aligned with the Electron-equivalent tray size; limit to 2-3 digits
@@ -136,6 +148,7 @@
 ### 5) Webview inconsistencies across OS
 
 **Why risky**
+
 - WKWebView, WebView2, and WebKitGTK do not behave identically
 
 **Options**
@@ -148,6 +161,7 @@
    - Tailor selectors and timing if inconsistencies are found
 
 **Reliability notes**
+
 - Use `on_navigation` allowlist to reduce unexpected redirects
 - Use conservative navigation guards and error reporting
 
@@ -156,6 +170,7 @@
 ### 6) WebView2 runtime on Windows
 
 **Why risky**
+
 - WebView2 runtime may be missing or outdated on some systems
 
 **Options**
@@ -170,6 +185,7 @@
    - Largest size; strict version control, higher maintenance
 
 **Recommended approach**
+
 - Detect and install Evergreen runtime via bootstrapper on first launch or during install
 
 ---
@@ -177,6 +193,7 @@
 ### 7) Auto-updater reliability
 
 **Why risky**
+
 - Migration changes packaging and signing requirements
 
 **Options**

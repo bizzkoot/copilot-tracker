@@ -1,3 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// This file uses 'any' types intentionally for:
+// - Window object extensions (window as any)
+// - Type conversions between Rust and JavaScript types
+// - Mock API that matches the interface with simplified types
+// These are necessary for the Tauri/Electron bridge functionality
+
 import {
   Settings,
   UsageFetchResult,

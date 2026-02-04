@@ -104,8 +104,6 @@ let currentAuthState:
   | "unauthenticated"
   | "checking"
   | "unknown" = "unknown";
-const failedAuthAttempts = 0;
-const MAX_FAILED_AUTH_ATTEMPTS = 3;
 
 // ============= Utility Functions =============
 
@@ -1083,12 +1081,13 @@ function showLoginWindow(): void {
   // Creating a child of a hidden window on Windows can result in the auth window being hidden
   // (user clicks "Re-Login" and nothing appears). When the main window is hidden, make the
   // auth window top-level and bring it to the front.
-  const authWindowOptions: any = {
+  const authWindowOptions: Electron.BrowserWindowConstructorOptions = {
     width: 900,
     height: 700,
     show: false,
     autoHideMenuBar: true,
     title: "GitHub Login",
+    skipTaskbar: false,
     webPreferences: {
       partition: "persist:github",
       nodeIntegration: false,
@@ -1101,14 +1100,50 @@ function showLoginWindow(): void {
   } else {
     // Ensure it appears on top when there is no visible parent
     authWindowOptions.alwaysOnTop = true;
+    // Use proper level for better cross-platform behavior
+    (
+      authWindowOptions as Electron.BrowserWindowConstructorOptions & {
+        alwaysOnTop?: boolean | string;
+      }
+    ).alwaysOnTop = "floating" as unknown as boolean;
   }
 
   authWindow = new BrowserWindow(authWindowOptions);
 
+  // Track if window has been shown
+  let hasShown = false;
+
   authWindow.on("ready-to-show", () => {
-    authWindow?.show();
-    authWindow?.focus();
+    if (!hasShown && authWindow && !authWindow.isDestroyed()) {
+      hasShown = true;
+      authWindow.show();
+      // Force focus on Windows - sometimes show() isn't enough
+      if (process.platform === "win32") {
+        authWindow.setAlwaysOnTop(true, "screen-saver");
+        authWindow.focus();
+        authWindow.setAlwaysOnTop(false);
+      } else {
+        authWindow.focus();
+      }
+    }
   });
+
+  // Fallback: show window after timeout if ready-to-show hasn't fired
+  // This handles cases where the event doesn't fire on Windows
+  setTimeout(() => {
+    if (!hasShown && authWindow && !authWindow.isDestroyed()) {
+      devLog.log("[Auth] Fallback: showing auth window after timeout");
+      hasShown = true;
+      authWindow.show();
+      if (process.platform === "win32") {
+        authWindow.setAlwaysOnTop(true, "screen-saver");
+        authWindow.focus();
+        authWindow.setAlwaysOnTop(false);
+      } else {
+        authWindow.focus();
+      }
+    }
+  }, 500); // 500ms should be enough for window to be ready, but not too long to feel delayed
 
   authWindow.on("closed", () => {
     devLog.log("[Auth] AuthWindow closed");
@@ -1573,9 +1608,11 @@ function stopRefreshTimer(): void {
 function setupIpcHandlers(): void {
   // Auth
   ipcMain.on("auth:login", () => {
+    devLog.log("[Auth] auth:login IPC received");
     try {
       // Destroy existing authWindow if any
       if (authWindow && !authWindow.isDestroyed()) {
+        devLog.log("[Auth] Destroying existing authWindow");
         authWindow.destroy();
         authWindow = null;
       }
@@ -1585,9 +1622,10 @@ function setupIpcHandlers(): void {
 
       // Show login window - this will handle the auth flow
       // and reload billing in authView after successful login
+      devLog.log("[Auth] Calling showLoginWindow");
       showLoginWindow();
     } catch (error) {
-      devLog.error("Auth login failed:", error);
+      devLog.error("[Auth] Auth login failed:", error);
       mainWindow?.webContents.send("auth:state-changed", "error");
     }
   });

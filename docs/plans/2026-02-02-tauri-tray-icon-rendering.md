@@ -13,10 +13,12 @@
 ### Task 1: Ensure Tauri v2 scaffold exists
 
 **Files:**
+
 - Create (if missing): src-tauri/
 - Modify (if missing): src-tauri/src/main.rs
 
 **Step 1: Verify scaffold exists**
+
 - Check for src-tauri/src/main.rs.
 - If missing, create a Tauri v2 scaffold per migration docs.
 
@@ -26,6 +28,7 @@ Expected: success (or fix build issues before proceeding)
 
 **Step 3: Commit (if scaffold created)**
 Run:
+
 ```bash
 git add src-tauri
 git commit -m "chore: add tauri v2 scaffold"
@@ -34,11 +37,13 @@ git commit -m "chore: add tauri v2 scaffold"
 ### Task 2: Add rendering dependencies and font asset
 
 **Files:**
+
 - Modify: src-tauri/Cargo.toml
 - Create: src-tauri/assets/fonts/Inter-Regular.ttf (or chosen font)
 
 **Step 1: Add dependencies**
 Add to Cargo.toml:
+
 ```toml
 [dependencies]
 fontdue = "0.9"
@@ -46,10 +51,12 @@ tiny-skia = "0.11"
 ```
 
 **Step 2: Add font asset**
+
 - Add a font file to src-tauri/assets/fonts/.
 - Decide whether to load via include_bytes! or from filesystem at runtime.
 
 **Step 3: Commit**
+
 ```bash
 git add src-tauri/Cargo.toml src-tauri/assets/fonts
  git commit -m "chore: add tray icon rendering dependencies"
@@ -58,9 +65,11 @@ git add src-tauri/Cargo.toml src-tauri/assets/fonts
 ### Task 3: Implement DigitAtlas and renderer module
 
 **Files:**
+
 - Create: src-tauri/src/tray_icon_renderer.rs
 
 **Step 1: Write a failing test**
+
 ```rust
 #[test]
 fn render_text_produces_non_empty_pixels() {
@@ -78,6 +87,7 @@ Run: cargo test tray_icon_renderer
 Expected: FAIL (TrayIconRenderer not defined)
 
 **Step 3: Implement minimal renderer**
+
 ```rust
 pub struct TrayIconRenderer {
     font: fontdue::Font,
@@ -102,6 +112,7 @@ Run: cargo test tray_icon_renderer
 Expected: PASS
 
 **Step 5: Commit**
+
 ```bash
 git add src-tauri/src/tray_icon_renderer.rs
  git commit -m "feat: add tray icon text renderer"
@@ -110,21 +121,26 @@ git add src-tauri/src/tray_icon_renderer.rs
 ### Task 4: Wire renderer into tray update path
 
 **Files:**
+
 - Modify: src-tauri/src/main.rs
 
 **Step 1: Add renderer initialization**
+
 - Load the font at startup.
 - Create a TrayIconRenderer instance.
 
 **Step 2: Update tray icon when usage changes**
+
 - Format the numeric string.
 - Call renderer.render_text and tray.set_icon(Some(image)).
 - On macOS call tray.set_icon_as_template(true).
 
 **Step 3: Add a debounce for updates**
+
 - Limit updates to at most 1 per second, especially on Linux.
 
 **Step 4: Commit**
+
 ```bash
 git add src-tauri/src/main.rs
  git commit -m "feat: update tray icon dynamically"
@@ -133,13 +149,16 @@ git add src-tauri/src/main.rs
 ### Task 5: Manual verification
 
 **Files:**
+
 - Modify: docs/PROGRESS.md (optional)
 
 **Step 1: Run the app and observe tray icon**
+
 - Check that numbers render clearly at 16-20 px.
 - Verify macOS template behavior and Linux update stability.
 
 **Step 2: Commit**
+
 ```bash
 git add docs/PROGRESS.md
  git commit -m "docs: note tray icon rendering verification"

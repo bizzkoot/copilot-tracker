@@ -28,6 +28,7 @@ All core features have been implemented, but there are Rust compilation errors t
 ### Files Created/Modified
 
 **Created**:
+
 - [`src-tauri/src/auth.rs`](src-tauri/src/auth.rs) - Authentication & WebView management (196 lines)
 - [`src-tauri/src/store.rs`](src-tauri/src/store.rs) - Settings & persistence (203 lines)
 - [`src-tauri/src/usage.rs`](src-tauri/src/usage.rs) - Usage fetching & predictions (178 lines)
@@ -35,6 +36,7 @@ All core features have been implemented, but there are Rust compilation errors t
 - [`docs/tauri-migration/IMPLEMENTATION.md`](docs/tauri-migration/IMPLEMENTATION.md) - This document
 
 **Modified**:
+
 - [`src-tauri/src/main.rs`](src-tauri/src/main.rs) - Complete rewrite with all IPC commands (370 lines)
 - [`src-tauri/src/lib.rs`](src-tauri/src/lib.rs) - Module exports
 - [`src-tauri/Cargo.toml`](src-tauri/Cargo.toml) - Dependencies added
@@ -43,12 +45,14 @@ All core features have been implemented, but there are Rust compilation errors t
 ### Remaining Work
 
 **Immediate** (to compile):
+
 1. Fix remaining type annotation errors in main.rs
 2. Resolve import path issues between lib.rs and main.rs
 3. Fix Tauri 2.0 API compatibility issues
 4. Test compilation on macOS
 
 **Next Steps** (after compilation):
+
 1. Test authentication flow on macOS
 2. Test on Windows and Linux
 3. Implement actual JS extraction (currently mocked)
@@ -92,6 +96,7 @@ src-tauri/
 **Status**: 🟡 Implemented but extraction logic is mocked
 
 **Key Features**:
+
 - ✅ Hidden webview creation for data extraction
 - ✅ Visible auth window for GitHub login
 - ✅ Window lifecycle management (show, hide, close)
@@ -100,17 +105,20 @@ src-tauri/
 
 **Why Mocked?**
 Tauri 2.0's `eval()` method doesn't return values like Electron's `executeJavaScript()`. Real extraction requires:
+
 1. Custom protocol for JS→Rust communication
 2. Event-based communication via `window.__TAURI__`
 3. HTML scraping from Rust
 4. URL-based IPC
 
 **Current Behavior**:
+
 - `extract_customer_id()` returns `Some(12345678)` (mock)
 - `extract_usage_data()` returns mock UsageData with zeros
 - `perform_extraction()` executes successfully with mock data
 
 **Production Implementation Required**:
+
 ```rust
 // Need to implement one of these approaches:
 // 1. Inject script that emits events:
@@ -133,6 +141,7 @@ let html = window.url()?;
 **Status**: ✅ Fully implemented
 
 **Key Features**:
+
 - ✅ Real-time usage fetching (with mock auth data)
 - ✅ Usage caching in store
 - ✅ End-of-month predictions (linear extrapolation)
@@ -141,6 +150,7 @@ let html = window.url()?;
 - ✅ Event emission to frontend (`usage:updated`)
 
 **Formulas Used**:
+
 ```rust
 // Daily average
 daily_average = used / current_day
@@ -159,17 +169,20 @@ days_until = ceil((limit - used) / daily_average)
 **Status**: ✅ Fully implemented
 
 **Key Features**:
+
 - ✅ JSON file persistence in app data directory
 - ✅ Thread-safe access via Mutex
 - ✅ Type-safe settings structure
 - ✅ Automatic file I/O with error handling
 
 **Storage Locations**:
+
 - macOS: `~/Library/Application Support/com.copilottracker.app/settings.json`
 - Windows: `%APPDATA%/com.copilottracker.app\settings.json`
 - Linux: `~/.config/com.copilottracker.app/settings.json`
 
 **Settings Structure**:
+
 ```rust
 AppSettings {
     customer_id: Option<u64>,
@@ -190,6 +203,7 @@ AppSettings {
 **Status**: ✅ Fully implemented and tested
 
 **Key Features**:
+
 - ✅ Font-based digit rendering using fontdue
 - ✅ Pixel buffer composition using tiny-skia
 - ✅ Grayscale text output for tray icons
@@ -197,11 +211,13 @@ AppSettings {
 - ✅ Unit tests included
 
 **Technical Approach**:
+
 - Rasterizes digits 0-9 at startup into a digit atlas
 - Blits digits into 16x16 RGBA pixel buffer
 - Converts to Tauri Image for tray icon display
 
 **Dependencies**:
+
 - `fontdue` - Font rasterization (no shaping, digits only)
 - `tiny-skia` - Pixel buffer composition
 
@@ -212,6 +228,7 @@ AppSettings {
 **Status**: ✅ Fully implemented (needs endpoint configuration)
 
 **Key Features**:
+
 - ✅ Automatic update checks every 24 hours
 - ✅ Manual check command
 - ✅ Download progress reporting
@@ -219,15 +236,18 @@ AppSettings {
 - ✅ Update installation with restart prompt
 
 **Commands**:
+
 - `check_for_updates()` - Returns UpdateStatus with version info
 - `install_update()` - Downloads and installs update
 
 **Events Emitted**:
+
 - `update:available` - New version available
 - `update:download-progress` - Progress 0-100
 - `update:ready` - Downloaded, ready to install
 
 **Configuration Required**:
+
 ```json
 "updater": {
   "pubkey": "YOUR_PUBLIC_KEY_HERE",
@@ -246,6 +266,7 @@ AppSettings {
 **Status**: 🔴 Has compilation errors
 
 **Implemented Features**:
+
 - ✅ 15 IPC commands across 5 categories
 - ✅ Plugin initialization (6 plugins)
 - ✅ Tray icon setup with dynamic updates
@@ -254,6 +275,7 @@ AppSettings {
 - ✅ State management for all modules
 
 **IPC Commands**:
+
 ```
 Authentication (4):
   - show_auth_window
@@ -281,6 +303,7 @@ Updater (2):
 ```
 
 **Compilation Errors** (as of 2026-02-02):
+
 1. Type annotations needed for closure parameter in `.setup()`
 2. Import path resolution between lib.rs and main.rs
 3. Tauri 2.0 API compatibility issues with state management
@@ -294,6 +317,7 @@ Updater (2):
 **Implementation**: [`auth.rs`](src-tauri/src/auth.rs)
 
 **Key Features**:
+
 - ✅ Hidden webview for data extraction
 - ✅ Visible auth window for GitHub login
 - ✅ JavaScript injection for customer ID extraction
@@ -302,12 +326,14 @@ Updater (2):
 - ✅ Session persistence (native webview behavior)
 
 **IPC Commands**:
+
 - `show_auth_window()` - Show GitHub login window
 - `perform_auth_extraction()` - Extract customer ID and usage
 - `check_auth_status()` - Check if authenticated
 - `logout()` - Clear authentication
 
 **Reliability Measures**:
+
 - 3 different methods for customer ID extraction
 - 2 different methods for usage data extraction
 - 2-second page load delay before extraction
@@ -320,6 +346,7 @@ Updater (2):
 **Implementation**: [`usage.rs`](src-tauri/src/usage.rs)
 
 **Key Features**:
+
 - ✅ Real-time usage fetching
 - ✅ Usage cache in store
 - ✅ End-of-month predictions
@@ -328,12 +355,14 @@ Updater (2):
 - ✅ Event emission to frontend
 
 **IPC Commands**:
+
 - `fetch_usage()` - Fetch latest usage from GitHub
 - `get_cached_usage()` - Get cached usage data
 - `predict_eom_usage()` - Predict end-of-month usage
 - `days_until_limit()` - Calculate days until limit reached
 
 **Background Tasks**:
+
 - Automatic polling every 15 minutes when authenticated
 - Updates store and emits events
 
@@ -344,6 +373,7 @@ Updater (2):
 **Implementation**: [`store.rs`](src-tauri/src/store.rs)
 
 **Key Features**:
+
 - ✅ JSON-based persistence
 - ✅ Customer ID storage
 - ✅ Usage data caching
@@ -351,11 +381,13 @@ Updater (2):
 - ✅ Timestamp tracking
 
 **IPC Commands**:
+
 - `get_settings()` - Get all settings
 - `update_settings()` - Update settings
 - `set_launch_at_login()` - Toggle launch at login
 
 **Storage Location**:
+
 - macOS: `~/Library/Application Support/com.copilottracker.app/`
 - Windows: `%APPDATA%/com.copilottracker.app/`
 - Linux: `~/.config/com.copilottracker.app/`
@@ -367,15 +399,18 @@ Updater (2):
 **Implementation**: [`tray_icon_renderer.rs`](src-tauri/src/tray_icon_renderer.rs)
 
 **Key Features**:
+
 - ✅ Font-based digit rendering (Arimo font)
 - ✅ Dynamic usage number display
 - ✅ Real-time updates via events
 - ✅ Cross-platform compatibility
 
 **IPC Commands**:
+
 - `update_tray_usage(used, limit)` - Update tray icon
 
 **Technical Approach**:
+
 - `fontdue` for font rasterization
 - `tiny-skia` for pixel buffer composition
 - 16x16 pixel tray icons with grayscale text
@@ -387,16 +422,19 @@ Updater (2):
 **Implementation**: [`updater.rs`](src-tauri/src/updater.rs)
 
 **Key Features**:
+
 - ✅ Automatic update checks (24-hour intervals)
 - ✅ Progress reporting during download
 - ✅ Event emission for update notifications
 - ✅ Separate beta/stable channels
 
 **IPC Commands**:
+
 - `check_for_updates()` - Manually check for updates
 - `install_update()` - Download and install update
 
 **Background Tasks**:
+
 - Automatic checks every 24 hours
 - Emits `update:available` event on new version
 
@@ -406,42 +444,42 @@ Updater (2):
 
 ### Authentication Commands
 
-| Command | Parameters | Returns | Description |
-|---------|-----------|---------|-------------|
-| `show_auth_window` | - | `bool` | Show GitHub login window |
-| `perform_auth_extraction` | - | `ExtractionResult` | Extract customer ID & usage |
-| `check_auth_status` | - | `AuthState` | Check if authenticated |
-| `logout` | - | `()` | Clear authentication |
+| Command                   | Parameters | Returns            | Description                 |
+| ------------------------- | ---------- | ------------------ | --------------------------- |
+| `show_auth_window`        | -          | `bool`             | Show GitHub login window    |
+| `perform_auth_extraction` | -          | `ExtractionResult` | Extract customer ID & usage |
+| `check_auth_status`       | -          | `AuthState`        | Check if authenticated      |
+| `logout`                  | -          | `()`               | Clear authentication        |
 
 ### Usage Commands
 
-| Command | Parameters | Returns | Description |
-|---------|-----------|---------|-------------|
-| `fetch_usage` | - | `UsageSummary` | Fetch latest usage |
-| `get_cached_usage` | - | `UsageSummary` | Get cached usage |
-| `predict_eom_usage` | - | `u32` | Predict end-of-month usage |
-| `days_until_limit` | - | `Option<i64>` | Days until limit reached |
+| Command             | Parameters | Returns        | Description                |
+| ------------------- | ---------- | -------------- | -------------------------- |
+| `fetch_usage`       | -          | `UsageSummary` | Fetch latest usage         |
+| `get_cached_usage`  | -          | `UsageSummary` | Get cached usage           |
+| `predict_eom_usage` | -          | `u32`          | Predict end-of-month usage |
+| `days_until_limit`  | -          | `Option<i64>`  | Days until limit reached   |
 
 ### Settings Commands
 
-| Command | Parameters | Returns | Description |
-|---------|-----------|---------|-------------|
-| `get_settings` | - | `AppSettings` | Get all settings |
-| `update_settings` | `AppSettings` | `()` | Update settings |
-| `set_launch_at_login` | `bool` | `()` | Toggle launch at login |
+| Command               | Parameters    | Returns       | Description            |
+| --------------------- | ------------- | ------------- | ---------------------- |
+| `get_settings`        | -             | `AppSettings` | Get all settings       |
+| `update_settings`     | `AppSettings` | `()`          | Update settings        |
+| `set_launch_at_login` | `bool`        | `()`          | Toggle launch at login |
 
 ### Tray Commands
 
-| Command | Parameters | Returns | Description |
-|---------|-----------|---------|-------------|
-| `update_tray_usage` | `used: u32, limit: u32` | `()` | Update tray icon |
+| Command             | Parameters              | Returns | Description      |
+| ------------------- | ----------------------- | ------- | ---------------- |
+| `update_tray_usage` | `used: u32, limit: u32` | `()`    | Update tray icon |
 
 ### Updater Commands
 
-| Command | Parameters | Returns | Description |
-|---------|-----------|---------|-------------|
-| `check_for_updates` | - | `UpdateStatus` | Check for updates |
-| `install_update` | - | `()` | Install update |
+| Command             | Parameters | Returns        | Description       |
+| ------------------- | ---------- | -------------- | ----------------- |
+| `check_for_updates` | -          | `UpdateStatus` | Check for updates |
+| `install_update`    | -          | `()`           | Install update    |
 
 ---
 
@@ -487,6 +525,7 @@ cargo test --package tray-icon-renderer --lib
 The implementation is complete but does not compile. Here are the known issues:
 
 ### Error 1: Type Annotations in Closure
+
 ```
 error[E0282]: type annotations needed for `&_`
    --> src/main.rs:268:22
@@ -496,11 +535,13 @@ error[E0282]: type annotations needed for `&_`
 ```
 
 **Solution Needed**: Specify type explicitly:
+
 ```rust
 .setup(move |app: &tauri::AppHandle| {
 ```
 
 ### Error 2: Import Path Resolution
+
 ```
 error[E0432]: unresolved import `crate::auth`
 error[E0432]: unresolved import `crate::store`
@@ -511,10 +552,12 @@ error[E0432]: unresolved import `crate::updater`
 **Issue**: Modules are in lib.rs but main.rs can't access them via `crate::`
 
 **Solution**: Either:
+
 1. Use direct imports: `use copilot_tracker::AuthManager`
 2. Or declare modules in both lib.rs and main.rs
 
 ### Error 3: Tray Icon Import
+
 ```
 error[E0432]: unresolved import `tray_icon_renderer`
 ```
@@ -522,6 +565,7 @@ error[E0432]: unresolved import `tray_icon_renderer`
 **Solution**: Already exported from lib.rs as `TrayIconRenderer`
 
 ### Fixed Already ✅
+
 - ✅ URL parsing for WebviewUrl
 - ✅ Chrono Datelike trait import
 - ✅ Type casting in usage calculations
@@ -547,11 +591,13 @@ error[E0432]: unresolved import `tray_icon_renderer`
 **Issue**: JavaScript injection in native webviews is less reliable than Electron
 
 **Mitigation**:
+
 - 3 different extraction methods with fallbacks
 - 2-second delay before extraction
 - Hidden webview with visible fallback option
 
 **Testing Required**:
+
 - ✅ macOS (WKWebView)
 - ⏳ Windows (WebView2)
 - ⏳ Linux (WebKitGTK)
@@ -578,39 +624,41 @@ error[E0432]: unresolved import `tray_icon_renderer`
 
 ### Feature Parity Matrix
 
-| Feature | Electron | Tauri | Status |
-|---------|----------|-------|--------|
-| Authentication | `WebContentsView` | `WebviewWindow` | ✅ Implemented |
-| JavaScript Injection | `executeJavaScript` | `eval()` | ✅ Implemented |
-| Session Persistence | `partition` | Native storage | ⚠️ Needs testing |
-| Tray Icon | `nativeImage` | `TrayIconBuilder` | ✅ Implemented |
-| Settings | `electron-store` | `tauri-plugin-store` | ✅ Implemented |
-| Auto-updater | `electron-updater` | `tauri-plugin-updater` | ✅ Implemented |
-| IPC | `ipcMain/ipcRenderer` | Commands/Events | ✅ Implemented |
-| Notifications | `Notification` | `tauri-plugin-notification` | ✅ Implemented |
+| Feature              | Electron              | Tauri                       | Status           |
+| -------------------- | --------------------- | --------------------------- | ---------------- |
+| Authentication       | `WebContentsView`     | `WebviewWindow`             | ✅ Implemented   |
+| JavaScript Injection | `executeJavaScript`   | `eval()`                    | ✅ Implemented   |
+| Session Persistence  | `partition`           | Native storage              | ⚠️ Needs testing |
+| Tray Icon            | `nativeImage`         | `TrayIconBuilder`           | ✅ Implemented   |
+| Settings             | `electron-store`      | `tauri-plugin-store`        | ✅ Implemented   |
+| Auto-updater         | `electron-updater`    | `tauri-plugin-updater`      | ✅ Implemented   |
+| IPC                  | `ipcMain/ipcRenderer` | Commands/Events             | ✅ Implemented   |
+| Notifications        | `Notification`        | `tauri-plugin-notification` | ✅ Implemented   |
 
 ### IPC Channel Mapping
 
-| Electron Channel | Tauri Command |
-|-----------------|---------------|
-| `auth:login` | `show_auth_window` |
-| `auth:extract` | `perform_auth_extraction` |
-| `usage:fetch` | `fetch_usage` |
-| `settings:get` | `get_settings` |
-| `settings:set` | `update_settings` |
-| `tray:update` | `update_tray_usage` |
-| `updater:check` | `check_for_updates` |
+| Electron Channel | Tauri Command             |
+| ---------------- | ------------------------- |
+| `auth:login`     | `show_auth_window`        |
+| `auth:extract`   | `perform_auth_extraction` |
+| `usage:fetch`    | `fetch_usage`             |
+| `settings:get`   | `get_settings`            |
+| `settings:set`   | `update_settings`         |
+| `tray:update`    | `update_tray_usage`       |
+| `updater:check`  | `check_for_updates`       |
 
 ---
 
 ## 📊 Bundle Size Comparison
 
 ### Current Electron Build
+
 - macOS: ~120 MB
 - Windows: ~110 MB
 - Linux: ~115 MB
 
 ### Expected Tauri Build
+
 - macOS: ~15-20 MB (85% reduction)
 - Windows: ~18-25 MB (80% reduction)
 - Linux: ~16-22 MB (82% reduction)
@@ -710,12 +758,15 @@ journalctl -f
 ### Common Issues
 
 **Issue**: Auth extraction fails
+
 - **Solution**: Check if GitHub is accessible, verify selectors, increase timeout
 
 **Issue**: Tray icon not updating
+
 - **Solution**: Verify event emission, check tray icon renderer
 
 **Issue**: Settings not persisting
+
 - **Solution**: Check file permissions, verify app data directory
 
 ---
@@ -733,6 +784,7 @@ journalctl -f
 ## 📞 Support
 
 For issues or questions:
+
 1. Check the [Research Notes](../RESEARCH.md) for known limitations
 2. Review the [PRD](../PRD-TAURI-MIGRATION.md) for design decisions
 3. Create an issue on GitHub
@@ -787,6 +839,7 @@ For issues or questions:
 As of session end, the code does not compile due to:
 
 1. **Type Annotation Error**:
+
    ```
    error[E0282]: type annotations needed for `&_`
    --> src/main.rs:268:22
@@ -796,6 +849,7 @@ As of session end, the code does not compile due to:
    ```
 
 2. **Import Path Errors** (4 modules):
+
    ```
    error[E0432]: unresolved import `crate::auth`
    error[E0432]: unresolved import `crate::store`
@@ -833,18 +887,21 @@ As of session end, the code does not compile due to:
 ### Next Session Goals
 
 **Priority 1** (Get it compiling):
+
 1. Fix type annotation in `.setup()` closure
 2. Reorganize imports (use `copilot_tracker::` prefix)
 3. Fix remaining type mismatches
 4. Build successfully on macOS
 
 **Priority 2** (Make it work):
+
 1. Implement real JS extraction (replace mocks)
 2. Test authentication flow
 3. Test session persistence
 4. Verify tray icon rendering
 
 **Priority 3** (Polish):
+
 1. Cross-platform testing
 2. Set up update server
 3. Create production builds
@@ -872,6 +929,7 @@ Created:
 No commits were made in this session. All changes are staged/modified.
 
 **Recommended Commit Message**:
+
 ```
 feat(tauri): Implement core Tauri migration
 
@@ -898,29 +956,34 @@ Status: Implementation complete, compilation pending
 Before declaring "It Works!", verify:
 
 **Compilation**:
+
 - [ ] `cargo check` passes without errors
 - [ ] `cargo build` produces binary
 - [ ] `npm run tauri build` creates app bundle
 
 **Basic Functionality**:
+
 - [ ] App launches without crashing
 - [ ] Tray icon appears with number
 - [ ] Main window opens
 - [ ] Settings are persisted
 
 **Authentication**:
+
 - [ ] Auth window opens
 - [ ] Can log in to GitHub
 - [ ] Customer ID is extracted (not mocked)
 - [ ] Session persists across restarts
 
 **Usage Tracking**:
+
 - [ ] Usage data is fetched
 - [ ] Tray icon updates with usage
 - [ ] Predictions are calculated
 - [ ] Background polling works
 
 **Updates**:
+
 - [ ] Update check works
 - [ ] Update can be downloaded
 - [ ] Update installation succeeds
@@ -937,16 +1000,16 @@ Before declaring "It Works!", verify:
 
 ## 📊 Final Status
 
-| Metric | Status |
-|--------|--------|
-| **Code Written** | ✅ 1,244 lines |
-| **Modules Created** | ✅ 5 modules |
-| **IPC Commands** | ✅ 15 commands |
-| **Dependencies** | ✅ All configured |
-| **Documentation** | ✅ Complete |
-| **Compilation** | 🔴 Errors exist |
-| **Testing** | ⏸️ Blocked by compilation |
-| **Production** | ❌ Not ready |
+| Metric              | Status                    |
+| ------------------- | ------------------------- |
+| **Code Written**    | ✅ 1,244 lines            |
+| **Modules Created** | ✅ 5 modules              |
+| **IPC Commands**    | ✅ 15 commands            |
+| **Dependencies**    | ✅ All configured         |
+| **Documentation**   | ✅ Complete               |
+| **Compilation**     | 🔴 Errors exist           |
+| **Testing**         | ⏸️ Blocked by compilation |
+| **Production**      | ❌ Not ready              |
 
 **Confidence Level**: 85% (architecture is sound, details need fixing)
 
