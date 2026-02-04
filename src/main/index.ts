@@ -99,6 +99,7 @@ let usagePrediction: UsagePrediction | null = null;
 let trayBaseIconBuffer: Buffer | null = null;
 let availableUpdate: { version: string; url: string } | null = null;
 let isInitialStartup = true; // Track if this is the first app launch
+let authWindowClosedByAuth = false; // Track if auth window was closed due to successful auth detection
 let currentAuthState:
   | "authenticated"
   | "unauthenticated"
@@ -1149,14 +1150,21 @@ function showLoginWindow(): void {
     devLog.log("[Auth] AuthWindow closed");
     authWindow = null;
 
-    // Always reload billing URL in authView when authWindow closes
-    // This handles both cases: user logged in OR user was already authenticated
-    if (authView) {
+    // Only reload billing URL if window was closed by user (not by successful auth detection)
+    // This prevents unnecessary reloads and potential loops when user is already authenticated
+    if (!authWindowClosedByAuth && authView) {
       devLog.log(
-        "[Auth] Reloading billing URL in authView after authWindow closed",
+        "[Auth] Reloading billing URL in authView after manual window close",
       );
       authView.webContents.loadURL(config.githubBillingUrl);
+    } else if (authWindowClosedByAuth) {
+      devLog.log(
+        "[Auth] Skipping billing URL reload - window was closed due to successful auth detection",
+      );
     }
+
+    // Reset the flag for next time
+    authWindowClosedByAuth = false;
   });
 
   authWindow.loadURL(config.githubLoginUrl);
@@ -1164,6 +1172,7 @@ function showLoginWindow(): void {
 
 function hideLoginWindow(): void {
   if (!authWindow) return;
+  authWindowClosedByAuth = true; // Mark that window is closing due to successful auth detection
   authWindow.close();
   authWindow = null;
 }
@@ -1610,6 +1619,22 @@ function setupIpcHandlers(): void {
   ipcMain.on("auth:login", () => {
     devLog.log("[Auth] auth:login IPC received");
     try {
+      // Check if already authenticated - if so, just refresh and show notification
+      if (currentAuthState === "authenticated") {
+        devLog.log(
+          "[Auth] Already authenticated - refreshing data and showing notification",
+        );
+
+        // Send a notification to the renderer that user is already logged in
+        mainWindow?.webContents.send("auth:already-authenticated");
+
+        // Refresh usage data
+        fetchUsageData();
+
+        // Don't open auth window
+        return;
+      }
+
       // Destroy existing authWindow if any
       if (authWindow && !authWindow.isDestroyed()) {
         devLog.log("[Auth] Destroying existing authWindow");

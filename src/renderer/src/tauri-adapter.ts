@@ -249,6 +249,19 @@ export function initTauriAdapter() {
           unlisten?.();
         };
       },
+      onAlreadyAuthenticated: (callback: () => void) => {
+        let unlisten: (() => void) | null = null;
+        listen("auth:already-authenticated", () => callback())
+          .then((stop) => {
+            unlisten = stop;
+          })
+          .catch((err) =>
+            console.error("Failed to listen auth:already-authenticated", err),
+          );
+        return () => {
+          unlisten?.();
+        };
+      },
 
       // Usage
       fetchUsage: async () => {
@@ -492,6 +505,7 @@ function setupMockAdapter() {
       return () => {};
     },
     onSessionExpired: () => () => {},
+    onAlreadyAuthenticated: () => () => {},
     fetchUsage: async () => {},
     refreshUsage: async () => {},
     onUsageData: () => () => {},

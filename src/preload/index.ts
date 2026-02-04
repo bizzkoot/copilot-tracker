@@ -20,6 +20,12 @@ const electronAPI = {
     ipcRenderer.on("auth:session-expired", listener);
     return () => ipcRenderer.removeListener("auth:session-expired", listener);
   },
+  onAlreadyAuthenticated: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on("auth:already-authenticated", listener);
+    return () =>
+      ipcRenderer.removeListener("auth:already-authenticated", listener);
+  },
 
   // Usage
   fetchUsage: (): void => ipcRenderer.send("usage:fetch"),

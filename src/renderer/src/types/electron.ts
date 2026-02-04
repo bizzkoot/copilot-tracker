@@ -87,6 +87,7 @@ export interface ElectronAPI {
   checkAuth: () => void;
   onAuthStateChanged: (callback: (state: AuthState) => void) => () => void;
   onSessionExpired: (callback: () => void) => () => void;
+  onAlreadyAuthenticated: (callback: () => void) => () => void;
 
   // Usage
   fetchUsage: () => void;

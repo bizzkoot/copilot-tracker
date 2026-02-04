@@ -56,12 +56,22 @@ export function useAuth() {
       setAuthState("unauthenticated");
     });
 
+    // Listen for already authenticated notification
+    const unsubAlreadyAuthenticated = window.electron.onAlreadyAuthenticated?.(
+      () => {
+        console.log("[Auth] Already authenticated - data will be refreshed");
+        // User will see the data refresh in the dashboard
+        // No need for a toast since the state is already showing as authenticated
+      },
+    );
+
     // Initial auth check
     checkAuth();
 
     return () => {
       unsubAuthState?.();
       unsubSessionExpired?.();
+      unsubAlreadyAuthenticated?.();
     };
   }, [setAuthState, checkAuth]);
 
