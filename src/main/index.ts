@@ -106,6 +106,13 @@ let currentAuthState:
   | "checking"
   | "unknown" = "unknown";
 
+// ============= Constants =============
+
+const AUTH_WINDOW_READY_TIMEOUT_MS = 500; // Fallback timeout for auth window ready-to-show
+const CUSTOMER_ID_RETRY_BASE_DELAY_MS = 1500; // Base delay for customer ID retry (exponential backoff)
+const CUSTOMER_ID_MAX_RETRIES = 3; // Maximum retries for getting customer ID
+const PAGE_LOAD_WAIT_MS = 2000; // Wait time for page to load after navigation
+
 // ============= Utility Functions =============
 
 /**
@@ -934,8 +941,7 @@ function destroyAuthView(): void {
   if (!authView) return;
 
   // Remove all event listeners
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const wc = (authView as any).webContents as Electron.WebContents;
+  const wc = authView.webContents;
   if (wc && !wc.isDestroyed()) {
     wc.removeAllListeners("did-navigate");
     wc.removeAllListeners("will-redirect");
@@ -1144,7 +1150,7 @@ function showLoginWindow(): void {
         authWindow.focus();
       }
     }
-  }, 500); // 500ms should be enough for window to be ready, but not too long to feel delayed
+  }, AUTH_WINDOW_READY_TIMEOUT_MS);
 
   authWindow.on("closed", () => {
     devLog.log("[Auth] AuthWindow closed");
@@ -1295,14 +1301,12 @@ async function getCustomerId(): Promise<number | null> {
   if (!authView) return null;
   if (customerId) return customerId;
 
-  const maxRetries = 3;
-  const baseDelayMs = 1500; // 1.5 seconds base delay
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+  for (let attempt = 0; attempt <= CUSTOMER_ID_MAX_RETRIES; attempt++) {
     if (attempt > 0) {
-      const delayMs = baseDelayMs * Math.pow(2, attempt - 1); // 1.5s, 3s, 6s
+      const delayMs =
+        CUSTOMER_ID_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1); // 1.5s, 3s, 6s
       devLog.log(
-        `[Auth] Retry ${attempt}/${maxRetries} - waiting ${delayMs}ms before retry`,
+        `[Auth] Retry ${attempt}/${CUSTOMER_ID_MAX_RETRIES} - waiting ${delayMs}ms before retry`,
       );
       await delay(delayMs);
 
@@ -1311,12 +1315,12 @@ async function getCustomerId(): Promise<number | null> {
         devLog.log("[Auth] Reloading billing page for retry");
         authView.webContents.loadURL(config.githubBillingUrl);
         // Wait for page to load
-        await delay(2000);
+        await delay(PAGE_LOAD_WAIT_MS);
       }
     }
 
     devLog.log(
-      `[Auth] Attempt ${attempt + 1}/${maxRetries + 1} to get customer ID`,
+      `[Auth] Attempt ${attempt + 1}/${CUSTOMER_ID_MAX_RETRIES + 1} to get customer ID`,
     );
     const id = await attemptGetCustomerId();
     if (id) {

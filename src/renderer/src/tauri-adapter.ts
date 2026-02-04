@@ -23,14 +23,21 @@ interface RustUsageSummary {
   timestamp: number;
 }
 
-// Rust AppSettings (full struct)
-interface RustAppSettings extends Settings {
+// Rust AppSettings (full struct with different field names than Settings)
+interface RustAppSettings {
+  refreshInterval: number;
+  predictionPeriod: number;
+  launchAtLogin: boolean;
+  startMinimized: boolean;
+  theme: string;
   customerId?: number;
   usageLimit: number;
   lastUsage: number;
   lastFetchTimestamp: number;
   isAuthenticated: boolean;
   updateChannel: string;
+  showNotifications: boolean;
+  notificationThresholds: number[];
 }
 
 // Rust AuthState result
@@ -314,16 +321,16 @@ export function initTauriAdapter() {
         try {
           const rustSettings = await invoke<RustAppSettings>("get_settings");
           return {
-            refreshInterval: rustSettings.refreshInterval,
-            predictionPeriod: rustSettings.predictionPeriod as any,
+            refreshInterval:
+              rustSettings.refreshInterval as Settings["refreshInterval"],
+            predictionPeriod:
+              rustSettings.predictionPeriod as Settings["predictionPeriod"],
             launchAtLogin: rustSettings.launchAtLogin,
             startMinimized: rustSettings.startMinimized,
-            theme: rustSettings.theme as any,
+            theme: rustSettings.theme as Settings["theme"],
             notifications: {
-              enabled: (rustSettings as any).showNotifications,
-              thresholds: (rustSettings as any).notificationThresholds || [
-                75, 90, 100,
-              ],
+              enabled: rustSettings.showNotifications,
+              thresholds: rustSettings.notificationThresholds || [75, 90, 100],
             },
           };
         } catch (e) {
@@ -337,8 +344,8 @@ export function initTauriAdapter() {
           const current = await invoke<RustAppSettings>("get_settings");
 
           // 2. Merge updates
-          let showNotifications = (current as any).showNotifications;
-          let notificationThresholds = (current as any).notificationThresholds;
+          let showNotifications = current.showNotifications;
+          let notificationThresholds = current.notificationThresholds;
 
           if (newSettings.notifications) {
             if (newSettings.notifications.enabled !== undefined) {
@@ -349,9 +356,15 @@ export function initTauriAdapter() {
             }
           }
 
-          const merged = {
-            ...current,
-            ...newSettings,
+          const merged: Partial<RustAppSettings> = {
+            refreshInterval:
+              newSettings.refreshInterval ?? current.refreshInterval,
+            predictionPeriod:
+              newSettings.predictionPeriod ?? current.predictionPeriod,
+            launchAtLogin: newSettings.launchAtLogin ?? current.launchAtLogin,
+            startMinimized:
+              newSettings.startMinimized ?? current.startMinimized,
+            theme: newSettings.theme ?? current.theme,
             showNotifications,
             notificationThresholds,
           };
@@ -369,14 +382,16 @@ export function initTauriAdapter() {
         console.log("[TauriAdapter] Backend reset complete");
 
         const settings: Settings = {
-          refreshInterval: rustSettings.refreshInterval,
-          predictionPeriod: rustSettings.predictionPeriod as any,
+          refreshInterval:
+            rustSettings.refreshInterval as Settings["refreshInterval"],
+          predictionPeriod:
+            rustSettings.predictionPeriod as Settings["predictionPeriod"],
           launchAtLogin: rustSettings.launchAtLogin,
           startMinimized: rustSettings.startMinimized,
-          theme: rustSettings.theme as any,
+          theme: rustSettings.theme as Settings["theme"],
           notifications: {
-            enabled: (rustSettings as any).showNotifications,
-            thresholds: (rustSettings as any).notificationThresholds,
+            enabled: rustSettings.showNotifications,
+            thresholds: rustSettings.notificationThresholds,
           },
         };
         notifySettingsListeners(settings);
@@ -403,17 +418,19 @@ export function initTauriAdapter() {
         listen<RustAppSettings>("settings:changed", (event) => {
           const rustSettings = event.payload;
           const settings: Settings = {
-            refreshInterval: rustSettings.refreshInterval,
-            predictionPeriod: rustSettings.predictionPeriod as any,
+            refreshInterval:
+              rustSettings.refreshInterval as Settings["refreshInterval"],
+            predictionPeriod:
+              rustSettings.predictionPeriod as Settings["predictionPeriod"],
             launchAtLogin: rustSettings.launchAtLogin,
             startMinimized: rustSettings.startMinimized,
-            theme: rustSettings.theme as any,
+            theme: rustSettings.theme as Settings["theme"],
             notifications: {
-              enabled: (rustSettings as any).showNotifications,
-              thresholds: (rustSettings as any).notificationThresholds,
+              enabled: rustSettings.showNotifications,
+              thresholds: rustSettings.notificationThresholds,
             },
           };
-          notifySettingsListeners(settings);
+          callback(settings);
         })
           .then((stop) => {
             unlisten = stop;
