@@ -2,12 +2,11 @@
 
 ## [1.4.1](https://github.com/bizzkoot/copilot-tracker/compare/v1.4.0...v1.4.1) (2026-02-04)
 
-
 ### Bug Fixes
 
-* add bundle metadata for Windows Tauri build ([611d318](https://github.com/bizzkoot/copilot-tracker/commit/611d318c74e2a137d3ed4daa01f89db0b5a3f71d))
-* **electron:** resolve Windows auth window and clean code - release ([fe102ab](https://github.com/bizzkoot/copilot-tracker/commit/fe102abef3939ffc179c0a259d3c53628d8dbe18))
-* remove icon array from tauri.conf.json to allow auto-detection of platform icons ([9f80fe6](https://github.com/bizzkoot/copilot-tracker/commit/9f80fe6db080ea60cefa811998773c8950ea22a0))
+- add bundle metadata for Windows Tauri build ([611d318](https://github.com/bizzkoot/copilot-tracker/commit/611d318c74e2a137d3ed4daa01f89db0b5a3f71d))
+- **electron:** resolve Windows auth window and clean code - release ([fe102ab](https://github.com/bizzkoot/copilot-tracker/commit/fe102abef3939ffc179c0a259d3c53628d8dbe18))
+- remove icon array from tauri.conf.json to allow auto-detection of platform icons ([9f80fe6](https://github.com/bizzkoot/copilot-tracker/commit/9f80fe6db080ea60cefa811998773c8950ea22a0))
 
 ## [1.4.0](https://github.com/bizzkoot/copilot-tracker/compare/v1.3.1...v1.4.0) (2026-02-04)
 

@@ -46,13 +46,7 @@ struct UpdateState {
     latest: Mutex<Option<UpdateInfo>>,
 }
 
-fn update_tray_icon(state: &TrayState, used: u32, limit: u32) -> Result<(), String> {
-    let percentage = if limit > 0 {
-        (used as f32 / limit as f32) * 100.0
-    } else {
-        0.0
-    };
-
+fn update_tray_icon(state: &TrayState, used: u32, _limit: u32) -> Result<(), String> {
     // Load base icon (embedded at compile time, 16x16)
     let icon_data = include_bytes!("../assets/tray/trayTemplate16.png");
 
@@ -62,7 +56,7 @@ fn update_tray_icon(state: &TrayState, used: u32, limit: u32) -> Result<(), Stri
     let mut icon_buffer = vec![0u8; reader.output_buffer_size()];
     let info = reader.next_frame(&mut icon_buffer).map_err(|e| format!("PNG frame error: {}", e))?;
 
-    // Create [icon][number][circle] layout
+    // Create [icon][number] layout
     let image = state
         .renderer
         .render_with_icon(
@@ -70,7 +64,6 @@ fn update_tray_icon(state: &TrayState, used: u32, limit: u32) -> Result<(), Stri
             &icon_buffer,
             info.width,
             info.height,
-            percentage,
         )
         .into_tauri_image();
 
@@ -750,7 +743,7 @@ fn main() {
                 if let Ok(mut reader) = decoder.read_info() {
                     let mut icon_buffer = vec![0u8; reader.output_buffer_size()];
                     if let Ok(info) = reader.next_frame(&mut icon_buffer) {
-                        renderer.render_with_icon("1", &icon_buffer, info.width, info.height, 0.0).into_tauri_image()
+                        renderer.render_with_icon("1", &icon_buffer, info.width, info.height).into_tauri_image()
                     } else {
                         renderer.render_text("1", 16).into_tauri_image()
                     }

@@ -165,7 +165,6 @@ impl TrayIconRenderer {
         icon_rgba: &[u8],
         icon_width: u32,
         icon_height: u32,
-        _percentage: f32, // Unused but kept for API compatibility
     ) -> TrayImage {
         // Canvas: icon (16px) + text (no circle)
         let icon_size: u32 = 16;
