@@ -32,7 +32,6 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": ["icons/icon.png"],
     "category": "Productivity",
     "shortDescription": "Track GitHub Copilot usage",
     "longDescription": "Monitor your GitHub Copilot usage with system tray integration and usage predictions.",
