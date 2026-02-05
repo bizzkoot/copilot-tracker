@@ -26,7 +26,7 @@ jobs:
           config-file: .release-please.json
 
   # ============================================================================
-  # Electron Builds (Existing)
+  # Electron Builds (macOS only - Windows/Linux disabled due to build issues)
   # ============================================================================
   build-electron:
     needs: release-please
@@ -35,7 +35,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
+        # Only build Electron for macOS - Windows/Linux builds are broken
+        os: [macos-latest]
+        # Disabled: ubuntu-latest, windows-latest
 
     steps:
       - name: Check out Git repository
@@ -98,9 +100,6 @@ jobs:
         with:
           files: |
             dist/*.dmg
-            dist/*.exe
-            dist/*.AppImage
-            dist/*.deb
           tag_name: ${{ needs.release-please.outputs.tag_name }}
 
   # ============================================================================

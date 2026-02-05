@@ -572,6 +572,7 @@ impl AuthManager {
 
     /// Create a hidden webview for data extraction
     /// Uses an off-screen visible window to avoid macOS throttling
+    /// On Windows, uses a tiny transparent window since off-screen positioning may not work
     pub fn create_hidden_webview(
         &mut self,
         app: &AppHandle,
@@ -579,16 +580,30 @@ impl AuthManager {
         let url = Url::parse(GITHUB_BILLING_URL)
             .map_err(|e| format!("Failed to parse URL: {}", e))?;
 
-        let window = WebviewWindowBuilder::new(
+        let builder = WebviewWindowBuilder::new(
             app,
             "hidden-auth",
             WebviewUrl::External(url),
         )
         .title("Hidden Auth")
-        .inner_size(10.0, 10.0)
-        .position(-100.0, -100.0) // Off-screen to avoid being visible
-        .visible(true) // Must be visible to avoid throttling, but off-screen
-        .skip_taskbar(true)
+        .skip_taskbar(true);
+
+        // Platform-specific configuration
+        #[cfg(target_os = "windows")]
+        let builder = builder
+            .inner_size(1.0, 1.0)
+            .position(0.0, 0.0)
+            .transparent(true)
+            .decorations(false)
+            .visible(true);
+
+        #[cfg(not(target_os = "windows"))]
+        let builder = builder
+            .inner_size(10.0, 10.0)
+            .position(-100.0, -100.0)
+            .visible(true);
+
+        let window = builder
         .initialization_script(r#"
             (function() {
               console.log('[HiddenAuth] Script initialized');

@@ -1,7 +1,8 @@
 use tiny_skia::Pixmap;
 
-/// Scale factor for Retina displays (2x for crisp rendering)
-const SCALE_FACTOR: u32 = 2;
+/// Default scale factor for Retina displays (2x for crisp rendering)
+/// Can be overridden for Windows high DPI scenarios
+const DEFAULT_SCALE_FACTOR: u32 = 2;
 
 #[derive(Clone, Debug)]
 pub struct TrayImage {
@@ -27,10 +28,19 @@ impl TrayImage {
 pub struct TrayIconRenderer {
     font: fontdue::Font,
     font_px: f32,
+    scale_factor: u32,
 }
 
 impl TrayIconRenderer {
     pub fn from_font_bytes(font_bytes: &[u8], font_px: f32) -> Result<Self, String> {
+        Self::from_font_bytes_with_scale(font_bytes, font_px, DEFAULT_SCALE_FACTOR)
+    }
+
+    pub fn from_font_bytes_with_scale(
+        font_bytes: &[u8],
+        font_px: f32,
+        scale_factor: u32,
+    ) -> Result<Self, String> {
         // Enable font hinting for sharper edges at small sizes
         let settings = fontdue::FontSettings {
             scale: font_px,
@@ -38,14 +48,18 @@ impl TrayIconRenderer {
         };
         let font =
             fontdue::Font::from_bytes(font_bytes, settings).map_err(|err| err.to_string())?;
-        Ok(Self { font, font_px })
+        Ok(Self {
+            font,
+            font_px,
+            scale_factor,
+        })
     }
 
     pub fn render_text_only(&self, text: &str, size_px: u32) -> TrayImage {
-        // Render at 2x scale for Retina sharpness
-        let scaled_size = size_px * SCALE_FACTOR;
-        let scaled_font_px = self.font_px * SCALE_FACTOR as f32;
-        let padding_x = 4 * SCALE_FACTOR as i32; // Scaled padding
+        // Use configured scale factor (2x for Retina, varies for Windows)
+        let scaled_size = size_px * self.scale_factor;
+        let scaled_font_px = self.font_px * self.scale_factor as f32;
+        let padding_x = 4 * self.scale_factor as i32; // Scaled padding
 
         // First pass: Calculate total width at scaled size
         let mut total_width = 0;

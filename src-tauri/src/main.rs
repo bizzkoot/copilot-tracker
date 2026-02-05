@@ -1,3 +1,9 @@
+// Prevent console window on Windows in release builds
+#![cfg_attr(
+    all(not(debug_assertions), target_os = "windows"),
+    windows_subsystem = "windows"
+)]
+
 use serde::Deserialize;
 use std::sync::{Arc, Mutex};
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
@@ -22,6 +28,7 @@ use copilot_tracker::{
 struct TrayState {
     tray: Mutex<Option<tauri::tray::TrayIcon>>,
     renderer: Arc<TrayIconRenderer>,
+    last_menu_rebuild: Mutex<std::time::Instant>,
 }
 
 #[derive(Clone, Debug, Deserialize, serde::Serialize)]
@@ -265,11 +272,31 @@ fn build_tray_menu(
 }
 
 fn rebuild_tray_menu(app: &AppHandle, update: Option<&UpdateInfo>) -> Result<(), String> {
-    let menu = build_tray_menu(app, update)?;
     let tray_state = app.state::<TrayState>();
+    
+    // Debounce: Don't rebuild more than once per second
+    {
+        let mut last_rebuild = tray_state.last_menu_rebuild.lock().map_err(|_| "lock poisoned")?;
+        let now = std::time::Instant::now();
+        if now.duration_since(*last_rebuild).as_millis() < 1000 {
+            log::debug!("Skipping tray menu rebuild - too soon since last rebuild");
+            return Ok(());
+        }
+        *last_rebuild = now;
+    }
+    
+    let menu = build_tray_menu(app, update)?;
     let tray_guard = tray_state.tray.lock().map_err(|_| "tray lock poisoned".to_string())?;
     let tray = tray_guard.as_ref().ok_or("tray not initialized".to_string())?;
-    tray.set_menu(Some(menu)).map_err(|e| e.to_string())
+    
+    // Set new menu (Tauri automatically cleans up old menu)
+    tray.set_menu(Some(menu)).map_err(|e| e.to_string())?;
+    
+    // Force cleanup of old menu references by dropping the guard early
+    drop(tray_guard);
+    
+    log::debug!("Tray menu rebuilt successfully");
+    Ok(())
 }
 
 #[tauri::command]
@@ -657,17 +684,26 @@ fn main() {
     // Initialize logger
     env_logger::init();
 
-    // Create tray icon renderer with bolder appearance
-    // Using larger font size (14 instead of 12) for bolder look
-    let renderer = TrayIconRenderer::from_font_bytes(
+    // Create tray icon renderer with platform-specific DPI scaling
+    // macOS/Linux: Fixed 2x scale for Retina
+    // Windows: Will be adjusted based on system DPI later
+    #[cfg(target_os = "windows")]
+    let scale_factor = 2; // Default, will adjust after window creation
+    
+    #[cfg(not(target_os = "windows"))]
+    let scale_factor = 2;
+
+    let renderer = TrayIconRenderer::from_font_bytes_with_scale(
         include_bytes!("../assets/fonts/RobotoMono-Medium.ttf"),
         14.0,
+        scale_factor,
     )
     .expect("renderer from font bytes");
     let renderer = Arc::new(renderer);
     let tray_state = TrayState {
         tray: Mutex::new(None),
         renderer: Arc::clone(&renderer),
+        last_menu_rebuild: Mutex::new(std::time::Instant::now()),
     };
 
     // Create auth manager state
@@ -740,6 +776,15 @@ fn main() {
                     }
                     "open_dashboard" => {
                         if let Some(window) = app.get_webview_window("main") {
+                            // Restore to taskbar/dock before showing
+                            #[cfg(not(target_os = "macos"))]
+                            {
+                                let _ = window.set_skip_taskbar(false);
+                            }
+                            #[cfg(target_os = "macos")]
+                            {
+                                let _ = app.show();
+                            }
                             let _ = window.show();
                             let _ = window.set_focus();
                         }
@@ -776,6 +821,15 @@ fn main() {
                     }
                     "settings" => {
                         if let Some(window) = app.get_webview_window("main") {
+                            // Restore to taskbar/dock before showing
+                            #[cfg(not(target_os = "macos"))]
+                            {
+                                let _ = window.set_skip_taskbar(false);
+                            }
+                            #[cfg(target_os = "macos")]
+                            {
+                                let _ = app.show();
+                            }
                             let _ = window.show();
                             let _ = window.set_focus();
                         }
@@ -862,10 +916,17 @@ fn main() {
                     if let Some(window) = app_handle.get_webview_window("main") {
                         let _ = window.hide();
                         
-                        // On macOS, hide from dock when main window closes (but keep tray alive)
+                        // Hide app from dock/taskbar when window closes (cross-platform)
+                        // macOS: Hide from dock
                         #[cfg(target_os = "macos")]
                         {
                             let _ = app_handle.hide();
+                        }
+                        
+                        // Windows/Linux: Hide from taskbar using skipTaskbar
+                        #[cfg(not(target_os = "macos"))]
+                        {
+                            let _ = window.set_skip_taskbar(true);
                         }
                     }
                 }
@@ -937,6 +998,23 @@ fn main() {
             let update_state = app.state::<UpdateState>();
             let latest = update_state.latest.lock().unwrap();
             let _ = rebuild_tray_menu(app.handle(), latest.as_ref());
+
+            // Show first-run notification on Windows to help users find tray icon
+            #[cfg(target_os = "windows")]
+            {
+                let store = app.state::<StoreManager>();
+                let settings = store.get_settings();
+                // Check if this is first run (you may want to add a first_run flag to settings)
+                // For now, just show it if not authenticated yet
+                if !store.is_authenticated() {
+                    let _ = app
+                        .notification()
+                        .builder()
+                        .title("Copilot Tracker - Tray Icon")
+                        .body("Look for the Copilot Tracker icon in your system tray (bottom-right corner). Click the arrow to pin it for easy access.")
+                        .show();
+                }
+            }
 
             // Start background usage polling (every 15 minutes)
             // NOTE: Deferred until after startup - needs proper async runtime initialization
