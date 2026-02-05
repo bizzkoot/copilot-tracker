@@ -798,8 +798,10 @@ fn main() {
             // This prevents the dock icon from appearing briefly on launch
             #[cfg(target_os = "macos")]
             {
-                log::info!("Hiding app from dock on macOS startup");
-                let _ = app.hide();
+                log::info!("Setting activation policy to accessory on macOS startup");
+                // Use set_activation_policy to completely hide from dock
+                // NSApplicationActivationPolicyAccessory = 1 means no dock icon
+                let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             }
 
             // Initialize store manager
@@ -829,6 +831,8 @@ fn main() {
                             }
                             #[cfg(target_os = "macos")]
                             {
+                                // Set activation policy to regular to show in dock
+                                let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
                                 let _ = app.show();
                             }
                             let _ = window.show();
@@ -874,6 +878,8 @@ fn main() {
                             }
                             #[cfg(target_os = "macos")]
                             {
+                                // Set activation policy to regular to show in dock
+                                let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
                                 let _ = app.show();
                             }
                             let _ = window.show();
@@ -963,9 +969,10 @@ fn main() {
                         let _ = window.hide();
                         
                         // Hide app from dock/taskbar when window closes (cross-platform)
-                        // macOS: Hide from dock
+                        // macOS: Set activation policy to accessory to remove dock icon
                         #[cfg(target_os = "macos")]
                         {
+                            let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
                             let _ = app_handle.hide();
                         }
                         
@@ -1044,6 +1051,9 @@ fn main() {
             let update_state = app.state::<UpdateState>();
             let latest = update_state.latest.lock().unwrap();
             let _ = rebuild_tray_menu(app.handle(), latest.as_ref());
+            // Explicitly drop the lock before moving on
+            drop(latest);
+            drop(update_state);
 
             // Show first-run notification on Windows to help users find tray icon
             #[cfg(target_os = "windows")]
@@ -1073,6 +1083,24 @@ fn main() {
                     tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
                     let _ = check_for_updates(app_handle).await;
                 });
+            }
+
+            // Show window on startup if startMinimized is false
+            let store = app.state::<StoreManager>();
+            let settings = store.get_settings();
+                if !settings.start_minimized {
+                if let Some(window) = app.get_webview_window("main") {
+                    #[cfg(target_os = "macos")]
+                    {
+                        // Set activation policy to regular to show in dock
+                        let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
+                        let _ = app.show();
+                    }
+                    let _ = window.show();
+                    log::info!("Showing window on startup (startMinimized is false)");
+                }
+            } else {
+                log::info!("Window hidden on startup (startMinimized is true)");
             }
 
             log::info!("Copilot Tracker initialized successfully");
