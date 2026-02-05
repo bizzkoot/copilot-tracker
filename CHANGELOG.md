@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/bizzkoot/copilot-tracker/compare/v1.4.2...v1.5.0) (2026-02-05)
+
+
+### Features
+
+* **tray:** implement Retina-aware text rendering with improved sharpness ([7a2b30c](https://github.com/bizzkoot/copilot-tracker/commit/7a2b30c015cd66b9ec0b85b9a40e61f15197bfe5))
+
 ## [1.4.2](https://github.com/bizzkoot/copilot-tracker/compare/v1.4.1...v1.4.2) (2026-02-04)
 
 ### Bug Fixes
