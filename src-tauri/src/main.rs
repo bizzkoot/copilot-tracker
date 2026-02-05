@@ -660,7 +660,7 @@ fn main() {
     // Create tray icon renderer with bolder appearance
     // Using larger font size (14 instead of 12) for bolder look
     let renderer = TrayIconRenderer::from_font_bytes(
-        include_bytes!("../assets/fonts/RobotoMono-Bold.ttf"),
+        include_bytes!("../assets/fonts/RobotoMono-Medium.ttf"),
         14.0,
     )
     .expect("renderer from font bytes");
