@@ -1,7 +1,6 @@
 {
   "packages": {
-    "copilot-tracker": {
-      "component": "copilot-tracker",
+    ".": {
       "release-type": "node",
       "extra-files": [
         {
@@ -9,11 +8,8 @@
           "path": "src-tauri/tauri.conf.json",
           "jsonpath": "$.version"
         },
-        {
-          "type": "toml",
-          "path": "src-tauri/Cargo.toml",
-          "jsonpath": "package.version"
-        }
+        "src-tauri/Cargo.toml",
+        "src-tauri/Cargo.lock"
       ]
     }
   },
