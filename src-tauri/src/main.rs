@@ -46,25 +46,17 @@ struct UpdateState {
     latest: Mutex<Option<UpdateInfo>>,
 }
 
-fn update_tray_icon(state: &TrayState, used: u32, _limit: u32) -> Result<(), String> {
-    // Load base icon (embedded at compile time, 16x16)
-    let icon_data = include_bytes!("../assets/tray/trayTemplate16.png");
-
-    // Decode PNG
-    let decoder = png::Decoder::new(&icon_data[..]);
-    let mut reader = decoder.read_info().map_err(|e| format!("PNG decode error: {}", e))?;
-    let mut icon_buffer = vec![0u8; reader.output_buffer_size()];
-    let info = reader.next_frame(&mut icon_buffer).map_err(|e| format!("PNG frame error: {}", e))?;
-
-    // Create [icon][number] layout
+fn update_tray_icon(state: &TrayState, used: u32, limit: u32) -> Result<(), String> {
+    // Create [number] layout
+    let text = if limit > 0 {
+        format!("{}/{}", used, limit)
+    } else {
+        used.to_string()
+    };
+    
     let image = state
         .renderer
-        .render_with_icon(
-            &used.to_string(),
-            &icon_buffer,
-            info.width,
-            info.height,
-        )
+        .render_text_only(&text, 16)
         .into_tauri_image();
 
     let tray_guard = state.tray.lock().map_err(|_| "tray lock poisoned".to_string())?;
@@ -668,8 +660,8 @@ fn main() {
     // Create tray icon renderer with bolder appearance
     // Using larger font size (14 instead of 12) for bolder look
     let renderer = TrayIconRenderer::from_font_bytes(
-        include_bytes!("../assets/fonts/Arimo[wght].ttf"),
-        14.0, // Increased from 12.0 for bolder appearance
+        include_bytes!("../assets/fonts/RobotoMono-Bold.ttf"),
+        14.0,
     )
     .expect("renderer from font bytes");
     let renderer = Arc::new(renderer);
@@ -735,22 +727,7 @@ fn main() {
             // Create tray menu
             let menu = build_tray_menu(app.handle(), None)?;
 
-            // Load base icon for initial tray icon (embedded at compile time, 16x16)
-            let initial_icon_data = include_bytes!("../assets/tray/trayTemplate16.png");
-            
-            let initial_image = {
-                let decoder = png::Decoder::new(&initial_icon_data[..]);
-                if let Ok(mut reader) = decoder.read_info() {
-                    let mut icon_buffer = vec![0u8; reader.output_buffer_size()];
-                    if let Ok(info) = reader.next_frame(&mut icon_buffer) {
-                        renderer.render_with_icon("1", &icon_buffer, info.width, info.height).into_tauri_image()
-                    } else {
-                        renderer.render_text("1", 16).into_tauri_image()
-                    }
-                } else {
-                    renderer.render_text("1", 16).into_tauri_image()
-                }
-            };
+            let initial_image = renderer.render_text_only("1", 16).into_tauri_image();
 
             let tray = TrayIconBuilder::new()
                 .icon(initial_image)
