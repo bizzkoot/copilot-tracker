@@ -6,3 +6,4 @@
 export * from "./useTheme";
 export * from "./useUsage";
 export * from "./useAuth";
+export * from "./useSettingsSync";

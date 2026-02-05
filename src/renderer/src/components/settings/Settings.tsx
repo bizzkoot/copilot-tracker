@@ -49,7 +49,6 @@ export function Settings({ onClose }: SettingsProps) {
     setStartMinimized,
     setNotificationsEnabled,
     setNotificationThresholds,
-    updateSettings,
   } = useSettingsStore();
 
   const handleLaunchAtLoginToggle = async () => {
@@ -67,15 +66,6 @@ export function Settings({ onClose }: SettingsProps) {
     // Sync with main process
     await window.electron.setSettings({ startMinimized: newValue });
   };
-
-  // Listen for settings changes from main process (e.g., when changed via tray menu)
-  useEffect(() => {
-    const cleanup = window.electron.onSettingsChanged((settings) => {
-      // Sync local state with settings changed from other sources (tray menu)
-      updateSettings(settings);
-    });
-    return cleanup;
-  }, [updateSettings]);
 
   // Fetch app version
   useEffect(() => {

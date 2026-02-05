@@ -62,9 +62,27 @@ export function useUsage() {
     }
   }, []);
 
-  // Setup IPC listeners
+  // Setup IPC listeners and request cached data on mount
   useEffect(() => {
     if (typeof window.electron === "undefined") return;
+
+    // Request cached data immediately on mount
+    const loadCachedData = async () => {
+      try {
+        const cached = await window.electron.getCachedUsage();
+        if (cached && cached.success) {
+          console.log("[useUsage] Loaded cached data on mount:", cached);
+          setUsageData({
+            usage: cached.usage,
+            history: cached.history,
+            prediction: cached.prediction,
+          });
+        }
+      } catch (err) {
+        console.error("[useUsage] Failed to load cached data:", err);
+      }
+    };
+    loadCachedData();
 
     // Listen for usage data
     const unsubUsage = window.electron.onUsageData?.((data) => {

@@ -27,7 +27,7 @@
         "minHeight": 500,
         "resizable": true,
         "visible": true,
-        "skipTaskbar": false
+        "skipTaskbar": true
       }
     ]
   },

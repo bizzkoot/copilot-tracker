@@ -406,6 +406,43 @@ fn days_until_limit(
     UsageManager::days_until_limit(&app)
 }
 
+#[tauri::command]
+fn get_cached_usage_data(
+    app: AppHandle,
+) -> Result<Option<copilot_tracker::UsagePayload>, String> {
+    let store = app.state::<StoreManager>();
+    let (used, limit) = store.get_usage();
+    let is_authenticated = store.is_authenticated();
+    
+    if !is_authenticated {
+        return Ok(None);
+    }
+    
+    let remaining = limit.saturating_sub(used);
+    let percentage = if limit > 0 {
+        (used as f32 / limit as f32) * 100.0
+    } else {
+        0.0
+    };
+    
+    let summary = copilot_tracker::UsageSummary {
+        used,
+        limit,
+        remaining,
+        percentage,
+        timestamp: chrono::Utc::now().timestamp(),
+    };
+    
+    let history = UsageManager::get_cached_history(&app);
+    let prediction = UsageManager::predict_usage_from_history(&history, used, limit);
+    
+    Ok(Some(copilot_tracker::UsagePayload {
+        summary,
+        history,
+        prediction,
+    }))
+}
+
 // ============================================================================
 // IPC Commands - Settings
 // ============================================================================
@@ -739,6 +776,7 @@ fn main() {
             get_cached_usage,
             predict_eom_usage,
             days_until_limit,
+            get_cached_usage_data,
             // Settings commands
             get_settings,
             update_settings,
@@ -755,6 +793,14 @@ fn main() {
         // Setup application
         .setup(move |app| {
             log::info!("Initializing Copilot Tracker (Tauri)");
+
+            // Hide from dock on macOS immediately on startup (before window creation)
+            // This prevents the dock icon from appearing briefly on launch
+            #[cfg(target_os = "macos")]
+            {
+                log::info!("Hiding app from dock on macOS startup");
+                let _ = app.hide();
+            }
 
             // Initialize store manager
             let app_handle = app.handle();

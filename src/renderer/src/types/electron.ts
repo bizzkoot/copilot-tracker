@@ -92,6 +92,7 @@ export interface ElectronAPI {
   // Usage
   fetchUsage: () => void;
   refreshUsage: () => void;
+  getCachedUsage: () => Promise<UsageFetchResult | null>;
   onUsageData: (callback: (data: UsageFetchResult) => void) => () => void;
   onUsageLoading: (callback: (loading: boolean) => void) => () => void;
 

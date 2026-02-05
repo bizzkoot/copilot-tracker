@@ -297,6 +297,73 @@ export function initTauriAdapter() {
           });
         }
       },
+      getCachedUsage: async () => {
+        try {
+          const payload = await invoke<{
+            summary: RustUsageSummary;
+            history: Array<{
+              timestamp: number;
+              used: number;
+              limit: number;
+              billed_requests?: number;
+              gross_amount?: number;
+              billed_amount?: number;
+            }>;
+            prediction?: {
+              predicted_monthly_requests: number;
+              predicted_billed_amount: number;
+              confidence_level: string;
+              days_used_for_prediction: number;
+            };
+          } | null>("get_cached_usage_data");
+
+          if (!payload) {
+            return null;
+          }
+
+          const result: UsageFetchResult = {
+            success: true,
+            usage: {
+              netQuantity: payload.summary.used,
+              netBilledAmount: 0,
+              discountQuantity: payload.summary.used,
+              userPremiumRequestEntitlement: payload.summary.limit,
+              filteredUserPremiumRequestEntitlement: payload.summary.limit,
+            },
+            history: {
+              fetchedAt: new Date(payload.summary.timestamp * 1000),
+              days: payload.history.map((entry) => ({
+                date: new Date(entry.timestamp * 1000),
+                includedRequests:
+                  entry.used - (entry.billed_requests ?? 0) < 0
+                    ? 0
+                    : entry.used - (entry.billed_requests ?? 0),
+                billedRequests: entry.billed_requests ?? 0,
+                grossAmount: entry.gross_amount ?? 0,
+                billedAmount: entry.billed_amount ?? 0,
+              })),
+            },
+            prediction: payload.prediction
+              ? {
+                  predictedMonthlyRequests:
+                    payload.prediction.predicted_monthly_requests,
+                  predictedBilledAmount:
+                    payload.prediction.predicted_billed_amount,
+                  confidenceLevel: payload.prediction.confidence_level as
+                    | "low"
+                    | "medium"
+                    | "high",
+                  daysUsedForPrediction:
+                    payload.prediction.days_used_for_prediction,
+                }
+              : undefined,
+          };
+          return result;
+        } catch (err) {
+          console.error("getCachedUsage failed:", err);
+          return null;
+        }
+      },
       onUsageData: (callback: (data: UsageFetchResult) => void) => {
         usageListeners.push(callback);
         return () => {
@@ -525,6 +592,7 @@ function setupMockAdapter() {
     onAlreadyAuthenticated: () => () => {},
     fetchUsage: async () => {},
     refreshUsage: async () => {},
+    getCachedUsage: async () => null,
     onUsageData: () => () => {},
     onUsageLoading: () => () => {},
     getSettings: async () =>
