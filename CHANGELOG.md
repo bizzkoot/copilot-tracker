@@ -2,19 +2,17 @@
 
 ## [1.5.1](https://github.com/bizzkoot/copilot-tracker/compare/v1.5.0...v1.5.1) (2026-02-05)
 
-
 ### Bug Fixes
 
-* properly hide dock icon on macOS using set_activation_policy ([2d957d5](https://github.com/bizzkoot/copilot-tracker/commit/2d957d57b90a8786bc1ce1a24ca43968803efe10))
-* **release:** correct release-please configuration for Tauri version bumping ([6ab6731](https://github.com/bizzkoot/copilot-tracker/commit/6ab6731599b2aa0c5b5542d578cd223a995cb8a8))
-* resolve tray-dashboard sync, dock visibility, and startup data issues ([75262c0](https://github.com/bizzkoot/copilot-tracker/commit/75262c0af74bb5fe3cc34cd0def6b36e8dad586a))
+- properly hide dock icon on macOS using set_activation_policy ([2d957d5](https://github.com/bizzkoot/copilot-tracker/commit/2d957d57b90a8786bc1ce1a24ca43968803efe10))
+- **release:** correct release-please configuration for Tauri version bumping ([6ab6731](https://github.com/bizzkoot/copilot-tracker/commit/6ab6731599b2aa0c5b5542d578cd223a995cb8a8))
+- resolve tray-dashboard sync, dock visibility, and startup data issues ([75262c0](https://github.com/bizzkoot/copilot-tracker/commit/75262c0af74bb5fe3cc34cd0def6b36e8dad586a))
 
 ## [1.5.0](https://github.com/bizzkoot/copilot-tracker/compare/v1.4.2...v1.5.0) (2026-02-05)
 
-
 ### Features
 
-* **tray:** implement Retina-aware text rendering with improved sharpness ([7a2b30c](https://github.com/bizzkoot/copilot-tracker/commit/7a2b30c015cd66b9ec0b85b9a40e61f15197bfe5))
+- **tray:** implement Retina-aware text rendering with improved sharpness ([7a2b30c](https://github.com/bizzkoot/copilot-tracker/commit/7a2b30c015cd66b9ec0b85b9a40e61f15197bfe5))
 
 ## [1.4.2](https://github.com/bizzkoot/copilot-tracker/compare/v1.4.1...v1.4.2) (2026-02-04)
 

@@ -592,7 +592,7 @@ impl AuthManager {
         #[cfg(target_os = "windows")]
         let builder = builder
             .inner_size(1.0, 1.0)
-            .position(0.0, 0.0)
+            .position(-32000.0, -32000.0)
             .transparent(true)
             .decorations(false)
             .visible(true);

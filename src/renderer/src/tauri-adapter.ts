@@ -215,7 +215,7 @@ export function initTauriAdapter() {
     }
 
     const electronAPI: ElectronAPI = {
-      platform: "darwin", // Todo: use window.__TAURI__.os.platform() if available
+      platform: (window.__TAURI__ as any)?.os?.platform() || "darwin",
 
       // Auth
       login: () => invoke("show_auth_window"),
