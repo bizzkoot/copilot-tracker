@@ -8,11 +8,7 @@
           "path": "src-tauri/tauri.conf.json",
           "jsonpath": "$.version"
         },
-        {
-          "type": "generic",
-          "path": "src-tauri/Cargo.toml",
-          "glob": false
-        },
+        "src-tauri/Cargo.toml",
         "src-tauri/Cargo.lock"
       ]
     }
