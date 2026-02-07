@@ -32,6 +32,48 @@ struct TrayState {
     last_menu_rebuild: Mutex<std::time::Instant>,
 }
 
+// ============================================================================
+// Background Polling State
+// ============================================================================
+
+struct PollingState {
+    cancel_tx: Mutex<Option<tokio::sync::mpsc::Sender<()>>>,
+}
+
+impl PollingState {
+    fn new() -> Self {
+        Self {
+            cancel_tx: Mutex::new(None),
+        }
+    }
+
+    /// Start or restart background polling with new interval
+    fn restart_polling(&self, app: AppHandle, interval_seconds: u64) {
+        // Cancel existing polling task if any
+        if let Ok(mut guard) = self.cancel_tx.lock() {
+            if let Some(tx) = guard.take() {
+                let _ = tx.try_send(());
+                log::info!("[PollingState] Cancelled previous polling task");
+            }
+
+            // Start new polling task
+            let cancel_tx = UsageManager::start_polling(app, interval_seconds);
+            *guard = Some(cancel_tx);
+            log::info!("[PollingState] Started polling with interval: {}s", interval_seconds);
+        }
+    }
+
+    /// Stop background polling
+    fn stop_polling(&self) {
+        if let Ok(mut guard) = self.cancel_tx.lock() {
+            if let Some(tx) = guard.take() {
+                let _ = tx.try_send(());
+                log::info!("[PollingState] Stopped polling");
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, serde::Serialize)]
 struct UpdateCheckStatus {
     status: String,
@@ -622,6 +664,11 @@ async fn logout(app: AppHandle) -> Result<(), String> {
     let store = app.state::<StoreManager>();
     store.clear_auth()?;
     
+    // Stop background polling when user logs out
+    let polling_state = app.state::<PollingState>();
+    polling_state.stop_polling();
+    log::info!("[Logout] Background polling stopped");
+    
     // Emit event to frontend
     let _ = app.emit("auth:state-changed", "unauthenticated");
     
@@ -843,6 +890,7 @@ fn main() {
         .manage(tray_state)
         .manage(auth_manager_state)
         .manage(UpdateState::default())
+        .manage(PollingState::new())
         // Register plugins
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_http::init())
@@ -910,6 +958,10 @@ fn main() {
                 .tooltip("Copilot Tracker")
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "quit" => {
+                        // Stop background polling before app exit
+                        let polling_state = app.state::<PollingState>();
+                        polling_state.stop_polling();
+                        log::info!("[Shutdown] Background polling stopped, exiting app");
                         app.exit(0);
                     }
                     "open_dashboard" => {
@@ -1006,8 +1058,17 @@ fn main() {
                         if let Ok(value) = id.split(':').nth(1).unwrap_or("0").parse::<u32>() {
                             let store = app.state::<StoreManager>();
                             let mut settings = store.get_settings();
+                            let old_interval = settings.refresh_interval;
                             settings.refresh_interval = value;
                             let _ = update_settings(app.clone(), settings);
+                            
+                            // Restart background polling with new interval
+                            if old_interval != value {
+                                let polling_state = app.state::<PollingState>();
+                                let interval_seconds = value.max(10); // Minimum 10 seconds
+                                polling_state.restart_polling(app.clone(), interval_seconds as u64);
+                                log::info!("[Settings] Restarted polling with new interval: {}s (was: {}s)", interval_seconds, old_interval);
+                            }
                         }
                     }
                     _ => {}
@@ -1159,10 +1220,15 @@ fn main() {
                 }
             }
 
-            // Start background usage polling (every 15 minutes)
-            // NOTE: Deferred until after startup - needs proper async runtime initialization
-            // let app_clone = app_handle.clone();
-            // UsageManager::start_polling(app_clone, 15);
+            // Get settings for startup configuration
+            let store = app.state::<StoreManager>();
+            let settings = store.get_settings();
+
+            // Start background usage polling with user's configured interval
+            let polling_state = app.state::<PollingState>();
+            let interval_seconds = settings.refresh_interval.max(10); // Minimum 10 seconds
+            polling_state.restart_polling(app_handle.clone(), interval_seconds as u64);
+            log::info!("[Startup] Started background polling with interval: {}s", interval_seconds);
 
             if !tauri::is_dev() {
                 let app_handle = app.handle().clone();
@@ -1173,9 +1239,7 @@ fn main() {
             }
 
             // Show window on startup if startMinimized is false
-            let store = app.state::<StoreManager>();
-            let settings = store.get_settings();
-                if !settings.start_minimized {
+            if !settings.start_minimized {
                 if let Some(window) = app.get_webview_window("main") {
                     #[cfg(target_os = "macos")]
                     {

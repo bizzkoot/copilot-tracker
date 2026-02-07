@@ -225,34 +225,50 @@ impl UsageManager {
         entries
     }
 
-    /// Start background usage polling
-    pub fn start_polling(app: AppHandle, interval_minutes: u64) {
+    /// Start background usage polling with cancellation support
+    /// Returns a channel sender that can be used to cancel the polling task
+    pub fn start_polling(app: AppHandle, interval_seconds: u64) -> tokio::sync::mpsc::Sender<()> {
+        let (cancel_tx, mut cancel_rx) = tokio::sync::mpsc::channel::<()>(1);
+        
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(interval_minutes * 60));
+            let mut interval = tokio::time::interval(Duration::from_secs(interval_seconds));
+            
+            // Skip the first tick (immediate fire)
+            interval.tick().await;
 
             loop {
-                interval.tick().await;
+                tokio::select! {
+                    _ = interval.tick() => {
+                        // Only fetch if authenticated
+                        if let Some(store) = app.try_state::<StoreManager>() {
+                            if store.is_authenticated() {
+                                // Create a new usage manager for this poll
+                                let mut usage_manager = UsageManager::new();
 
-                // Only fetch if authenticated
-                if let Some(store) = app.try_state::<StoreManager>() {
-                    if store.is_authenticated() {
-                        // Create a new auth manager for this poll
-                        let mut usage_manager = UsageManager::new();
-
-                        if let Ok(summary) = usage_manager.fetch_usage(&app).await {
-            log::info!(
-                "Usage updated: {}/{} ({}%)",
-                summary.used,
-                summary.limit,
-                summary.percentage
-            );
-                        } else {
-                            log::warn!("Failed to fetch usage during polling");
+                                if let Ok(summary) = usage_manager.fetch_usage(&app).await {
+                                    log::info!(
+                                        "[Background Polling] Usage updated: {}/{} ({}%)",
+                                        summary.used,
+                                        summary.limit,
+                                        summary.percentage
+                                    );
+                                } else {
+                                    log::warn!("[Background Polling] Failed to fetch usage");
+                                }
+                            } else {
+                                log::debug!("[Background Polling] Skipping - not authenticated");
+                            }
                         }
+                    }
+                    _ = cancel_rx.recv() => {
+                        log::info!("[Background Polling] Cancelled");
+                        break;
                     }
                 }
             }
         });
+        
+        cancel_tx
     }
 
     /// Predict end-of-month usage based on current trends
