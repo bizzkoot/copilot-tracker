@@ -18,7 +18,7 @@ Cross-platform desktop application built with **Tauri**, React, and TypeScript t
 - 🎯 **System Tray**: Quick access from menu bar (macOS) or system tray
 - 🎨 **Customizable Tray Icon**: Choose from 7 display formats (current, remaining, percentage, etc.)
 - 🔐 **Secure Auth**: WebView-based GitHub OAuth (no API tokens stored)
-- 🔄 **Auto-Updates**: Automatic updates via GitHub releases
+- 🔄 **Auto-Updates**: Automatic updates via GitHub Releases
 - 📡 **Offline Mode**: View cached usage data even without internet
 
 ## Screenshots
