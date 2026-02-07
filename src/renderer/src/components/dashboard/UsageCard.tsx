@@ -44,7 +44,10 @@ export function UsageCard({ usage, isLoading }: UsageCardProps) {
           <CardTitle className="text-lg">Current Usage</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-muted-foreground">No usage data available</p>
+          <p className="text-muted-foreground">
+            No usage data available. Please check your connection or try again
+            later.
+          </p>
         </CardContent>
       </Card>
     );
