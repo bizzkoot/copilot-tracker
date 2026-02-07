@@ -9,9 +9,9 @@
           "jsonpath": "$.version"
         },
         {
-          "type": "toml",
+          "type": "generic",
           "path": "src-tauri/Cargo.toml",
-          "jsonpath": "$.package.version"
+          "glob": false
         },
         "src-tauri/Cargo.lock"
       ]
