@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.2](https://github.com/bizzkoot/copilot-tracker/compare/v2.1.1...v2.1.2) (2026-02-07)
+
+
+### Bug Fixes
+
+* **ci:** correct version extraction regex in release workflow ([3b464de](https://github.com/bizzkoot/copilot-tracker/commit/3b464de3414e5d557cd671cafee52efb2baa8da9))
+* **ci:** release - correct version verification regex and non-blocking Cargo.lock check ([1f1287e](https://github.com/bizzkoot/copilot-tracker/commit/1f1287e718ed9970cc734142b83dc78f7d633ae8))
+
 ## [2.1.1](https://github.com/bizzkoot/copilot-tracker/compare/v2.1.0...v2.1.1) (2026-02-07)
 
 
