@@ -1,5 +1,28 @@
 # Changelog
 
+## [2.0.0](https://github.com/bizzkoot/copilot-tracker/compare/v1.5.1...v2.0.0) (2026-02-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* Electron builds discontinued after v1.5.1
+
+### Features
+
+* add customizable tray icon display formats ([6972b39](https://github.com/bizzkoot/copilot-tracker/commit/6972b39a8342c72138337f87849da9327b6228d4))
+* **tray:** enhance system tray menu with consumption metrics ([6ca57f4](https://github.com/bizzkoot/copilot-tracker/commit/6ca57f4801625ee7c798fab07b64ba0df014a2ad))
+
+
+### Bug Fixes
+
+* explicitly specify TOML type and jsonpath for Cargo.toml ([33fe842](https://github.com/bizzkoot/copilot-tracker/commit/33fe842fe17c75eb132a35e5ea8d2c2e803389c5))
+* sync version to 1.5.1 and improve cross-platform compatibility ([e9abcfd](https://github.com/bizzkoot/copilot-tracker/commit/e9abcfd508d1ff9eab11345ae98a236af378c5ae))
+
+
+### Continuous Integration
+
+* remove Electron builds and update release workflow ([c5aacbf](https://github.com/bizzkoot/copilot-tracker/commit/c5aacbf198a7f243add9b2161f53fe2fad00959e))
+
 ## [1.5.1](https://github.com/bizzkoot/copilot-tracker/compare/v1.5.0...v1.5.1) (2026-02-05)
 
 ### Bug Fixes

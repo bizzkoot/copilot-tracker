@@ -1,6 +1,6 @@
 {
   "name": "copilot-tracker",
-  "version": "1.5.1",
+  "version": "2.0.0",
   "description": "Copilot Usage Tracker - Electron App",
   "main": "./out/main/index.js",
   "author": "",
