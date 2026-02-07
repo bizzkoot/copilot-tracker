@@ -50,10 +50,6 @@ jobs:
           # Check Cargo.toml
           CARGO_VERSION=$(grep '^version = ' src-tauri/Cargo.toml | head -1 | sed 's/version = "\([^"]*\)".*/\1/')
           echo "✓ Cargo.toml: $CARGO_VERSION"
-
-          # Check Cargo.lock
-          CARGO_LOCK_VERSION=$(grep -A 2 'name = "copilot-tracker"' src-tauri/Cargo.lock | grep '^version = ' | head -1 | sed 's/version = "\(.*\)"/\1/')
-          echo "✓ Cargo.lock: $CARGO_LOCK_VERSION"
           echo ""
 
           # Verification
@@ -74,9 +70,12 @@ jobs:
             FAILED=true
           fi
 
+          # Cargo.lock check (informational only - will be auto-updated during build)
+          CARGO_LOCK_VERSION=$(grep -A 2 'name = "copilot-tracker"' src-tauri/Cargo.lock | grep '^version = ' | head -1 | sed 's/version = "\([^"]*\)".*/\1/')
           if [ "$CARGO_LOCK_VERSION" != "$EXPECTED_VERSION" ]; then
-            echo "⚠️  WARNING: Cargo.lock version mismatch (expected: $EXPECTED_VERSION, got: $CARGO_LOCK_VERSION)"
-            echo "This may require manual cargo update, but build will continue."
+            echo "⚠️  Cargo.lock: $CARGO_LOCK_VERSION (will be auto-updated during build)"
+          else
+            echo "✓ Cargo.lock: $CARGO_LOCK_VERSION"
           fi
 
           if [ "$FAILED" = true ]; then
