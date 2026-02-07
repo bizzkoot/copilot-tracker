@@ -19,11 +19,111 @@ jobs:
       tag_name: ${{ steps.release.outputs.tag_name }}
       upload_url: ${{ steps.release.outputs.upload_url }}
     steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+
       - uses: googleapis/release-please-action@v4
         id: release
         with:
           release-type: node
           config-file: .release-please.json
+
+      # Sync version to Tauri files after release-please creates release
+      - name: Sync version to Tauri files
+        if: steps.release.outputs.release_created
+        run: |
+          VERSION=${{ steps.release.outputs.tag_name }}
+          VERSION=${VERSION#v}  # Remove 'v' prefix
+
+          echo "Syncing version $VERSION to Tauri files..."
+
+          # Install jq if not available
+          sudo apt-get update && sudo apt-get install -y jq
+
+          # Update tauri.conf.json
+          jq ".version = \"$VERSION\"" src-tauri/tauri.conf.json > tmp.json
+          mv tmp.json src-tauri/tauri.conf.json
+
+          # Update Cargo.toml
+          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+
+          # Update Cargo.lock (requires Rust)
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source $HOME/.cargo/env
+          cd src-tauri
+          cargo update -p copilot-tracker || echo "Warning: Could not update Cargo.lock"
+          cd ..
+
+      # Verify all version files are in sync
+      - name: Verify version sync
+        if: steps.release.outputs.release_created
+        run: |
+          EXPECTED_VERSION=${{ steps.release.outputs.tag_name }}
+          EXPECTED_VERSION=${EXPECTED_VERSION#v}
+
+          echo "=== Version Verification Report ==="
+          echo "Expected version: $EXPECTED_VERSION"
+          echo ""
+
+          # Check package.json
+          PKG_VERSION=$(jq -r '.version' package.json)
+          echo "✓ package.json: $PKG_VERSION"
+
+          # Check tauri.conf.json
+          TAURI_CONF_VERSION=$(jq -r '.version' src-tauri/tauri.conf.json)
+          echo "✓ tauri.conf.json: $TAURI_CONF_VERSION"
+
+          # Check Cargo.toml
+          CARGO_VERSION=$(grep '^version = ' src-tauri/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          echo "✓ Cargo.toml: $CARGO_VERSION"
+
+          # Check Cargo.lock
+          CARGO_LOCK_VERSION=$(grep -A 2 'name = "copilot-tracker"' src-tauri/Cargo.lock | grep '^version = ' | head -1 | sed 's/version = "\(.*\)"/\1/')
+          echo "✓ Cargo.lock: $CARGO_LOCK_VERSION"
+          echo ""
+
+          # Verification
+          FAILED=false
+
+          if [ "$PKG_VERSION" != "$EXPECTED_VERSION" ]; then
+            echo "❌ FAILED: package.json version mismatch (expected: $EXPECTED_VERSION, got: $PKG_VERSION)"
+            FAILED=true
+          fi
+
+          if [ "$TAURI_CONF_VERSION" != "$EXPECTED_VERSION" ]; then
+            echo "❌ FAILED: tauri.conf.json version mismatch (expected: $EXPECTED_VERSION, got: $TAURI_CONF_VERSION)"
+            FAILED=true
+          fi
+
+          if [ "$CARGO_VERSION" != "$EXPECTED_VERSION" ]; then
+            echo "❌ FAILED: Cargo.toml version mismatch (expected: $EXPECTED_VERSION, got: $CARGO_VERSION)"
+            FAILED=true
+          fi
+
+          if [ "$CARGO_LOCK_VERSION" != "$EXPECTED_VERSION" ]; then
+            echo "⚠️  WARNING: Cargo.lock version mismatch (expected: $EXPECTED_VERSION, got: $CARGO_LOCK_VERSION)"
+            echo "This may require manual cargo update, but build will continue."
+          fi
+
+          if [ "$FAILED" = true ]; then
+            echo ""
+            echo "🛑 Version sync verification FAILED!"
+            echo "Please check the sync script and try again."
+            exit 1
+          fi
+
+          echo ""
+          echo "✅ All critical versions verified successfully!"
+
+      # Commit the synced version files back to the repository
+      - name: Commit synced version files
+        if: steps.release.outputs.release_created
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
+          git diff --staged --quiet || git commit -m "chore: sync Tauri version files to ${{ steps.release.outputs.tag_name }}"
+          git push || echo "Nothing to commit"
 
   # ============================================================================
   # Tauri Builds (All Platforms - Unsigned)
