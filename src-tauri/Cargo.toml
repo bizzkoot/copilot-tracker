@@ -1,6 +1,6 @@
 [package]
 name = "copilot-tracker"
-version = "2.1.0" # x-release-please-version
+version = "3.0.0" # x-release-please-version
 edition = "2021"
 
 [[bin]]

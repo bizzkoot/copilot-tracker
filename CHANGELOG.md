@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.0.0](https://github.com/bizzkoot/copilot-tracker/compare/copilot-tracker-v2.1.0...copilot-tracker-v3.0.0) (2026-02-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* Electron builds discontinued after v1.5.1
+
+### ci
+
+* remove Electron builds and update release workflow ([c5aacbf](https://github.com/bizzkoot/copilot-tracker/commit/c5aacbf198a7f243add9b2161f53fe2fad00959e))
+
 ## [2.1.0](https://github.com/bizzkoot/copilot-tracker/compare/v2.0.1...v2.1.0) (2026-02-07)
 
 
