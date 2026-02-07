@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.1.0](https://github.com/bizzkoot/copilot-tracker/compare/v2.0.1...v2.1.0) (2026-02-07)
+
+
+### Features
+
+* **polling:** add dynamic background polling with lifecycle management ([f07bc53](https://github.com/bizzkoot/copilot-tracker/commit/f07bc53247f7665208a857ae5f8cd7aefd05a9e4))
+
+
+### Bug Fixes
+
+* **platform:** resolve Linux window management and improve cross-platform compatibility ([f4102f3](https://github.com/bizzkoot/copilot-tracker/commit/f4102f3adf3f4da121fc284cd8f647f7010c0a30))
+* **runtime:** use tauri::async_runtime::spawn instead of tokio::spawn ([45985a3](https://github.com/bizzkoot/copilot-tracker/commit/45985a32da7f820bf652fec0b35e71b9520fb9a8))
+
 ## [2.0.1](https://github.com/bizzkoot/copilot-tracker/compare/v2.0.0...v2.0.1) (2026-02-07)
 
 
