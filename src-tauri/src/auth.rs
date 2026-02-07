@@ -592,6 +592,8 @@ impl AuthManager {
         #[cfg(target_os = "windows")]
         let builder = builder
             .inner_size(1.0, 1.0)
+            // Position far off-screen (-32000, -32000) to ensure window is completely hidden
+            // Windows coordinates at 0,0 would still be visible on screen, so we use extreme negative values
             .position(-32000.0, -32000.0)
             .transparent(true)
             .decorations(false)

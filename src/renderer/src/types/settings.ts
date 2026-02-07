@@ -3,14 +3,26 @@
  * User preferences and application settings
  */
 
+// Tray icon format constants - must match TRAY_ICON_FORMATS in Rust (src-tauri/src/store.rs)
+export const TRAY_FORMAT_CURRENT = "current" as const;
+export const TRAY_FORMAT_CURRENT_TOTAL = "currentTotal" as const;
+export const TRAY_FORMAT_REMAINING_TOTAL = "remainingTotal" as const;
+export const TRAY_FORMAT_PERCENTAGE = "percentage" as const;
+export const TRAY_FORMAT_REMAINING_PERCENT = "remainingPercent" as const;
+export const TRAY_FORMAT_COMBINED = "combined" as const;
+export const TRAY_FORMAT_REMAINING_COMBINED = "remainingCombined" as const;
+
+// Default tray icon format - must match DEFAULT_TRAY_ICON_FORMAT in Rust
+export const DEFAULT_TRAY_FORMAT = TRAY_FORMAT_CURRENT_TOTAL;
+
 export type TrayIconFormat =
-  | "current"
-  | "currentTotal"
-  | "remainingTotal"
-  | "percentage"
-  | "remainingPercent"
-  | "combined"
-  | "remainingCombined";
+  | typeof TRAY_FORMAT_CURRENT
+  | typeof TRAY_FORMAT_CURRENT_TOTAL
+  | typeof TRAY_FORMAT_REMAINING_TOTAL
+  | typeof TRAY_FORMAT_PERCENTAGE
+  | typeof TRAY_FORMAT_REMAINING_PERCENT
+  | typeof TRAY_FORMAT_COMBINED
+  | typeof TRAY_FORMAT_REMAINING_COMBINED;
 
 export interface NotificationSettings {
   enabled: boolean;
@@ -37,7 +49,7 @@ export const DEFAULT_SETTINGS: Settings = {
     thresholds: [75, 90, 100],
   },
   theme: "system",
-  trayIconFormat: "currentTotal",
+  trayIconFormat: DEFAULT_TRAY_FORMAT,
 };
 
 // Refresh interval options for UI
@@ -65,30 +77,30 @@ export const THEME_OPTIONS = [
 
 // Tray icon format options for UI
 export const TRAY_ICON_FORMAT_OPTIONS = [
-  { value: "current" as const, label: "Current only", example: "450" },
+  { value: TRAY_FORMAT_CURRENT, label: "Current only", example: "450" },
   {
-    value: "currentTotal" as const,
+    value: TRAY_FORMAT_CURRENT_TOTAL,
     label: "Current / Total",
     example: "450/1200",
   },
   {
-    value: "remainingTotal" as const,
+    value: TRAY_FORMAT_REMAINING_TOTAL,
     label: "Remaining / Total",
     example: "750/1200",
   },
-  { value: "percentage" as const, label: "Percentage used", example: "38%" },
+  { value: TRAY_FORMAT_PERCENTAGE, label: "Percentage used", example: "38%" },
   {
-    value: "remainingPercent" as const,
+    value: TRAY_FORMAT_REMAINING_PERCENT,
     label: "Percentage remaining",
     example: "62%",
   },
   {
-    value: "combined" as const,
+    value: TRAY_FORMAT_COMBINED,
     label: "Current + Percentage",
     example: "450/1200 (38%)",
   },
   {
-    value: "remainingCombined" as const,
+    value: TRAY_FORMAT_REMAINING_COMBINED,
     label: "Remaining + Percentage",
     example: "750/1200 (62%)",
   },

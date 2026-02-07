@@ -12,6 +12,7 @@ import {
   UpdateInfo,
   UpdateCheckStatus,
   ElectronAPI,
+  DEFAULT_TRAY_FORMAT,
 } from "./types";
 
 // Rust payload types
@@ -401,7 +402,7 @@ export function initTauriAdapter() {
               thresholds: rustSettings.notificationThresholds || [75, 90, 100],
             },
             trayIconFormat: (rustSettings.trayIconFormat ||
-              "currentTotal") as Settings["trayIconFormat"],
+              DEFAULT_TRAY_FORMAT) as Settings["trayIconFormat"],
           };
         } catch (e) {
           console.error("Failed to get settings", e);
@@ -475,7 +476,7 @@ export function initTauriAdapter() {
             thresholds: rustSettings.notificationThresholds,
           },
           trayIconFormat: (rustSettings.trayIconFormat ||
-            "currentTotal") as Settings["trayIconFormat"],
+            DEFAULT_TRAY_FORMAT) as Settings["trayIconFormat"],
         };
         notifySettingsListeners(settings);
 
@@ -512,7 +513,8 @@ export function initTauriAdapter() {
               enabled: rustSettings.showNotifications,
               thresholds: rustSettings.notificationThresholds,
             },
-            trayIconFormat: (rustSettings.trayIconFormat || "currentTotal") as Settings["trayIconFormat"],
+            trayIconFormat: (rustSettings.trayIconFormat ||
+              DEFAULT_TRAY_FORMAT) as Settings["trayIconFormat"],
           };
           callback(settings);
         })

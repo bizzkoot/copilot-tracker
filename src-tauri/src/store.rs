@@ -8,6 +8,20 @@ use crate::usage::UsageEntry;
 const STORE_FILENAME: &str = "settings.json";
 const HISTORY_FILENAME: &str = "usage_history.json";
 
+/// Valid tray icon display formats
+pub const TRAY_ICON_FORMATS: &[&str] = &[
+    "current",
+    "currentTotal",
+    "remainingTotal",
+    "percentage",
+    "remainingPercent",
+    "combined",
+    "remainingCombined",
+];
+
+/// Default tray icon format - must be one of TRAY_ICON_FORMATS
+pub const DEFAULT_TRAY_ICON_FORMAT: &str = "currentTotal";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
@@ -68,7 +82,7 @@ fn default_theme() -> String {
 }
 
 fn default_tray_icon_format() -> String {
-    "currentTotal".to_string()
+    DEFAULT_TRAY_ICON_FORMAT.to_string()
 }
 
 impl Default for AppSettings {
@@ -348,17 +362,7 @@ impl StoreManager {
 
     /// Set the tray icon display format with validation
     pub fn set_tray_icon_format(&self, format: String) -> Result<(), String> {
-        const VALID_FORMATS: &[&str] = &[
-            "current",
-            "currentTotal",
-            "remainingTotal",
-            "percentage",
-            "remainingPercent",
-            "combined",
-            "remainingCombined",
-        ];
-
-        if !VALID_FORMATS.contains(&format.as_str()) {
+        if !TRAY_ICON_FORMATS.contains(&format.as_str()) {
             return Err(format!("Invalid tray icon format: {}", format));
         }
 
