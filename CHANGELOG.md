@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.1.1](https://github.com/bizzkoot/copilot-tracker/compare/v2.1.0...v2.1.1) (2026-02-07)
+
+
+### Bug Fixes
+
+* add x-release-please-version marker to Cargo.toml ([b8ed7dd](https://github.com/bizzkoot/copilot-tracker/commit/b8ed7dd4dbcb2404f627a09d0a3a7c78f4ad00b2))
+* **ci:** add bootstrap-sha to release-please config ([5ad5285](https://github.com/bizzkoot/copilot-tracker/commit/5ad5285039d23453d7c30606407d3c62e53bc078))
+* **ci:** correct changelog-sections configuration ([737172f](https://github.com/bizzkoot/copilot-tracker/commit/737172f592d2b754217871a1f3d5154a500d8523))
+* **ci:** correct release-please tag naming convention ([d5358ae](https://github.com/bizzkoot/copilot-tracker/commit/d5358ae0efd07d47df87c4629de56b868385df33))
+* **ci:** switch to release-please Manifest Mode ([c733f25](https://github.com/bizzkoot/copilot-tracker/commit/c733f25923df49a767684ec82bc821ef3a541fc4))
+* **ci:** update bootstrap-sha to skip breaking change ([d853635](https://github.com/bizzkoot/copilot-tracker/commit/d853635efb6781adca4fd482c0e00b4839eb0584))
+* **ci:** update version sync configuration for future builds ([69940ad](https://github.com/bizzkoot/copilot-tracker/commit/69940ad8d02e75ecbfbae3ce6b9ffbe674fd718d))
+* correct Cargo.toml updater in release-please config ([55de77f](https://github.com/bizzkoot/copilot-tracker/commit/55de77f7024c650be4c2758bca9fcf7473dd03f7))
+* **docs:** correct capitalization in README features list ([f980221](https://github.com/bizzkoot/copilot-tracker/commit/f9802214b5848ced2586c2134f21100d0d18561b))
+* switch release-please config to Single Package Mode ([3e9d766](https://github.com/bizzkoot/copilot-tracker/commit/3e9d76642977fe777b49037b586d91c0f507f03b))
+* **ui:** improve error message when usage data is unavailable ([72aefd2](https://github.com/bizzkoot/copilot-tracker/commit/72aefd2f8aea44bd4d8a482e6b2b38ced863e26f))
+
 ## [2.1.0](https://github.com/bizzkoot/copilot-tracker/compare/v2.0.1...v2.1.0) (2026-02-07)
 
 
