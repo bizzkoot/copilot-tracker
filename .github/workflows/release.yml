@@ -48,7 +48,7 @@ jobs:
           echo "✓ tauri.conf.json: $TAURI_CONF_VERSION"
 
           # Check Cargo.toml
-          CARGO_VERSION=$(grep '^version = ' src-tauri/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          CARGO_VERSION=$(grep '^version = ' src-tauri/Cargo.toml | head -1 | sed 's/version = "\([^"]*\)".*/\1/')
           echo "✓ Cargo.toml: $CARGO_VERSION"
 
           # Check Cargo.lock
@@ -88,8 +88,6 @@ jobs:
 
           echo ""
           echo "✅ All critical versions verified successfully!"
-
-
 
   # ============================================================================
   # Tauri Builds (All Platforms - Unsigned)
