@@ -42,6 +42,9 @@ pub struct AppSettings {
     /// Theme
     #[serde(default = "default_theme")]
     pub theme: String,
+    /// Tray icon display format
+    #[serde(default = "default_tray_icon_format")]
+    pub tray_icon_format: String,
 }
 
 fn default_thresholds() -> Vec<u32> {
@@ -64,6 +67,10 @@ fn default_theme() -> String {
     "system".to_string()
 }
 
+fn default_tray_icon_format() -> String {
+    "currentTotal".to_string()
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -80,6 +87,7 @@ impl Default for AppSettings {
             prediction_period: default_prediction_period(),
             start_minimized: default_start_minimized(),
             theme: default_theme(),
+            tray_icon_format: default_tray_icon_format(),
         }
     }
 }
@@ -331,6 +339,32 @@ impl StoreManager {
         }
 
         Ok(defaults)
+    }
+
+    /// Get the tray icon display format
+    pub fn get_tray_icon_format(&self) -> String {
+        self.settings.lock().unwrap().tray_icon_format.clone()
+    }
+
+    /// Set the tray icon display format with validation
+    pub fn set_tray_icon_format(&self, format: String) -> Result<(), String> {
+        const VALID_FORMATS: &[&str] = &[
+            "current",
+            "currentTotal",
+            "remainingTotal",
+            "percentage",
+            "remainingPercent",
+            "combined",
+            "remainingCombined",
+        ];
+
+        if !VALID_FORMATS.contains(&format.as_str()) {
+            return Err(format!("Invalid tray icon format: {}", format));
+        }
+
+        self.update_settings(|s| {
+            s.tray_icon_format = format;
+        })
     }
 }
 

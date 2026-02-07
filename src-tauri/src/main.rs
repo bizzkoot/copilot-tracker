@@ -53,14 +53,32 @@ struct UpdateState {
     latest: Mutex<Option<UpdateInfo>>,
 }
 
-fn update_tray_icon(state: &TrayState, used: u32, limit: u32) -> Result<(), String> {
-    // Create [number] layout
-    let text = if limit > 0 {
-        format!("{}/{}", used, limit)
-    } else {
-        used.to_string()
-    };
-    
+/// Format tray icon text based on the specified format
+fn format_tray_text(used: u32, limit: u32, format: &str) -> String {
+    // Handle unauthenticated state (limit == 0)
+    if limit == 0 {
+        return used.to_string();
+    }
+
+    let remaining = limit.saturating_sub(used);
+    let percentage = (used as f32 / limit as f32) * 100.0;
+    let remaining_pct = 100.0 - percentage;
+
+    match format {
+        "current" => used.to_string(),
+        "currentTotal" => format!("{used}/{limit}"),
+        "remainingTotal" => format!("{remaining}/{limit}"),
+        "percentage" => format!("{:.0}%", percentage),
+        "remainingPercent" => format!("{:.0}%", remaining_pct),
+        "combined" => format!("{used}/{limit} ({:.0}%)", percentage),
+        "remainingCombined" => format!("{remaining}/{limit} ({:.0}%)", remaining_pct),
+        _ => format!("{used}/{limit}"), // fallback to current default
+    }
+}
+
+fn update_tray_icon(state: &TrayState, used: u32, limit: u32, format: &str) -> Result<(), String> {
+    let text = format_tray_text(used, limit, format);
+
     let image = state
         .renderer
         .render_text_only(&text, 16)
@@ -69,6 +87,15 @@ fn update_tray_icon(state: &TrayState, used: u32, limit: u32) -> Result<(), Stri
     let tray_guard = state.tray.lock().map_err(|_| "tray lock poisoned".to_string())?;
     let tray = tray_guard.as_ref().ok_or("tray not initialized".to_string())?;
     tray.set_icon(Some(image)).map_err(|err| err.to_string())
+}
+
+/// Helper to update tray icon using current settings from store
+fn update_tray_icon_from_store(app: &AppHandle) -> Result<(), String> {
+    let store = app.state::<StoreManager>();
+    let (used, limit) = store.get_usage();
+    let format = store.get_tray_icon_format();
+    let tray_state = app.state::<TrayState>();
+    update_tray_icon(&tray_state, used, limit, &format)
 }
 
 fn build_tray_menu(
@@ -477,6 +504,9 @@ fn update_settings(
     let latest = update_state.latest.lock().unwrap();
     let _ = rebuild_tray_menu(&app, latest.as_ref());
 
+    // Update tray icon with new format
+    let _ = update_tray_icon_from_store(&app);
+
     Ok(())
 }
 
@@ -519,7 +549,7 @@ fn reset_settings(app: AppHandle) -> Result<copilot_tracker::AppSettings, String
 
     // Update tray icon directly to "1" (unauthenticated state)
     let tray_state = app.state::<TrayState>();
-    let _ = update_tray_icon(&tray_state, 1, 0);
+    let _ = update_tray_icon(&tray_state, 1, 0, "currentTotal");
     log::info!("Updated tray icon to default '1' for unauthenticated state");
 
     // Rebuild tray menu
@@ -697,11 +727,14 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 fn update_tray_usage(
+    app: AppHandle,
     state: tauri::State<TrayState>,
     used: u32,
     limit: u32,
 ) -> Result<(), String> {
-    update_tray_icon(&state, used, limit)
+    let store = app.state::<StoreManager>();
+    let format = store.get_tray_icon_format();
+    update_tray_icon(&state, used, limit, &format)
 }
 
 // ============================================================================
@@ -801,7 +834,7 @@ fn main() {
                 log::info!("Setting activation policy to accessory on macOS startup");
                 // Use set_activation_policy to completely hide from dock
                 // NSApplicationActivationPolicyAccessory = 1 means no dock icon
-                let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             }
 
             // Initialize store manager
@@ -945,10 +978,9 @@ fn main() {
                         return;
                     }
                 };
-                log::info!("[TrayListener] Updating tray icon to: {} / {} ({}%)", 
+                log::info!("[TrayListener] Updating tray icon to: {} / {} ({}%)",
                     parsed.used, parsed.limit, parsed.percentage);
-                let state = listener_handle.state::<TrayState>();
-                let _ = update_tray_icon(&state, parsed.used, parsed.limit);
+                let _ = update_tray_icon_from_store(&listener_handle);
                 // Rebuild menu with fresh data from store (not using update state)
                 let update_state = listener_handle.state::<UpdateState>();
                 let latest = update_state.latest.lock().unwrap();
@@ -995,8 +1027,7 @@ fn main() {
             // Always emit if authenticated, even if used=0 (might have zero usage but still have history)
             if is_authenticated {
                 if used > 0 {
-                    let state = app.state::<TrayState>();
-                    let _ = update_tray_icon(&state, used, limit);
+                    let _ = update_tray_icon_from_store(app.handle());
                 }
                 
                 // Emit initial usage data to frontend (delayed to allow frontend listeners to attach)
@@ -1053,7 +1084,6 @@ fn main() {
             let _ = rebuild_tray_menu(app.handle(), latest.as_ref());
             // Explicitly drop the lock before moving on
             drop(latest);
-            drop(update_state);
 
             // Show first-run notification on Windows to help users find tray icon
             #[cfg(target_os = "windows")]
@@ -1093,7 +1123,7 @@ fn main() {
                     #[cfg(target_os = "macos")]
                     {
                         // Set activation policy to regular to show in dock
-                        let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
+                        app.set_activation_policy(tauri::ActivationPolicy::Regular);
                         let _ = app.show();
                     }
                     let _ = window.show();

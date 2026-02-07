@@ -38,6 +38,7 @@ interface RustAppSettings {
   updateChannel: string;
   showNotifications: boolean;
   notificationThresholds: number[];
+  trayIconFormat: string;
 }
 
 // Rust AuthState result
@@ -399,6 +400,8 @@ export function initTauriAdapter() {
               enabled: rustSettings.showNotifications,
               thresholds: rustSettings.notificationThresholds || [75, 90, 100],
             },
+            trayIconFormat: (rustSettings.trayIconFormat ||
+              "currentTotal") as Settings["trayIconFormat"],
           };
         } catch (e) {
           console.error("Failed to get settings", e);
@@ -423,7 +426,9 @@ export function initTauriAdapter() {
             }
           }
 
-          const merged: Partial<RustAppSettings> = {
+          // Include ALL fields from current (Rust expects full AppSettings struct)
+          const merged = {
+            // User-modifiable fields (with new values or current)
             refreshInterval:
               newSettings.refreshInterval ?? current.refreshInterval,
             predictionPeriod:
@@ -434,6 +439,15 @@ export function initTauriAdapter() {
             theme: newSettings.theme ?? current.theme,
             showNotifications,
             notificationThresholds,
+            trayIconFormat:
+              newSettings.trayIconFormat ?? current.trayIconFormat,
+            // Backend-managed fields (always include from current)
+            customerId: current.customerId,
+            usageLimit: current.usageLimit,
+            lastUsage: current.lastUsage,
+            lastFetchTimestamp: current.lastFetchTimestamp,
+            isAuthenticated: current.isAuthenticated,
+            updateChannel: current.updateChannel,
           };
 
           // 3. Send back to Rust
@@ -460,6 +474,8 @@ export function initTauriAdapter() {
             enabled: rustSettings.showNotifications,
             thresholds: rustSettings.notificationThresholds,
           },
+          trayIconFormat: (rustSettings.trayIconFormat ||
+            "currentTotal") as Settings["trayIconFormat"],
         };
         notifySettingsListeners(settings);
 
@@ -496,6 +512,7 @@ export function initTauriAdapter() {
               enabled: rustSettings.showNotifications,
               thresholds: rustSettings.notificationThresholds,
             },
+            trayIconFormat: (rustSettings.trayIconFormat || "currentTotal") as Settings["trayIconFormat"],
           };
           callback(settings);
         })

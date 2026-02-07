@@ -3,6 +3,15 @@
  * User preferences and application settings
  */
 
+export type TrayIconFormat =
+  | "current"
+  | "currentTotal"
+  | "remainingTotal"
+  | "percentage"
+  | "remainingPercent"
+  | "combined"
+  | "remainingCombined";
+
 export interface NotificationSettings {
   enabled: boolean;
   thresholds: number[]; // e.g., [50, 75, 90, 100]
@@ -15,6 +24,7 @@ export interface Settings {
   startMinimized: boolean; // Auto-hide window on startup/login
   notifications: NotificationSettings;
   theme: "light" | "dark" | "system";
+  trayIconFormat: TrayIconFormat;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -27,6 +37,7 @@ export const DEFAULT_SETTINGS: Settings = {
     thresholds: [75, 90, 100],
   },
   theme: "system",
+  trayIconFormat: "currentTotal",
 };
 
 // Refresh interval options for UI
@@ -50,4 +61,35 @@ export const THEME_OPTIONS = [
   { value: "light", label: "Light" },
   { value: "dark", label: "Dark" },
   { value: "system", label: "System" },
+] as const;
+
+// Tray icon format options for UI
+export const TRAY_ICON_FORMAT_OPTIONS = [
+  { value: "current" as const, label: "Current only", example: "450" },
+  {
+    value: "currentTotal" as const,
+    label: "Current / Total",
+    example: "450/1200",
+  },
+  {
+    value: "remainingTotal" as const,
+    label: "Remaining / Total",
+    example: "750/1200",
+  },
+  { value: "percentage" as const, label: "Percentage used", example: "38%" },
+  {
+    value: "remainingPercent" as const,
+    label: "Percentage remaining",
+    example: "62%",
+  },
+  {
+    value: "combined" as const,
+    label: "Current + Percentage",
+    example: "450/1200 (38%)",
+  },
+  {
+    value: "remainingCombined" as const,
+    label: "Remaining + Percentage",
+    example: "750/1200 (62%)",
+  },
 ] as const;

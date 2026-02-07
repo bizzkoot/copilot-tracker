@@ -17,6 +17,7 @@ interface SettingsState extends Settings {
   setNotificationsEnabled: (enabled: boolean) => void;
   setNotificationThresholds: (thresholds: number[]) => void;
   setTheme: (theme: Settings["theme"]) => void;
+  setTrayIconFormat: (format: Settings["trayIconFormat"]) => void;
   updateSettings: (settings: Partial<Settings>) => void;
   resetSettings: () => void;
 }
@@ -47,6 +48,8 @@ export const useSettingsStore = create<SettingsState>()(
         })),
 
       setTheme: (theme) => set({ theme }),
+
+      setTrayIconFormat: (trayIconFormat) => set({ trayIconFormat }),
 
       updateSettings: (settings) =>
         set((state) => ({

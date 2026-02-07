@@ -17,6 +17,7 @@ import {
   REFRESH_INTERVAL_OPTIONS,
   PREDICTION_PERIOD_OPTIONS,
   THEME_OPTIONS,
+  TRAY_ICON_FORMAT_OPTIONS,
 } from "@renderer/types/settings";
 import { ArrowLeft, RotateCcw, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -42,6 +43,7 @@ export function Settings({ onClose }: SettingsProps) {
     launchAtLogin,
     startMinimized,
     notifications,
+    trayIconFormat,
     setRefreshInterval,
     setPredictionPeriod,
     setTheme,
@@ -49,6 +51,7 @@ export function Settings({ onClose }: SettingsProps) {
     setStartMinimized,
     setNotificationsEnabled,
     setNotificationThresholds,
+    setTrayIconFormat,
   } = useSettingsStore();
 
   const handleLaunchAtLoginToggle = async () => {
@@ -221,6 +224,53 @@ export function Settings({ onClose }: SettingsProps) {
               </Button>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Tray Icon Format */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Tray Icon Format</CardTitle>
+          <CardDescription>
+            Choose how usage is displayed in the system tray icon
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {TRAY_ICON_FORMAT_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => {
+                  setTrayIconFormat(option.value);
+                  window.electron.setSettings({
+                    trayIconFormat: option.value,
+                  });
+                }}
+                className={`
+                  flex items-center justify-between p-4 rounded-lg border-2 transition-all
+                  ${
+                    trayIconFormat === option.value
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/50"
+                  }
+                `}
+              >
+                <div className="text-left">
+                  <div className="font-medium text-sm">{option.label}</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Example: {option.example}
+                  </div>
+                </div>
+                {/* Mini tray icon preview */}
+                <div className="bg-black/80 text-white px-2 py-1 rounded text-xs font-mono">
+                  {option.example}
+                </div>
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground mt-3">
+            * Preview may differ slightly from actual tray icon appearance
+          </p>
         </CardContent>
       </Card>
 
