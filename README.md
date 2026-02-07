@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-blue.svg)](https://github.com/bizzkoot/copilot-tracker)
 
-Cross-platform desktop application built with **Tauri** (and Electron for macOS legacy), React, and TypeScript to monitor your GitHub Copilot usage, featuring system tray integration, usage predictions, and smart notifications.
+Cross-platform desktop application built with **Tauri**, React, and TypeScript to monitor your GitHub Copilot usage, featuring system tray integration, usage predictions, and smart notifications.
 
 ## Features
 
@@ -16,6 +16,7 @@ Cross-platform desktop application built with **Tauri** (and Electron for macOS 
 - 🌓 **Dark/Light Theme**: Automatic theme detection with manual override
 - 🔔 **Smart Notifications**: Configurable alerts when approaching limits
 - 🎯 **System Tray**: Quick access from menu bar (macOS) or system tray
+- 🎨 **Customizable Tray Icon**: Choose from 7 display formats (current, remaining, percentage, etc.)
 - 🔐 **Secure Auth**: WebView-based GitHub OAuth (no API tokens stored)
 - 🔄 **Auto-Updates**: Automatic updates via GitHub releases
 - 📡 **Offline Mode**: View cached usage data even without internet
@@ -25,13 +26,13 @@ Cross-platform desktop application built with **Tauri** (and Electron for macOS 
 ### Dashboard
 
 <p align="center">
-  <img src="assets/Dashboard.gif" alt="Copilot Tracker Dashboard" width="700"/>
+  <img src="assets/Dashboard_Tauri.gif" alt="Copilot Tracker Dashboard" width="700"/>
 </p>
 
 ### System Tray (Windows)
 
 <p align="center">
-  <img src="assets/Taskbar.gif" alt="System Tray Integration" width="500"/>
+  <img src="assets/Taskbar_Tauri.gif" alt="System Tray Integration" width="500"/>
 </p>
 
 ## Download
@@ -50,19 +51,15 @@ Choose the file that matches your operating system from the [latest release](htt
 | **Linux** (any distribution)      | `Copilot.Tracker_X.X.X_amd64.AppImage` (Tauri)     |
 | **Linux** (Debian/Ubuntu)         | `Copilot.Tracker_X.X.X_amd64.deb` (Tauri)          |
 
-### Electron Builds (Legacy - macOS only)
+### Electron Builds (Discontinued)
 
-**⚠️ Deprecated: Windows/Linux Electron builds discontinued after v1.4.1**
-
-| Operating System   | Download This File          |
-| ------------------ | --------------------------- |
-| **macOS** (legacy) | `copilot-tracker-X.X.X.dmg` |
+**⚠️ Electron builds stopped at v1.5.1. Only Tauri builds are released from v1.5.2 onward.**
 
 > **Note:**
 >
-> - Replace `X.X.X` with the latest version number from the releases page.
-> - **Tauri builds** are recommended for all platforms (smaller, faster, more secure).
-> - **Electron macOS** is maintained for compatibility but will be phased out in future releases.
+> - **Tauri builds** are the only supported platform going forward (smaller, faster, more secure).
+> - Electron builds for macOS, Windows, and Linux were discontinued after v1.5.1.
+> - No new Electron releases will be published.
 
 <details>
 <summary><strong>🔒 Privacy & Security</strong></summary>
@@ -152,38 +149,14 @@ chmod +x Copilot.Tracker_1.4.2_amd64.AppImage
 sudo dpkg -i Copilot.Tracker_1.4.2_amd64.deb
 ```
 
-### Electron Builds (Legacy - macOS only)
-
-#### macOS (Electron)
-
-```bash
-# Download the Electron .dmg from releases
-open copilot-tracker-1.4.2.dmg
-# Drag to Applications folder
-```
-
-**Remove quarantine:**
-
-```bash
-# For Electron build (legacy)
-xattr -cr /Applications/copilot-tracker.app
-```
-
 ### Uninstallation
 
 To remove the application and its data:
 
-**macOS (Tauri)**
+**macOS**
 
 ```bash
 rm -rf /Applications/"Copilot Tracker.app"
-rm -rf ~/Library/Application\ Support/copilot-tracker
-```
-
-**macOS (Electron - legacy)**
-
-```bash
-rm -rf /Applications/copilot-tracker.app
 rm -rf ~/Library/Application\ Support/copilot-tracker
 ```
 
@@ -227,11 +200,7 @@ When you first try to open the app, you may see:
 **Option 2: Terminal method (remove quarantine)**
 
 ```bash
-# For Tauri build (v1.4.2+)
 xattr -cr /Applications/"Copilot Tracker.app"
-
-# For Electron build (legacy, macOS only)
-xattr -cr /Applications/copilot-tracker.app
 ```
 
 ### Windows
@@ -244,8 +213,6 @@ When you first run the installer or app, you may see:
 
 1. Click "More info"
 2. Click "Run anyway"
-
-**Note:** Tauri builds (v1.4.2+) do NOT show a CMD/console window.
 
 ### Linux
 
@@ -286,19 +253,13 @@ cd copilot-tracker
 # Install dependencies
 npm install
 
-# Start development server (Electron)
-npm run dev
-
-# Start Tauri development
+# Start Tauri development server
 npm run tauri:dev
 ```
 
 ### Build
 
 ```bash
-# Electron builds (macOS only - deprecated for Windows/Linux)
-npm run build:mac      # macOS
-
 # Tauri builds (all platforms)
 npm run tauri:build:mac     # macOS (universal binary)
 npm run tauri:build:win     # Windows
@@ -330,28 +291,14 @@ sudo apt-get install -y \
 rustup target add aarch64-apple-darwin x86_64-apple-darwin
 ```
 
-**For Electron canvas dependencies (legacy):**
-
-```bash
-# macOS
-brew install cairo pango libjpeg giflib librsvg
-
-# Linux
-sudo apt-get install build-essential libcairo2-dev libpango1.0-dev \
-  libjpeg-dev libgif-dev librsvg2-dev libxi-dev
-```
-
 ### Build Commands
 
 ```bash
-# Tauri (recommended)
+# Tauri builds
 npm run tauri:build           # Current platform
 npm run tauri:build:mac       # macOS universal binary
 npm run tauri:build:win       # Windows (x64)
 npm run tauri:build:linux     # Linux (x64)
-
-# Electron (legacy - macOS only)
-npm run build:mac             # macOS DMG
 
 # Lint and format
 npm run lint                  # Check code style
@@ -382,35 +329,41 @@ Available variables:
 
 ## Tech Stack
 
-| Component | Technology                                |
-| --------- | ----------------------------------------- |
-| Framework | Tauri 2.0 (Electron 33+ for macOS legacy) |
-| Frontend  | React 18                                  |
-| Language  | TypeScript, Rust (Tauri backend)          |
-| Styling   | Tailwind CSS + shadcn/ui                  |
-| State     | Zustand                                   |
-| Charts    | Recharts                                  |
-| Build     | Vite (Tauri), electron-vite (Electron)    |
-| Packaging | Tauri CLI, electron-builder               |
+| Component | Technology                       |
+| --------- | -------------------------------- |
+| Framework | Tauri 2.0                        |
+| Frontend  | React 18                         |
+| Language  | TypeScript, Rust (Tauri backend) |
+| Styling   | Tailwind CSS + shadcn/ui         |
+| State     | Zustand                          |
+| Charts    | Recharts                         |
+| Build     | Vite                             |
+| Packaging | Tauri CLI                        |
 
 ## Project Status
 
-✅ **Status**: v1.4.2 - Tauri Migration Complete
+✅ **Status**: v1.5.1 - Tauri Only
 
 ## Version History
 
-- **v1.4.2** (Latest) - Tauri build for all platforms, Electron macOS only
-- **v1.4.1** - Last version with Electron Windows/Linux support (deprecated)
+- **v1.5.1** (Latest) - Tauri only, Electron builds discontinued
+- **v1.5.0** - Added customizable tray icon formats
+- **v1.4.2** - Tauri build for all platforms, Electron macOS only
+- **v1.4.1** - Last version with Electron Windows/Linux support
 - **v1.0.0** - Initial release (Electron-only)
+
+> **Breaking Change:** Electron builds stopped at v1.5.1. Only Tauri builds are released from v1.5.2 onward.
 
 ## Platform Support
 
-| Platform              | Tauri |          Electron           |
-| --------------------- | :---: | :-------------------------: |
-| macOS (Intel)         |  ✅   |         ✅ (legacy)         |
-| macOS (Apple Silicon) |  ✅   |         ✅ (legacy)         |
-| Windows 64-bit        |  ✅   | ⛔ Deprecated (v1.4.1 last) |
-| Linux (x64)           |  ✅   | ⛔ Deprecated (v1.4.1 last) |
+| Platform              | Tauri |
+| --------------------- | :---: |
+| macOS (Intel)         |  ✅   |
+| macOS (Apple Silicon) |  ✅   |
+| Windows 64-bit        |  ✅   |
+| Linux (x64)           |  ✅   |
+
+> **Note:** Electron builds were discontinued after v1.5.1. All releases from v1.5.2 onward are Tauri-only.
 
 ## Roadmap
 
@@ -455,7 +408,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Inspired by [opencode-bar](https://github.com/kargnas/opencode-bar) by kargnas
   - `Previously known as copilot-usage-monitor`
 - UI components from [shadcn/ui](https://ui.shadcn.com/)
-- Built with [Tauri](https://tauri.app/) (v1.4.2+) and [Electron](https://www.electronjs.org/) (legacy macOS)
+- Built with [Tauri](https://tauri.app/)
 
 ## Support
 
