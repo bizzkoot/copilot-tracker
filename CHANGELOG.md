@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.1](https://github.com/bizzkoot/copilot-tracker/compare/v2.1.0...v2.1.1) (2026-02-07)
+
+
+### Bug Fixes
+
+* **ci:** update version sync configuration for future builds ([69940ad](https://github.com/bizzkoot/copilot-tracker/commit/69940ad8d02e75ecbfbae3ce6b9ffbe674fd718d))
+* correct Cargo.toml updater in release-please config ([55de77f](https://github.com/bizzkoot/copilot-tracker/commit/55de77f7024c650be4c2758bca9fcf7473dd03f7))
+
 ## [2.1.0](https://github.com/bizzkoot/copilot-tracker/compare/v2.0.1...v2.1.0) (2026-02-07)
 
 
