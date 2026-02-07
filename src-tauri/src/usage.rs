@@ -230,7 +230,7 @@ impl UsageManager {
     pub fn start_polling(app: AppHandle, interval_seconds: u64) -> tokio::sync::mpsc::Sender<()> {
         let (cancel_tx, mut cancel_rx) = tokio::sync::mpsc::channel::<()>(1);
         
-        tokio::spawn(async move {
+        tauri::async_runtime::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(interval_seconds));
             
             // Skip the first tick (immediate fire)
