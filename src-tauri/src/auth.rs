@@ -585,12 +585,12 @@ impl AuthManager {
             "hidden-auth",
             WebviewUrl::External(url),
         )
-        .title("Hidden Auth")
-        .skip_taskbar(true);
+        .title("Hidden Auth");
 
         // Platform-specific configuration
         #[cfg(target_os = "windows")]
         let builder = builder
+            .skip_taskbar(true)
             .inner_size(1.0, 1.0)
             // Position far off-screen (-32000, -32000) to ensure window is completely hidden
             // Windows coordinates at 0,0 would still be visible on screen, so we use extreme negative values
@@ -599,7 +599,14 @@ impl AuthManager {
             .decorations(false)
             .visible(true);
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(target_os = "macos")]
+        let builder = builder
+            .skip_taskbar(true)
+            .inner_size(10.0, 10.0)
+            .position(-100.0, -100.0)
+            .visible(true);
+
+        #[cfg(target_os = "linux")]
         let builder = builder
             .inner_size(10.0, 10.0)
             .position(-100.0, -100.0)

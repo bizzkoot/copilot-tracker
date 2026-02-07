@@ -859,12 +859,8 @@ fn main() {
     env_logger::init();
 
     // Create tray icon renderer with platform-specific DPI scaling
-    // macOS/Linux: Fixed 2x scale for Retina
-    // Windows: Will be adjusted based on system DPI later
-    #[cfg(target_os = "windows")]
-    let scale_factor = 2; // Default, will adjust after window creation
-    
-    #[cfg(not(target_os = "windows"))]
+    // macOS/Linux: Fixed 2x scale for Retina/HiDPI
+    // Windows: Use 2x for consistency (Tauri handles DPI scaling automatically)
     let scale_factor = 2;
 
     let renderer = TrayIconRenderer::from_font_bytes_with_scale(
@@ -967,7 +963,7 @@ fn main() {
                     "open_dashboard" => {
                         if let Some(window) = app.get_webview_window("main") {
                             // Restore to taskbar/dock before showing
-                            #[cfg(not(target_os = "macos"))]
+                            #[cfg(target_os = "windows")]
                             {
                                 let _ = window.set_skip_taskbar(false);
                             }
@@ -977,6 +973,7 @@ fn main() {
                                 let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
                                 let _ = app.show();
                             }
+                            // Linux doesn't need skipTaskbar manipulation
                             let _ = window.show();
                             let _ = window.set_focus();
                         }
@@ -1014,7 +1011,7 @@ fn main() {
                     "settings" => {
                         if let Some(window) = app.get_webview_window("main") {
                             // Restore to taskbar/dock before showing
-                            #[cfg(not(target_os = "macos"))]
+                            #[cfg(target_os = "windows")]
                             {
                                 let _ = window.set_skip_taskbar(false);
                             }
@@ -1024,6 +1021,7 @@ fn main() {
                                 let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
                                 let _ = app.show();
                             }
+                            // Linux doesn't need skipTaskbar manipulation
                             let _ = window.show();
                             let _ = window.set_focus();
                         }
@@ -1126,11 +1124,13 @@ fn main() {
                             let _ = app_handle.hide();
                         }
                         
-                        // Windows/Linux: Hide from taskbar using skipTaskbar
-                        #[cfg(not(target_os = "macos"))]
+                        // Windows: Hide from taskbar using skipTaskbar
+                        #[cfg(target_os = "windows")]
                         {
                             let _ = window.set_skip_taskbar(true);
                         }
+                        
+                        // Linux: Window manager handles taskbar visibility automatically
                     }
                 }
             });
@@ -1204,12 +1204,10 @@ fn main() {
             drop(latest);
 
             // Show first-run notification on Windows to help users find tray icon
+            // This shows every launch until the user authenticates for the first time
             #[cfg(target_os = "windows")]
             {
                 let store = app.state::<StoreManager>();
-                let settings = store.get_settings();
-                // Check if this is first run (you may want to add a first_run flag to settings)
-                // For now, just show it if not authenticated yet
                 if !store.is_authenticated() {
                     let _ = app
                         .notification()
