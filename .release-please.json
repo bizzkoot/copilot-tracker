@@ -17,18 +17,23 @@
   },
   "changelog-sections": [
     {
-      "type": "conventional-commits",
+      "type": "feat",
       "section": "Features",
       "hidden": false
     },
     {
-      "type": "conventional-commits",
+      "type": "fix",
       "section": "Bug Fixes",
       "hidden": false
     },
     {
-      "type": "conventional-commits",
+      "type": "chore",
       "section": "Other",
+      "hidden": false
+    },
+    {
+      "type": "docs",
+      "section": "Documentation",
       "hidden": false
     }
   ]
