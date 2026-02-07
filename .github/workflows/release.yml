@@ -25,8 +25,8 @@ jobs:
       - uses: googleapis/release-please-action@v4
         id: release
         with:
-          release-type: node
           config-file: .release-please.json
+          manifest-file: .release-please-manifest.json
 
       # Verify all version files are in sync (updated by release-please in the PR)
       - name: Verify version sync
