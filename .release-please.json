@@ -1,23 +1,13 @@
 {
-  "packages": {
-    ".": {
-      "release-type": "node",
-      "extra-files": [
-        {
-          "type": "json",
-          "path": "src-tauri/tauri.conf.json",
-          "jsonpath": "$.version"
-        },
-        "src-tauri/Cargo.toml",
-        "src-tauri/Cargo.lock"
-      ]
-    }
-  },
-  "plugins": [
+  "release-type": "node",
+  "extra-files": [
     {
-      "type": "node-workspace",
-      "path": "."
-    }
+      "type": "json",
+      "path": "src-tauri/tauri.conf.json",
+      "jsonpath": "$.version"
+    },
+    "src-tauri/Cargo.toml",
+    "src-tauri/Cargo.lock"
   ],
   "changelog-sections": [
     {
