@@ -137,6 +137,7 @@ function TableRow({ day, isExpanded, onToggle }: TableRowProps) {
 
 export function HistoryTable({ history, isLoading }: HistoryTableProps) {
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const [isTotalExpanded, setIsTotalExpanded] = useState(false);
 
   const toggleRow = (index: number) => {
     const newExpanded = new Set(expandedRows);
@@ -189,6 +190,39 @@ export function HistoryTable({ history, isLoading }: HistoryTableProps) {
     { total: 0, included: 0, billed: 0, amount: 0 },
   );
 
+  // Calculate model totals
+  const modelTotals = history.days.reduce(
+    (acc, day) => {
+      day.models?.forEach((model) => {
+        if (!acc[model.name]) {
+          acc[model.name] = {
+            name: model.name,
+            includedRequests: 0,
+            billedRequests: 0,
+            billedAmount: 0,
+          };
+        }
+        acc[model.name].includedRequests += model.includedRequests;
+        acc[model.name].billedRequests += model.billedRequests;
+        acc[model.name].billedAmount += model.billedAmount;
+      });
+      return acc;
+    },
+    {} as Record<
+      string,
+      {
+        name: string;
+        includedRequests: number;
+        billedRequests: number;
+        billedAmount: number;
+      }
+    >,
+  );
+
+  const sortedModelTotals = Object.values(modelTotals).sort(
+    (a, b) => b.billedAmount - a.billedAmount,
+  );
+
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -222,8 +256,22 @@ export function HistoryTable({ history, isLoading }: HistoryTableProps) {
               ))}
             </tbody>
             <tfoot>
-              <tr className="border-t-2 border-border bg-muted/30 font-medium">
-                <td className="py-3 px-4">Total</td>
+              <tr
+                className={`border-t-2 border-border font-medium cursor-pointer hover:bg-muted/50 transition-colors ${isTotalExpanded ? "bg-muted/30" : "bg-muted/30"}`}
+                onClick={() => setIsTotalExpanded(!isTotalExpanded)}
+              >
+                <td className="py-3 px-4 flex items-center gap-2">
+                  {sortedModelTotals.length > 0 ? (
+                    isTotalExpanded ? (
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    )
+                  ) : (
+                    <span className="w-4" />
+                  )}
+                  <span>Total</span>
+                </td>
                 <td className="py-3 px-4 text-right">
                   {totals.total.toLocaleString()}
                 </td>
@@ -249,6 +297,49 @@ export function HistoryTable({ history, isLoading }: HistoryTableProps) {
                   )}
                 </td>
               </tr>
+              {isTotalExpanded && sortedModelTotals.length > 0 && (
+                <tr className="bg-muted/20">
+                  <td colSpan={5} className="p-0">
+                    <div className="px-4 py-2 pl-12">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-xs text-muted-foreground border-b border-border/50">
+                            <th className="py-2 text-left font-medium">Model</th>
+                            <th className="py-2 text-right font-medium">
+                              Included
+                            </th>
+                            <th className="py-2 text-right font-medium">
+                              Billed
+                            </th>
+                            <th className="py-2 text-right font-medium">Cost</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sortedModelTotals.map((model, idx) => (
+                            <tr
+                              key={idx}
+                              className="border-b border-border/20 last:border-0 hover:bg-muted/30"
+                            >
+                              <td className="py-2 text-muted-foreground">
+                                {model.name}
+                              </td>
+                              <td className="py-2 text-right text-muted-foreground">
+                                {model.includedRequests.toLocaleString()}
+                              </td>
+                              <td className="py-2 text-right text-muted-foreground">
+                                {model.billedRequests.toLocaleString()}
+                              </td>
+                              <td className="py-2 text-right text-muted-foreground">
+                                {formatCurrency(model.billedAmount)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </td>
+                </tr>
+              )}
             </tfoot>
           </table>
         </div>
