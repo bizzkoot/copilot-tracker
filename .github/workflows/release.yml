@@ -8,19 +8,32 @@ on:
   push:
     branches:
       - main
+  schedule:
+    # Run every hour to check for release PRs
+    - cron: '0 * * * *'
+  workflow_dispatch:
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
-    # CONTROL: Only run if 'release' is in the commit message
-    if: contains(github.event.head_commit.message, 'release')
+    # Only run on schedule or manual dispatch (for PR creation)
+    # OR if 'release' is in the commit message (for publishing releases)
+    if: |
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.head_commit.message, 'release')
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
       upload_url: ${{ steps.release.outputs.upload_url }}
+      pr_created: ${{ steps.release.outputs.pr_created }}
+      pr_number: ${{ steps.release.outputs.pr_number }}
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v4
+        with:
+          # Fetch all history for proper version calculation
+          fetch-depth: 0
 
       - uses: googleapis/release-please-action@v4
         id: release
@@ -28,11 +41,249 @@ jobs:
           config-file: .release-please.json
           manifest-file: .release-please-manifest.json
 
-      # Verify all version files are in sync (updated by release-please in the PR)
-      - name: Verify version sync
-        if: steps.release.outputs.release_created
+  # ============================================================================
+  # Format Release PR - Build, format, and commit to PR
+  # ============================================================================
+  format-release-pr:
+    needs: release-please
+    # Only run if a PR was created by release-please
+    if: ${{ needs.release-please.outputs.pr_created }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+        with:
+          # Checkout the PR branch directly (not merge commit)
+          ref: refs/pull/${{ needs.release-please.outputs.pr_number }}/head
+          fetch-depth: 0
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project (updates lock files)
+        run: npm run build
+
+      - name: Run formatting (after build)
+        run: npm run format
+
+      - name: Commit all changes (build + format)
         run: |
-          EXPECTED_VERSION=${{ steps.release.outputs.tag_name }}
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add -A
+          git diff --staged --quiet || git commit -m "style: apply formatting after version update and build"
+          git push
+
+  # ============================================================================
+  # Validate Release PR - Comprehensive checks before merge
+  # ============================================================================
+  validate-release-pr:
+    needs: [release-please, format-release-pr]
+    # Only run if formatting was successful
+    if: ${{ needs.format-release-pr.result == 'success' }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+        with:
+          # Checkout the PR branch
+          ref: refs/pull/${{ needs.release-please.outputs.pr_number }}/head
+          fetch-depth: 0
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install Rust (non-Windows)
+        if: runner.os != 'Windows'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Rust (Windows)
+        if: runner.os == 'Windows'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install System Dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run TypeScript type checking
+        run: npm run typecheck
+
+      - name: Verify version sync
+        run: |
+          EXPECTED_VERSION=$(jq -r '.version' package.json)
+          echo "=== Version Verification ==="
+          echo "Expected version: $EXPECTED_VERSION"
+          echo ""
+
+          # Check all version files match package.json
+          PKG_VERSION=$(jq -r '.version' package.json)
+          TAURI_CONF_VERSION=$(jq -r '.version' src-tauri/tauri.conf.json)
+          CARGO_VERSION=$(grep '^version = ' src-tauri/Cargo.toml | head -1 | sed 's/version = "\([^"]*\)".*/\1/')
+
+          echo "✓ package.json: $PKG_VERSION"
+          echo "✓ tauri.conf.json: $TAURI_CONF_VERSION"
+          echo "✓ Cargo.toml: $CARGO_VERSION"
+          echo ""
+
+          FAILED=false
+
+          if [ "$PKG_VERSION" != "$EXPECTED_VERSION" ]; then
+            echo "❌ FAILED: package.json version mismatch"
+            FAILED=true
+          fi
+
+          if [ "$TAURI_CONF_VERSION" != "$EXPECTED_VERSION" ]; then
+            echo "❌ FAILED: tauri.conf.json version mismatch"
+            FAILED=true
+          fi
+
+          if [ "$CARGO_VERSION" != "$EXPECTED_VERSION" ]; then
+            echo "❌ FAILED: Cargo.toml version mismatch"
+            FAILED=true
+          fi
+
+          if [ "$FAILED" = true ]; then
+            echo ""
+            echo "🛑 Version sync verification FAILED!"
+            exit 1
+          fi
+
+          echo "✅ All versions verified successfully!"
+
+      - name: Run ESLint
+        run: npm run lint
+        continue-on-error: false
+
+      - name: Dry run build - Frontend
+        run: npm run build
+
+      - name: Dry run build - Rust compilation check
+        run: |
+          cd src-tauri
+          cargo check --all-targets --all-features
+
+      - name: Report validation status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ All validation checks passed on ${{ matrix.os }}"
+          else
+            echo "❌ Validation failed on ${{ matrix.os }}"
+            exit 1
+          fi
+
+  # ============================================================================
+  # Post Validation Summary to PR
+  # ============================================================================
+  post-validation-summary:
+    needs: [release-please, validate-release-pr]
+    # Run after validation, regardless of result
+    if: always() && needs.release-please.outputs.pr_created
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Generate validation summary
+        id: summary
+        run: |
+          if [ "${{ needs.validate-release-pr.result }}" == "success" ]; then
+            echo "summary=✅ **All validation checks passed!**" >> $GITHUB_OUTPUT
+            echo "details=<br><br>### Validation Results<br>✅ TypeScript type checking<br>✅ ESLint<br>✅ Version sync<br>✅ Frontend build<br>✅ Rust compilation (all platforms)" >> $GITHUB_OUTPUT
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "summary=❌ **Validation checks failed**" >> $GITHUB_OUTPUT
+            echo "details=<br><br>### Validation Results<br>⚠️ Some validation checks failed. Please check the workflow logs for details.<br><br>**Failed checks may include:**<br>- TypeScript type errors<br>- ESLint violations<br>- Version sync issues<br>- Build failures<br>- Rust compilation errors" >> $GITHUB_OUTPUT
+            echo "status=failure" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Find comment
+        uses: peter-evans/find-comment@v3
+        id: find-comment
+        with:
+          issue-number: ${{ needs.release-please.outputs.pr_number }}
+          comment-author: 'github-actions[bot]'
+          body-includes: '<!-- validation-summary -->'
+
+      - name: Create or update comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.find-comment.outputs.comment-id }}
+          issue-number: ${{ needs.release-please.outputs.pr_number }}
+          edit-mode: replace
+          body: |
+            <!-- validation-summary -->
+            ## Release PR Validation ${{ steps.summary.outputs.summary }}
+
+            ${{ steps.summary.outputs.details }}
+
+            <details>
+            <summary>View detailed workflow logs</summary>
+
+            - [TypeScript](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            - [ESLint](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            - [Build](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+            </details>
+
+            ---
+            *This comment is automatically updated by the validation workflow.*
+
+      - name: Fail workflow if validation failed
+        if: steps.summary.outputs.status == 'failure'
+        run: exit 1
+
+  # ============================================================================
+  # Verify version sync (for release publishing)
+  # ============================================================================
+  verify-versions:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
+    runs-on: ubuntu-latest
+    outputs:
+      verified: ${{ steps.verify.outputs.verified }}
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+
+      - name: Verify version sync
+        id: verify
+        run: |
+          EXPECTED_VERSION=${{ needs.release-please.outputs.tag_name }}
           EXPECTED_VERSION=${EXPECTED_VERSION#v}
 
           echo "=== Version Verification Report ==="
@@ -87,12 +338,13 @@ jobs:
 
           echo ""
           echo "✅ All critical versions verified successfully!"
+          echo "verified=true" >> $GITHUB_OUTPUT
 
   # ============================================================================
   # Tauri Builds (All Platforms - Unsigned)
   # ============================================================================
   build-tauri:
-    needs: release-please
+    needs: [release-please, verify-versions]
     if: ${{ needs.release-please.outputs.release_created }}
     runs-on: ${{ matrix.os }}
     strategy:
