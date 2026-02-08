@@ -207,9 +207,20 @@ impl UsageManager {
         let mut entries: Vec<UsageEntry> = rows
             .iter()
             .map(|row| {
-                let timestamp = chrono::DateTime::parse_from_rfc3339(&row.date)
-                    .map(|dt| dt.timestamp())
-                    .unwrap_or_else(|_| chrono::Utc::now().timestamp());
+                // Try to parse the date string in multiple formats
+                let timestamp = if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&row.date) {
+                    dt.timestamp()
+                } else {
+                    // Try parsing the format from GitHub: "2026-02-01 00:00:00 +0000 UTC"
+                    // We can just grab the first part "2026-02-01" since the time is usually 00:00:00
+                    let date_part = row.date.split(' ').next().unwrap_or("");
+                    if let Ok(naive_date) = chrono::NaiveDate::parse_from_str(date_part, "%Y-%m-%d") {
+                        naive_date.and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp()
+                    } else {
+                        log::warn!("Failed to parse date: '{}', using current time", row.date);
+                        chrono::Utc::now().timestamp()
+                    }
+                };
                 UsageEntry {
                     timestamp,
                     used: row.included_requests + row.billed_requests,

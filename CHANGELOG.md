@@ -2,71 +2,63 @@
 
 ## [2.1.2](https://github.com/bizzkoot/copilot-tracker/compare/v2.1.1...v2.1.2) (2026-02-07)
 
-
 ### Bug Fixes
 
-* **ci:** correct version extraction regex in release workflow ([3b464de](https://github.com/bizzkoot/copilot-tracker/commit/3b464de3414e5d557cd671cafee52efb2baa8da9))
-* **ci:** release - correct version verification regex and non-blocking Cargo.lock check ([1f1287e](https://github.com/bizzkoot/copilot-tracker/commit/1f1287e718ed9970cc734142b83dc78f7d633ae8))
+- **ci:** correct version extraction regex in release workflow ([3b464de](https://github.com/bizzkoot/copilot-tracker/commit/3b464de3414e5d557cd671cafee52efb2baa8da9))
+- **ci:** release - correct version verification regex and non-blocking Cargo.lock check ([1f1287e](https://github.com/bizzkoot/copilot-tracker/commit/1f1287e718ed9970cc734142b83dc78f7d633ae8))
 
 ## [2.1.1](https://github.com/bizzkoot/copilot-tracker/compare/v2.1.0...v2.1.1) (2026-02-07)
 
-
 ### Bug Fixes
 
-* add x-release-please-version marker to Cargo.toml ([b8ed7dd](https://github.com/bizzkoot/copilot-tracker/commit/b8ed7dd4dbcb2404f627a09d0a3a7c78f4ad00b2))
-* **ci:** add bootstrap-sha to release-please config ([5ad5285](https://github.com/bizzkoot/copilot-tracker/commit/5ad5285039d23453d7c30606407d3c62e53bc078))
-* **ci:** correct changelog-sections configuration ([737172f](https://github.com/bizzkoot/copilot-tracker/commit/737172f592d2b754217871a1f3d5154a500d8523))
-* **ci:** correct release-please tag naming convention ([d5358ae](https://github.com/bizzkoot/copilot-tracker/commit/d5358ae0efd07d47df87c4629de56b868385df33))
-* **ci:** switch to release-please Manifest Mode ([c733f25](https://github.com/bizzkoot/copilot-tracker/commit/c733f25923df49a767684ec82bc821ef3a541fc4))
-* **ci:** update bootstrap-sha to skip breaking change ([d853635](https://github.com/bizzkoot/copilot-tracker/commit/d853635efb6781adca4fd482c0e00b4839eb0584))
-* **ci:** update version sync configuration for future builds ([69940ad](https://github.com/bizzkoot/copilot-tracker/commit/69940ad8d02e75ecbfbae3ce6b9ffbe674fd718d))
-* correct Cargo.toml updater in release-please config ([55de77f](https://github.com/bizzkoot/copilot-tracker/commit/55de77f7024c650be4c2758bca9fcf7473dd03f7))
-* **docs:** correct capitalization in README features list ([f980221](https://github.com/bizzkoot/copilot-tracker/commit/f9802214b5848ced2586c2134f21100d0d18561b))
-* switch release-please config to Single Package Mode ([3e9d766](https://github.com/bizzkoot/copilot-tracker/commit/3e9d76642977fe777b49037b586d91c0f507f03b))
-* **ui:** improve error message when usage data is unavailable ([72aefd2](https://github.com/bizzkoot/copilot-tracker/commit/72aefd2f8aea44bd4d8a482e6b2b38ced863e26f))
+- add x-release-please-version marker to Cargo.toml ([b8ed7dd](https://github.com/bizzkoot/copilot-tracker/commit/b8ed7dd4dbcb2404f627a09d0a3a7c78f4ad00b2))
+- **ci:** add bootstrap-sha to release-please config ([5ad5285](https://github.com/bizzkoot/copilot-tracker/commit/5ad5285039d23453d7c30606407d3c62e53bc078))
+- **ci:** correct changelog-sections configuration ([737172f](https://github.com/bizzkoot/copilot-tracker/commit/737172f592d2b754217871a1f3d5154a500d8523))
+- **ci:** correct release-please tag naming convention ([d5358ae](https://github.com/bizzkoot/copilot-tracker/commit/d5358ae0efd07d47df87c4629de56b868385df33))
+- **ci:** switch to release-please Manifest Mode ([c733f25](https://github.com/bizzkoot/copilot-tracker/commit/c733f25923df49a767684ec82bc821ef3a541fc4))
+- **ci:** update bootstrap-sha to skip breaking change ([d853635](https://github.com/bizzkoot/copilot-tracker/commit/d853635efb6781adca4fd482c0e00b4839eb0584))
+- **ci:** update version sync configuration for future builds ([69940ad](https://github.com/bizzkoot/copilot-tracker/commit/69940ad8d02e75ecbfbae3ce6b9ffbe674fd718d))
+- correct Cargo.toml updater in release-please config ([55de77f](https://github.com/bizzkoot/copilot-tracker/commit/55de77f7024c650be4c2758bca9fcf7473dd03f7))
+- **docs:** correct capitalization in README features list ([f980221](https://github.com/bizzkoot/copilot-tracker/commit/f9802214b5848ced2586c2134f21100d0d18561b))
+- switch release-please config to Single Package Mode ([3e9d766](https://github.com/bizzkoot/copilot-tracker/commit/3e9d76642977fe777b49037b586d91c0f507f03b))
+- **ui:** improve error message when usage data is unavailable ([72aefd2](https://github.com/bizzkoot/copilot-tracker/commit/72aefd2f8aea44bd4d8a482e6b2b38ced863e26f))
 
 ## [2.1.0](https://github.com/bizzkoot/copilot-tracker/compare/v2.0.1...v2.1.0) (2026-02-07)
 
-
 ### Features
 
-* **polling:** add dynamic background polling with lifecycle management ([f07bc53](https://github.com/bizzkoot/copilot-tracker/commit/f07bc53247f7665208a857ae5f8cd7aefd05a9e4))
-
+- **polling:** add dynamic background polling with lifecycle management ([f07bc53](https://github.com/bizzkoot/copilot-tracker/commit/f07bc53247f7665208a857ae5f8cd7aefd05a9e4))
 
 ### Bug Fixes
 
-* **platform:** resolve Linux window management and improve cross-platform compatibility ([f4102f3](https://github.com/bizzkoot/copilot-tracker/commit/f4102f3adf3f4da121fc284cd8f647f7010c0a30))
-* **runtime:** use tauri::async_runtime::spawn instead of tokio::spawn ([45985a3](https://github.com/bizzkoot/copilot-tracker/commit/45985a32da7f820bf652fec0b35e71b9520fb9a8))
+- **platform:** resolve Linux window management and improve cross-platform compatibility ([f4102f3](https://github.com/bizzkoot/copilot-tracker/commit/f4102f3adf3f4da121fc284cd8f647f7010c0a30))
+- **runtime:** use tauri::async_runtime::spawn instead of tokio::spawn ([45985a3](https://github.com/bizzkoot/copilot-tracker/commit/45985a32da7f820bf652fec0b35e71b9520fb9a8))
 
 ## [2.0.1](https://github.com/bizzkoot/copilot-tracker/compare/v2.0.0...v2.0.1) (2026-02-07)
 
-
 ### Bug Fixes
 
-* sync Tauri version to 2.0.0 and add automated version sync workflow ([a6d0a19](https://github.com/bizzkoot/copilot-tracker/commit/a6d0a19950fa8268423528ca1e3c73bc40bbe46d))
+- sync Tauri version to 2.0.0 and add automated version sync workflow ([a6d0a19](https://github.com/bizzkoot/copilot-tracker/commit/a6d0a19950fa8268423528ca1e3c73bc40bbe46d))
 
 ## [2.0.0](https://github.com/bizzkoot/copilot-tracker/compare/v1.5.1...v2.0.0) (2026-02-07)
 
-
 ### ⚠ BREAKING CHANGES
 
-* Electron builds discontinued after v1.5.1
+- Electron builds discontinued after v1.5.1
 
 ### Features
 
-* add customizable tray icon display formats ([6972b39](https://github.com/bizzkoot/copilot-tracker/commit/6972b39a8342c72138337f87849da9327b6228d4))
-* **tray:** enhance system tray menu with consumption metrics ([6ca57f4](https://github.com/bizzkoot/copilot-tracker/commit/6ca57f4801625ee7c798fab07b64ba0df014a2ad))
-
+- add customizable tray icon display formats ([6972b39](https://github.com/bizzkoot/copilot-tracker/commit/6972b39a8342c72138337f87849da9327b6228d4))
+- **tray:** enhance system tray menu with consumption metrics ([6ca57f4](https://github.com/bizzkoot/copilot-tracker/commit/6ca57f4801625ee7c798fab07b64ba0df014a2ad))
 
 ### Bug Fixes
 
-* explicitly specify TOML type and jsonpath for Cargo.toml ([33fe842](https://github.com/bizzkoot/copilot-tracker/commit/33fe842fe17c75eb132a35e5ea8d2c2e803389c5))
-* sync version to 1.5.1 and improve cross-platform compatibility ([e9abcfd](https://github.com/bizzkoot/copilot-tracker/commit/e9abcfd508d1ff9eab11345ae98a236af378c5ae))
-
+- explicitly specify TOML type and jsonpath for Cargo.toml ([33fe842](https://github.com/bizzkoot/copilot-tracker/commit/33fe842fe17c75eb132a35e5ea8d2c2e803389c5))
+- sync version to 1.5.1 and improve cross-platform compatibility ([e9abcfd](https://github.com/bizzkoot/copilot-tracker/commit/e9abcfd508d1ff9eab11345ae98a236af378c5ae))
 
 ### Continuous Integration
 
-* remove Electron builds and update release workflow ([c5aacbf](https://github.com/bizzkoot/copilot-tracker/commit/c5aacbf198a7f243add9b2161f53fe2fad00959e))
+- remove Electron builds and update release workflow ([c5aacbf](https://github.com/bizzkoot/copilot-tracker/commit/c5aacbf198a7f243add9b2161f53fe2fad00959e))
 
 ## [1.5.1](https://github.com/bizzkoot/copilot-tracker/compare/v1.5.0...v1.5.1) (2026-02-05)
 

@@ -16,7 +16,6 @@ export function useUsage() {
     isLoading,
     error,
     lastUpdated,
-    authState,
     setUsageData,
     setIsLoading,
     setError,
@@ -24,7 +23,7 @@ export function useUsage() {
   } = useUsageStore();
 
   const predictionPeriod = useSettingsStore((state) => state.predictionPeriod);
-  const refreshInterval = useSettingsStore((state) => state.refreshInterval);
+  // refreshInterval is managed by the main process, not needed here
 
   // Update prediction when usage, history, or period changes
   useEffect(() => {
@@ -86,7 +85,24 @@ export function useUsage() {
 
     // Listen for usage data
     const unsubUsage = window.electron.onUsageData?.((data) => {
+      console.log("[FRONTEND] Received usage data:", data);
+
+      // DEBUG: Log raw rows from backend if available
+      if (data.debugRawRows) {
+        console.log(
+          "[FRONTEND] RAW ROWS FROM API:",
+          JSON.stringify(data.debugRawRows, null, 2),
+        );
+      }
+
       if (data.success) {
+        if (data.history && data.history.days) {
+          console.log("[FRONTEND] History days:", data.history.days);
+          console.log(
+            "[FRONTEND] Dates:",
+            data.history.days.map((d) => String(d.date)),
+          );
+        }
         setUsageData({
           usage: data.usage,
           history: data.history,
@@ -108,16 +124,8 @@ export function useUsage() {
     };
   }, [setUsageData, setError, setIsLoading]);
 
-  // Auto-refresh on interval
-  useEffect(() => {
-    if (authState !== "authenticated") return;
-
-    const intervalId = setInterval(() => {
-      refresh();
-    }, refreshInterval * 1000);
-
-    return () => clearInterval(intervalId);
-  }, [authState, refreshInterval, refresh]);
+  // Auto-refresh is handled by the main process timer
+  // The renderer receives updates via IPC, no need for a separate timer
 
   return {
     usage,

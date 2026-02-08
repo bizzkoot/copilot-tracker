@@ -608,7 +608,7 @@ dependencies = [
 
 [[package]]
 name = "copilot-tracker"
-version = "2.1.0"
+version = "2.1.2"
 dependencies = [
  "chrono",
  "env_logger",

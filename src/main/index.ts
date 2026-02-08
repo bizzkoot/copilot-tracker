@@ -62,6 +62,25 @@ interface UsagePrediction {
   daysUsedForPrediction: number;
 }
 
+interface HistoryCell {
+  value?: string | number;
+  sortValue?: string | number;
+  text?: string | number;
+}
+
+interface HistoryRow {
+  cells?: HistoryCell[];
+  date?: string;
+  included_requests?: number;
+  includedRequests?: number;
+  billed_requests?: number;
+  billedRequests?: number;
+  gross_amount?: number;
+  grossAmount?: number;
+  billed_amount?: number;
+  billedAmount?: number;
+}
+
 // Constants
 const DEFAULT_SETTINGS: Settings = {
   refreshInterval: 60,
@@ -99,6 +118,19 @@ let usagePrediction: UsagePrediction | null = null;
 let trayBaseIconBuffer: Buffer | null = null;
 let availableUpdate: { version: string; url: string } | null = null;
 let isInitialStartup = true; // Track if this is the first app launch
+
+// Tray menu interaction tracking to prevent menu dismissal
+// On macOS, any tray update (menu, icon, tooltip) while menu is open will dismiss it
+const MENU_BLOCK_DURATION_MS = 1500; // Time to block updates after menu interaction
+let lastMenuInteractionTime = 0;
+let pendingTrayUpdate = false;
+let pendingTrayUsage: CopilotUsage | null = null;
+
+// Track last menu state to avoid unnecessary rebuilds
+let lastMenuUsage: CopilotUsage | null = null;
+let lastMenuHistory: UsageHistory | null = null;
+let lastMenuPrediction: UsagePrediction | null = null;
+let lastAvailableUpdate: { version: string; url: string } | null = null;
 let authWindowClosedByAuth = false; // Track if auth window was closed due to successful auth detection
 let currentAuthState:
   | "authenticated"
@@ -347,6 +379,9 @@ function createTray(): void {
   updateTrayMenu();
 
   tray.on("click", () => {
+    // Track menu interaction to prevent updates from dismissing the menu
+    lastMenuInteractionTime = Date.now();
+
     if (process.platform === "darwin") {
       // On macOS, clicking the tray icon shows the menu
     } else {
@@ -360,8 +395,69 @@ function createTray(): void {
   });
 }
 
+function applyPendingTrayUpdate(): void {
+  if (pendingTrayUpdate && tray) {
+    devLog.log("[Tray] Applying pending update after menu block period");
+    pendingTrayUpdate = false;
+    updateTrayMenu(pendingTrayUsage);
+    pendingTrayUsage = null;
+  }
+}
+
 function updateTrayMenu(usage?: CopilotUsage | null): void {
   if (!tray) return;
+
+  // Check if we should block updates due to recent menu interaction
+  // On macOS, any tray operation (setContextMenu, setImage, setToolTip) will dismiss an open menu
+  const timeSinceMenuInteraction = Date.now() - lastMenuInteractionTime;
+  if (timeSinceMenuInteraction < MENU_BLOCK_DURATION_MS) {
+    // Menu was recently opened - defer this update
+    devLog.log(
+      `[Tray] Deferring update - menu interaction ${timeSinceMenuInteraction}ms ago`,
+    );
+    pendingTrayUpdate = true;
+    pendingTrayUsage = usage ?? null;
+
+    // Schedule the update after the block period expires
+    setTimeout(
+      () => {
+        applyPendingTrayUpdate();
+      },
+      MENU_BLOCK_DURATION_MS - timeSinceMenuInteraction + 100,
+    ); // +100ms buffer
+
+    return;
+  }
+
+  // Check if data actually changed to avoid unnecessary menu rebuilds
+  const usageChanged = JSON.stringify(usage) !== JSON.stringify(lastMenuUsage);
+  const historyChanged =
+    JSON.stringify(usageHistory) !== JSON.stringify(lastMenuHistory);
+  const predictionChanged =
+    JSON.stringify(usagePrediction) !== JSON.stringify(lastMenuPrediction);
+  const updateChanged =
+    JSON.stringify(availableUpdate) !== JSON.stringify(lastAvailableUpdate);
+
+  // Only rebuild menu if data changed or menu hasn't been built yet
+  const shouldRebuildMenu =
+    usageChanged ||
+    historyChanged ||
+    predictionChanged ||
+    updateChanged ||
+    !lastMenuUsage;
+
+  if (!shouldRebuildMenu) {
+    // Data hasn't changed, skip all updates
+    return;
+  }
+
+  // Store current data for next comparison
+  lastMenuUsage = usage ? { ...usage } : null;
+  lastMenuHistory = usageHistory
+    ? { ...usageHistory, days: usageHistory.days ? [...usageHistory.days] : [] }
+    : null;
+  lastMenuPrediction = usagePrediction ? { ...usagePrediction } : null;
+  lastAvailableUpdate = availableUpdate ? { ...availableUpdate } : null;
 
   const settings = store.get("settings") as Settings;
   const version = app.getVersion() || "0.0.1";
@@ -862,7 +958,6 @@ function createTrayIconWithNumbers(
       // Draw icon at 16x16 size
       ctx.drawImage(img, 0, 0, size, size);
       iconLoaded = true;
-      // console.log("[TrayIcon] Base icon loaded successfully");
     } catch (e) {
       devLog.log("[TrayIcon] Failed to load base icon:", e);
     }
@@ -1338,35 +1433,40 @@ async function getCustomerId(): Promise<number | null> {
 }
 
 async function fetchUsageData(): Promise<void> {
-  if (!authView || !mainWindow) return;
-
-  // Prevent aggressive unauthenticated fetch loops by requiring an authenticated state
-  if (currentAuthState !== "authenticated") {
-    devLog.log("[Usage] Skipping fetchUsageData - not authenticated");
-    mainWindow.webContents.send("usage:data", {
-      success: false,
-      error: "Not authenticated",
-    });
-    return;
-  }
-
-  devLog.log("[Usage] Starting fetchUsageData");
-  mainWindow.webContents.send("usage:loading", true);
-
+  // Wrap entire function in try-catch to ensure all errors are handled
   try {
-    const id = await getCustomerId();
-    devLog.log("[Usage] Got customer ID:", id);
-    if (!id) {
+    if (!authView || !mainWindow) {
+      devLog.error("[Usage] Cannot fetch - authView or mainWindow is null");
+      return;
+    }
+
+    // Prevent aggressive unauthenticated fetch loops by requiring an authenticated state
+    if (currentAuthState !== "authenticated") {
+      devLog.log("[Usage] Skipping fetchUsageData - not authenticated");
       mainWindow.webContents.send("usage:data", {
         success: false,
-        error: "Could not get customer ID. Please log in again.",
+        error: "Not authenticated",
       });
       return;
     }
 
-    // Fetch usage card
-    devLog.log("[Usage] Fetching usage card for customer:", id);
-    const usageResult = await authView.webContents.executeJavaScript(`
+    devLog.log("[Usage] Starting fetchUsageData");
+    mainWindow.webContents.send("usage:loading", true);
+
+    try {
+      const id = await getCustomerId();
+      devLog.log("[Usage] Got customer ID:", id);
+      if (!id) {
+        mainWindow.webContents.send("usage:data", {
+          success: false,
+          error: "Could not get customer ID. Please log in again.",
+        });
+        return;
+      }
+
+      // Fetch usage card
+      devLog.log("[Usage] Fetching usage card for customer:", id);
+      const usageResult = await authView.webContents.executeJavaScript(`
       (async function() {
         try {
           const res = await fetch('/settings/billing/copilot_usage_card?customer_id=${id}&period=3', {
@@ -1384,23 +1484,23 @@ async function fetchUsageData(): Promise<void> {
       })()
     `);
 
-    const usageParsed = JSON.parse(usageResult);
-    console.log(
-      "[Usage] Usage card parsed:",
-      usageParsed.success ? "success" : "failed",
-      usageParsed.error || "",
-    );
-    if (!usageParsed.success) {
-      mainWindow.webContents.send("usage:data", {
-        success: false,
-        error: usageParsed.error,
-      });
-      return;
-    }
+      const usageParsed = JSON.parse(usageResult);
+      devLog.log(
+        "[Usage] Usage card parsed:",
+        usageParsed.success ? "success" : "failed",
+        usageParsed.error || "",
+      );
+      if (!usageParsed.success) {
+        mainWindow.webContents.send("usage:data", {
+          success: false,
+          error: usageParsed.error,
+        });
+        return;
+      }
 
-    // Fetch usage history
-    devLog.log("[Usage] Fetching usage history");
-    const historyResult = await authView.webContents.executeJavaScript(`
+      // Fetch usage history
+      devLog.log("[Usage] Fetching usage history");
+      const historyResult = await authView.webContents.executeJavaScript(`
       (async function() {
         try {
           const res = await fetch('/settings/billing/copilot_usage_table?customer_id=${id}&group=0&period=3&query=&page=1', {
@@ -1418,184 +1518,299 @@ async function fetchUsageData(): Promise<void> {
       })()
     `);
 
-    const historyParsed = JSON.parse(historyResult);
-    devLog.log(
-      "[Usage] History parsed:",
-      historyParsed.success ? "success" : "failed",
-    );
-
-    // DEBUG: Log raw history data structure
-    if (historyParsed.success && historyParsed.data) {
-      const rawHistory = historyParsed.data;
+      const historyParsed = JSON.parse(historyResult);
       devLog.log(
-        "[Usage] History data keys:",
-        Object.keys(rawHistory).join(", "),
-      );
-      devLog.log(
-        "[Usage] History has 'table' field?:",
-        Object.prototype.hasOwnProperty.call(rawHistory, "table"),
-      );
-      devLog.log(
-        "[Usage] History has 'rows' field?:",
-        Object.prototype.hasOwnProperty.call(rawHistory, "rows"),
+        "[Usage] History parsed:",
+        historyParsed.success ? "success" : "failed",
       );
 
-      // Check for nested table.rows structure
-      if (rawHistory.table && rawHistory.table.rows) {
-        devLog.log("[Usage] Found table.rows structure");
+      // DEBUG: Log raw history data structure
+      if (historyParsed.success && historyParsed.data) {
+        const rawHistory = historyParsed.data;
         devLog.log(
-          "[Usage] Number of history rows:",
-          rawHistory.table.rows.length,
+          "[Usage] History data keys:",
+          Object.keys(rawHistory).join(", "),
         );
-        if (rawHistory.table.rows.length > 0) {
+        devLog.log(
+          "[Usage] History has 'table' field?:",
+          Object.prototype.hasOwnProperty.call(rawHistory, "table"),
+        );
+        devLog.log(
+          "[Usage] History has 'rows' field?:",
+          Object.prototype.hasOwnProperty.call(rawHistory, "rows"),
+        );
+
+        // Check for nested table.rows structure
+        if (rawHistory.table && rawHistory.table.rows) {
+          devLog.log("[Usage] Found table.rows structure");
           devLog.log(
-            "[Usage] First row sample:",
-            JSON.stringify(rawHistory.table.rows[0]).slice(0, 200),
+            "[Usage] Number of history rows:",
+            rawHistory.table.rows.length,
           );
-        }
-      } else if (rawHistory.rows) {
-        devLog.log("[Usage] Number of history rows:", rawHistory.rows.length);
-        if (rawHistory.rows.length > 0) {
-          devLog.log(
-            "[Usage] First row sample:",
-            JSON.stringify(rawHistory.rows[0]).slice(0, 200),
-          );
-        }
-      }
-    } else {
-      devLog.log("[Usage] History data missing or failed:", historyParsed);
-    }
-
-    // Parse usage data
-    const usageData = usageParsed.data;
-    devLog.log(
-      "[Usage] Raw usage data keys:",
-      Object.keys(usageData).join(", "),
-    );
-    devLog.log("[Usage] Sample values:", {
-      netBilledAmount:
-        usageData.netBilledAmount ?? usageData.net_billed_amount ?? "missing",
-      discountQuantity:
-        usageData.discountQuantity ?? usageData.discount_quantity ?? "missing",
-      entitlement:
-        usageData.userPremiumRequestEntitlement ??
-        usageData.user_premium_request_entitlement ??
-        "missing",
-    });
-
-    const usage: CopilotUsage = {
-      netBilledAmount:
-        usageData.netBilledAmount ?? usageData.net_billed_amount ?? 0,
-      netQuantity: usageData.netQuantity ?? usageData.net_quantity ?? 0,
-      discountQuantity:
-        usageData.discountQuantity ?? usageData.discount_quantity ?? 0,
-      userPremiumRequestEntitlement:
-        usageData.userPremiumRequestEntitlement ??
-        usageData.user_premium_request_entitlement ??
-        0,
-      filteredUserPremiumRequestEntitlement:
-        usageData.filteredUserPremiumRequestEntitlement ??
-        usageData.filtered_user_premium_request_entitlement ??
-        0,
-    };
-    devLog.log("[Usage] Parsed usage:", usage);
-
-    // Parse history data - handle nested table.rows.cells structure
-    const historyData = historyParsed.success
-      ? historyParsed.data
-      : { table: { rows: [] } };
-
-    // Extract rows from either table.rows or rows directly
-    const rawRows = historyData.table?.rows || historyData.rows || [];
-
-    const history: UsageHistory = {
-      fetchedAt: new Date().toISOString(),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      days: rawRows.map((row: any) => {
-        // Handle Swift-style nested cells structure
-        if (row.cells && Array.isArray(row.cells)) {
-          const cells = row.cells;
-
-          // Helper to parse cell value
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const parseCell = (cell: any): number => {
-            if (!cell) return 0;
-            const value = cell.value || cell.sortValue || "";
-            if (typeof value === "number") return value;
-            if (typeof value === "string") {
-              // Remove commas and currency symbols
-              const cleaned = value.replace(/[$,]/g, "");
-              return parseFloat(cleaned) || 0;
+          if (rawHistory.table.rows.length > 0) {
+            // Log full first row structure
+            devLog.log(
+              "[Usage] FULL First row:",
+              JSON.stringify(rawHistory.table.rows[0], null, 2),
+            );
+            // Debug: Log first 3 rows cell structures for date parsing
+            for (
+              let i = 0;
+              i < Math.min(3, rawHistory.table.rows.length);
+              i++
+            ) {
+              const row = rawHistory.table.rows[i];
+              if (row.cells) {
+                devLog.log(
+                  `[Usage] Row ${i} cells:`,
+                  JSON.stringify(row.cells),
+                );
+              }
             }
-            return 0;
-          };
-
-          // Parse date from sortValue (format: "yyyy-MM-dd HH:mm:ss Z utc")
-          const dateCell = cells[0];
-          const dateStr = dateCell?.sortValue || dateCell?.value || "";
-          const dateMatch = dateStr.match(/^(\d{4}-\d{2}-\d{2})/);
-          const date = dateMatch
-            ? dateMatch[1]
-            : new Date().toISOString().split("T")[0];
-
-          return {
-            date,
-            includedRequests: cells[1] ? parseCell(cells[1]) : 0,
-            billedRequests: cells[2] ? parseCell(cells[2]) : 0,
-            grossAmount: cells[3] ? parseCell(cells[3]) : 0,
-            billedAmount: cells[4] ? parseCell(cells[4]) : 0,
-          };
+          }
+        } else if (rawHistory.rows) {
+          devLog.log("[Usage] Number of history rows:", rawHistory.rows.length);
+          if (rawHistory.rows.length > 0) {
+            devLog.log(
+              "[Usage] FULL First row:",
+              JSON.stringify(rawHistory.rows[0], null, 2),
+            );
+          }
         }
+      } else {
+        devLog.log("[Usage] History data missing or failed:", historyParsed);
+      }
 
-        // Fallback: handle flat structure
-        return {
-          date: row.date || new Date().toISOString().split("T")[0],
-          includedRequests: row.included_requests ?? row.includedRequests ?? 0,
-          billedRequests: row.billed_requests ?? row.billedRequests ?? 0,
-          grossAmount: row.gross_amount ?? row.grossAmount ?? 0,
-          billedAmount: row.billed_amount ?? row.billedAmount ?? 0,
-        };
-      }),
-    };
-
-    // Store history globally for tray menu
-    usageHistory = history;
-
-    // Calculate prediction if we have any data
-    if (history.days.length > 0 && usage) {
-      const settings = store.get("settings") as Settings;
-      const prediction = calculatePrediction(
-        history,
-        usage,
-        settings.predictionPeriod,
+      // Parse usage data
+      const usageData = usageParsed.data;
+      devLog.log(
+        "[Usage] Raw usage data keys:",
+        Object.keys(usageData).join(", "),
       );
-      usagePrediction = prediction;
+      devLog.log("[Usage] Sample values:", {
+        netBilledAmount:
+          usageData.netBilledAmount ?? usageData.net_billed_amount ?? "missing",
+        discountQuantity:
+          usageData.discountQuantity ??
+          usageData.discount_quantity ??
+          "missing",
+        entitlement:
+          usageData.userPremiumRequestEntitlement ??
+          usageData.user_premium_request_entitlement ??
+          "missing",
+      });
+
+      const usage: CopilotUsage = {
+        netBilledAmount:
+          usageData.netBilledAmount ?? usageData.net_billed_amount ?? 0,
+        netQuantity: usageData.netQuantity ?? usageData.net_quantity ?? 0,
+        discountQuantity:
+          usageData.discountQuantity ?? usageData.discount_quantity ?? 0,
+        userPremiumRequestEntitlement:
+          usageData.userPremiumRequestEntitlement ??
+          usageData.user_premium_request_entitlement ??
+          0,
+        filteredUserPremiumRequestEntitlement:
+          usageData.filteredUserPremiumRequestEntitlement ??
+          usageData.filtered_user_premium_request_entitlement ??
+          0,
+      };
+      devLog.log("[Usage] Parsed usage:", usage);
+
+      // Parse history data - handle nested table.rows.cells structure
+      const historyData = historyParsed.success
+        ? historyParsed.data
+        : { table: { rows: [] } };
+
+      // Extract rows from either table.rows or rows directly
+      const rawRows = historyData.table?.rows || historyData.rows || [];
+
+      const history: UsageHistory = {
+        fetchedAt: new Date().toISOString(),
+        days: rawRows.map((row: HistoryRow) => {
+          // Handle Swift-style nested cells structure
+          if (row.cells && Array.isArray(row.cells)) {
+            const cells = row.cells;
+
+            // Helper to parse cell value
+            const parseCell = (cell: HistoryCell | undefined): number => {
+              if (!cell) return 0;
+              const value = cell.value ?? cell.sortValue ?? "";
+              if (typeof value === "number") return value;
+              if (typeof value === "string") {
+                // Remove commas and currency symbols
+                const cleaned = value.replace(/[$,]/g, "");
+                return parseFloat(cleaned) || 0;
+              }
+              return 0;
+            };
+
+            // Parse date from first cell - try multiple property names
+            const dateCell = cells[0];
+            let dateStr = "";
+
+            // Helper to find date string in object
+            const findDateInObject = (obj: any): string => {
+              if (!obj) return "";
+              if (typeof obj === "string") {
+                if (obj.match(/^\d{4}-\d{2}-\d{2}/)) return obj;
+                return "";
+              }
+              if (typeof obj === "object") {
+                for (const key in obj) {
+                  if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                    const val = obj[key];
+                    if (
+                      typeof val === "string" &&
+                      val.match(/^\d{4}-\d{2}-\d{2}/)
+                    ) {
+                      return val;
+                    }
+                    if (typeof val === "object" && val !== null) {
+                      const found = findDateInObject(val);
+                      if (found) return found;
+                    }
+                  }
+                }
+              }
+              return "";
+            };
+
+            if (dateCell) {
+              // First try direct properties
+              const rawValue =
+                dateCell.sortValue ?? dateCell.value ?? dateCell.text ?? "";
+              if (
+                typeof rawValue === "string" &&
+                rawValue.match(/^\d{4}-\d{2}-\d{2}/)
+              ) {
+                dateStr = rawValue;
+              } else {
+                // If not found, deep search the cell object for a date string
+                dateStr = findDateInObject(dateCell);
+              }
+
+              devLog.log(`[Usage] Extracted dateStr: "${dateStr}" from cell`);
+            }
+
+            // Try to extract YYYY-MM-DD from various formats
+            let date = new Date().toISOString().split("T")[0];
+            if (dateStr) {
+              // Match YYYY-MM-DD at the start of the string
+              const isoMatch = dateStr.match(/^(\d{4}-\d{2}-\d{2})/);
+              if (isoMatch) {
+                date = isoMatch[1];
+                devLog.log(`[Usage] Parsed date from ISO match: ${date}`);
+              } else {
+                // Try parsing as a date and formatting
+                try {
+                  const parsedDate = new Date(dateStr);
+                  if (!isNaN(parsedDate.getTime())) {
+                    date = parsedDate.toISOString().split("T")[0];
+                    devLog.log(`[Usage] Parsed date from Date object: ${date}`);
+                  } else {
+                    devLog.log(
+                      `[Usage] Failed to parse date from: "${dateStr}"`,
+                    );
+                  }
+                } catch (e) {
+                  devLog.log(
+                    `[Usage] Exception parsing date from: "${dateStr}"`,
+                    e,
+                  );
+                  // Keep default date if parsing fails
+                }
+              }
+            } else {
+              devLog.log(`[Usage] No dateStr found, using default: ${date}`);
+            }
+
+            return {
+              date,
+              includedRequests: cells[1] ? parseCell(cells[1]) : 0,
+              billedRequests: cells[2] ? parseCell(cells[2]) : 0,
+              grossAmount: cells[3] ? parseCell(cells[3]) : 0,
+              billedAmount: cells[4] ? parseCell(cells[4]) : 0,
+            };
+          }
+
+          // Fallback: handle flat structure
+          return {
+            date: row.date || new Date().toISOString().split("T")[0],
+            includedRequests:
+              row.included_requests ?? row.includedRequests ?? 0,
+            billedRequests: row.billed_requests ?? row.billedRequests ?? 0,
+            grossAmount: row.gross_amount ?? row.grossAmount ?? 0,
+            billedAmount: row.billed_amount ?? row.billedAmount ?? 0,
+          };
+        }),
+      };
+
+      // Debug: Log parsed dates to verify they're different
+      if (history.days.length > 0) {
+        devLog.log(
+          "[Usage] Parsed dates:",
+          history.days.map((d) => d.date).join(", "),
+        );
+      }
+
+      // Store history globally for tray menu
+      usageHistory = history;
+
+      // Calculate prediction if we have any data
+      if (history.days.length > 0 && usage) {
+        const settings = store.get("settings") as Settings;
+        const prediction = calculatePrediction(
+          history,
+          usage,
+          settings.predictionPeriod,
+        );
+        usagePrediction = prediction;
+      }
+
+      // Update tray
+      updateTrayMenu(usage);
+
+      // Send to renderer with DEBUG raw rows
+      mainWindow.webContents.send("usage:data", {
+        success: true,
+        usage,
+        history,
+        debugRawRows: rawRows.slice(0, 3), // Send first 3 rows for debugging
+      });
+
+      // Cache data
+      store.set("cache", {
+        usage,
+        history,
+        lastFetched: new Date().toISOString(),
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      devLog.error("[Usage] Failed to fetch usage:", error);
+      mainWindow?.webContents.send("usage:data", {
+        success: false,
+        error: errorMessage,
+      });
+    } finally {
+      mainWindow?.webContents.send("usage:loading", false);
     }
-
-    // Update tray
-    updateTrayMenu(usage);
-
-    // Send to renderer
-    mainWindow.webContents.send("usage:data", {
-      success: true,
-      usage,
-      history,
-    });
-
-    // Cache data
-    store.set("cache", {
-      usage,
-      history,
-      lastFetched: new Date().toISOString(),
-    });
-  } catch (error) {
-    devLog.error("Failed to fetch usage:", error);
-    mainWindow.webContents.send("usage:data", {
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
-    });
-  } finally {
-    mainWindow.webContents.send("usage:loading", false);
+  } catch (outerError) {
+    // Handle errors that occur before mainWindow is available or in guard clauses
+    const errorMessage =
+      outerError instanceof Error
+        ? outerError.message
+        : "Critical error in fetchUsageData";
+    devLog.error("[Usage] Critical error in fetchUsageData:", outerError);
+    // Try to notify renderer if possible
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("usage:data", {
+        success: false,
+        error: errorMessage,
+      });
+      mainWindow.webContents.send("usage:loading", false);
+    }
   }
 }
 
