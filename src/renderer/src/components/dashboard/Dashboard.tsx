@@ -25,17 +25,8 @@ export function Dashboard() {
       error.toLowerCase().includes("auth") ||
       error.toLowerCase().includes("unauthorized"));
 
-  // Calculate daily average for chart reference line
-  const dailyAverage =
-    history && history.days.length > 0
-      ? history.days.reduce(
-        (sum, day) => sum + day.includedRequests + day.billedRequests,
-        0,
-      ) / history.days.length
-      : undefined;
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Error State */}
       {error && (
         <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 flex items-center gap-3">
@@ -89,12 +80,8 @@ export function Dashboard() {
         />
       </div>
 
-      {/* Usage Chart */}
-      <UsageChart
-        history={history}
-        isLoading={isLoading && !history}
-        dailyAverage={dailyAverage}
-      />
+      {/* Usage Trend Chart */}
+      <UsageChart history={history} isLoading={isLoading} />
 
       {/* History Table */}
       <HistoryTable history={history} isLoading={isLoading && !history} />

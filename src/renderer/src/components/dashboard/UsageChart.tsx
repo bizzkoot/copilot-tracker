@@ -15,27 +15,39 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  ReferenceLine,
+  Legend,
 } from "recharts";
 
 interface UsageChartProps {
   history: UsageHistory | null;
   isLoading?: boolean;
-  dailyAverage?: number;
 }
 
 interface ChartDataPoint {
   date: string;
   fullDate: string;
   usage: number;
+  trend?: number;
   isWeekend: boolean;
 }
 
-export function UsageChart({
-  history,
-  isLoading,
-  dailyAverage,
-}: UsageChartProps) {
+/**
+ * Calculate Exponential Moving Average (EMA)
+ * Alpha = smoothing factor (0.25 = ~4 day emphasis)
+ */
+function calculateEMA(data: number[], alpha: number = 0.25): number[] {
+  if (data.length === 0) return [];
+
+  const ema: number[] = [data[0]]; // Start with first value
+
+  for (let i = 1; i < data.length; i++) {
+    ema.push(alpha * data[i] + (1 - alpha) * ema[i - 1]);
+  }
+
+  return ema;
+}
+
+export function UsageChart({ history, isLoading }: UsageChartProps) {
   if (isLoading) {
     return (
       <Card>
@@ -63,7 +75,7 @@ export function UsageChart({
   }
 
   // Transform data for chart (reverse to show oldest first)
-  const chartData: ChartDataPoint[] = [...history.days]
+  const rawData = [...history.days]
     .reverse()
     .slice(-14) // Last 14 days
     .map((day) => {
@@ -77,10 +89,20 @@ export function UsageChart({
       };
     });
 
+  // Calculate EMA trend
+  const usageValues = rawData.map((d) => d.usage);
+  const trendValues = calculateEMA(usageValues);
+
+  // Combine data with trend
+  const chartData: ChartDataPoint[] = rawData.map((d, i) => ({
+    ...d,
+    trend: trendValues[i],
+  }));
+
   // Calculate max for Y axis
   const maxUsage = Math.max(
     ...chartData.map((d) => d.usage),
-    dailyAverage || 0,
+    ...chartData.map((d) => d.trend || 0),
   );
   const yAxisMax = Math.ceil(maxUsage * 1.2);
 
@@ -126,34 +148,71 @@ export function UsageChart({
                   if (active && payload && payload.length) {
                     const data = payload[0].payload as ChartDataPoint;
                     return (
-                      <div className="rounded-lg border bg-background p-2 shadow-md">
-                        <p className="text-sm font-medium">{data.fullDate}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {data.usage.toLocaleString()} requests
-                          {data.isWeekend && " (weekend)"}
-                        </p>
+                      <div className="rounded-lg border bg-background p-3 shadow-md space-y-2">
+                        <div>
+                          <p className="text-sm font-medium">{data.fullDate}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {data.isWeekend ? "Weekend" : "Weekday"}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 text-sm">
+                            <span className="h-2 w-2 rounded-full bg-primary" />
+                            <span className="text-muted-foreground">
+                              Usage:
+                            </span>
+                            <span className="font-medium">
+                              {data.usage.toLocaleString()}
+                            </span>
+                          </div>
+                          {data.trend !== undefined && (
+                            <div className="flex items-center gap-2 text-sm">
+                              <span className="h-2 w-2 rounded-full bg-muted-foreground/50" />
+                              <span className="text-muted-foreground">
+                                Trend:
+                              </span>
+                              <span className="font-medium">
+                                {data.trend.toFixed(1)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     );
                   }
                   return null;
                 }}
               />
-              {dailyAverage && (
-                <ReferenceLine
-                  y={dailyAverage}
-                  stroke="hsl(var(--muted-foreground))"
-                  strokeDasharray="5 5"
-                  label={{
-                    value: "Avg",
-                    position: "right",
-                    fill: "hsl(var(--muted-foreground))",
-                    fontSize: 12,
-                  }}
-                />
-              )}
+              <Legend
+                verticalAlign="top"
+                height={36}
+                content={({ payload }) => (
+                  <div className="flex justify-end gap-4 text-xs text-muted-foreground pb-2">
+                    {payload?.map((entry, index) => (
+                      <div key={index} className="flex items-center gap-1.5">
+                        {entry.value === "Usage" ? (
+                          <div className="flex items-center">
+                            <span className="h-2 w-2 rounded-full bg-primary mr-1.5" />
+                            <span>Daily Usage</span>
+                          </div>
+                        ) : (
+                          <div
+                            className="flex items-center"
+                            title="Exponential Moving Average (smoothed trend)"
+                          >
+                            <span className="h-0 w-3 border-t-2 border-dashed border-muted-foreground mr-1.5" />
+                            <span>Trend (EMA)</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              />
               <Line
                 type="monotone"
                 dataKey="usage"
+                name="Usage"
                 stroke="hsl(var(--primary))"
                 strokeWidth={2}
                 dot={{
@@ -166,6 +225,16 @@ export function UsageChart({
                   strokeWidth: 0,
                   r: 6,
                 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="trend"
+                stroke="hsl(var(--muted-foreground))"
+                strokeWidth={2}
+                strokeDasharray="5 5"
+                dot={false}
+                activeDot={false}
+                name="Trend"
               />
             </LineChart>
           </ResponsiveContainer>

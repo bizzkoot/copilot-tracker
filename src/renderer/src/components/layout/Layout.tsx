@@ -53,17 +53,8 @@ export function Layout() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* macOS traffic lights safe area - only on macOS */}
-      <div
-        className="h-12 flex-shrink-0 -webkit-app-region-drag"
-        style={
-          {
-            WebkitAppRegion: "drag",
-          } as React.CSSProperties
-        }
-      />
       <Header onSettingsClick={handleSettingsClick} />
-      <main className="flex-1 container mx-auto px-4 py-6">
+      <main className="flex-1 container mx-auto px-4 py-4">
         {currentView === "dashboard" ? (
           <Dashboard />
         ) : (

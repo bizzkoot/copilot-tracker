@@ -17,7 +17,10 @@ export function Header({ onSettingsClick }: HeaderProps) {
   const { logout, isAuthenticated } = useAuth();
 
   return (
-    <header className="border-b border-border bg-card">
+    <header
+      className="border-b border-border bg-card"
+      style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+    >
       <div className="container mx-auto px-4 py-3 flex items-center justify-between">
         {/* Logo and Title */}
         <div className="flex items-center gap-3">
@@ -35,7 +38,10 @@ export function Header({ onSettingsClick }: HeaderProps) {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2">
+        <div
+          className="flex items-center gap-2"
+          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+        >
           {/* Theme Toggle */}
           <Button
             variant="ghost"

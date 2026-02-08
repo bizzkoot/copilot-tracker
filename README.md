@@ -1,21 +1,26 @@
+<div align="center">
+
 # <img src="resources/icon.png" width="48" height="48" alt="Copilot Tracker Icon" style="vertical-align: middle; margin-right: 8px;" /> Copilot Tracker
 
 > A modern, cross-platform GitHub Copilot usage monitoring application
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-blue.svg)](https://github.com/bizzkoot/copilot-tracker)
+[![GitHub Downloads](https://img.shields.io/github/downloads/bizzkoot/copilot-tracker/total?label=downloads)](https://github.com/bizzkoot/copilot-tracker/releases)
+
+</div>
 
 Cross-platform desktop application built with **Tauri**, React, and TypeScript to monitor your GitHub Copilot usage, featuring system tray integration, usage predictions, and smart notifications.
 
 ## Features
 
 - 🖥️ **Cross-Platform**: Works on macOS, Windows, and Linux
-- 📊 **Usage Tracking**: Real-time monitoring of Copilot premium requests
-- 📈 **Trend Visualization**: Beautiful charts showing usage patterns over time
-- 🔮 **Smart Predictions**: AI-powered end-of-month usage predictions
+- 📊 **Usage Tracking**: Real-time monitoring of Copilot premium requests with gauge visualization
+- 📈 **Trend Visualization**: Interactive usage history with Weighted Trend Line (EMA) for better analysis
+- 🔮 **Smart Predictions**: Calculated end-of-month forecast using weighted averages based on recent usage behavior
 - 🌓 **Dark/Light Theme**: Automatic theme detection with manual override
 - 🔔 **Smart Notifications**: Configurable alerts when approaching limits
-- 🎯 **System Tray**: Quick access from menu bar (macOS) or system tray
+- 🎯 **System Tray**: Quick access from menu bar (macOS) or system tray with synced Monthly Forecast banner
 - 🎨 **Customizable Tray Icon**: Choose from 7 display formats (current, remaining, percentage, etc.)
 - 🔐 **Secure Auth**: WebView-based GitHub OAuth (no API tokens stored)
 - 🔄 **Auto-Updates**: Automatic updates via GitHub Releases
@@ -26,13 +31,13 @@ Cross-platform desktop application built with **Tauri**, React, and TypeScript t
 ### Dashboard
 
 <p align="center">
-  <img src="assets/Dashboard_Tauri.gif" alt="Copilot Tracker Dashboard" width="700"/>
+  <img src="assets/Dashboard_Tauri2.gif" alt="Copilot Tracker Dashboard" width="700"/>
 </p>
 
 ### System Tray (Windows)
 
 <p align="center">
-  <img src="assets/Taskbar_Tauri.gif" alt="System Tray Integration" width="500"/>
+  <img src="assets/Taskbar_Tauri2.gif" alt="System Tray Integration" width="500"/>
 </p>
 
 ## Download
@@ -337,6 +342,7 @@ Available variables:
 | Styling   | Tailwind CSS + shadcn/ui         |
 | State     | Zustand                          |
 | Charts    | Recharts                         |
+| Icons     | lucide-react                     |
 | Build     | Vite                             |
 | Packaging | Tauri CLI                        |
 
@@ -358,10 +364,10 @@ Available variables:
 
 | Platform              | Tauri |
 | --------------------- | :---: |
-| macOS (Intel)         |  ✅   |
-| macOS (Apple Silicon) |  ✅   |
-| Windows 64-bit        |  ✅   |
-| Linux (x64)           |  ✅   |
+| macOS (Intel)         |   ✅   |
+| macOS (Apple Silicon) |   ✅   |
+| Windows 64-bit        |   ✅   |
+| Linux (x64)           |   ✅   |
 
 > **Note:** Electron builds were discontinued after v1.5.1. All releases from v1.5.2 onward are Tauri-only.
 
