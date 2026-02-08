@@ -25,6 +25,16 @@ export interface DailyUsage {
   billedRequests: number; // Add-on billed requests
   grossAmount: number; // Gross amount
   billedAmount: number; // Add-on cost
+  models?: ModelUsage[]; // Breakdown by model
+}
+
+// Model usage breakdown
+export interface ModelUsage {
+  name: string;
+  includedRequests: number;
+  billedRequests: number;
+  grossAmount: number;
+  billedAmount: number;
 }
 
 // Usage history collection

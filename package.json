@@ -14,6 +14,7 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "start": "electron-vite preview",
     "dev": "cross-env-shell NODE_ENV=development electron-vite dev",
+    "dev:vite": "vite --port 5173 --host",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:lint": "cd src-tauri && cargo clippy -- -D warnings",

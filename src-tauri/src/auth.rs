@@ -39,6 +39,16 @@ pub struct UsageHistoryRow {
     pub billed_requests: u32,
     pub gross_amount: f64,
     pub billed_amount: f64,
+    pub models: Vec<UsageModelRow>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UsageModelRow {
+    pub name: String,
+    pub included_requests: u32,
+    pub billed_requests: u32,
+    pub gross_amount: f64,
+    pub billed_amount: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -166,12 +176,40 @@ impl AuthManager {
                                                 .parse::<f64>()
                                                 .ok()?;
                                             
+                                            let models = if let Some(subtable) = row.get("subtable") {
+                                                if let Some(sub_rows) = subtable.get("rows").and_then(|v| v.as_array()) {
+                                                    sub_rows.iter().filter_map(|sub_row| {
+                                                        let sub_cells = sub_row.get("cells").and_then(|v| v.as_array())?;
+                                                        if sub_cells.len() < 5 { return None; }
+
+                                                        let name = sub_cells.get(0)?.get("value")?.as_str()?.to_string();
+                                                        let included_requests = sub_cells.get(1)?.get("value")?.as_str()?.parse::<u32>().ok()?;
+                                                        let billed_requests = sub_cells.get(2)?.get("value")?.as_str()?.parse::<u32>().ok()?;
+                                                        let gross_amount = sub_cells.get(3)?.get("value")?.as_str()?.trim_start_matches('$').parse::<f64>().ok()?;
+                                                        let billed_amount = sub_cells.get(4)?.get("value")?.as_str()?.trim_start_matches('$').parse::<f64>().ok()?;
+
+                                                        Some(UsageModelRow {
+                                                            name,
+                                                            included_requests,
+                                                            billed_requests,
+                                                            gross_amount,
+                                                            billed_amount,
+                                                        })
+                                                    }).collect()
+                                                } else {
+                                                    vec![]
+                                                }
+                                            } else {
+                                                vec![]
+                                            };
+
                                             Some(UsageHistoryRow {
                                                 date: id,
                                                 included_requests,
                                                 billed_requests,
                                                 gross_amount,
                                                 billed_amount,
+                                                models,
                                             })
                                         }).collect();
                                         
@@ -868,12 +906,40 @@ impl AuthManager {
                                         .parse::<f64>()
                                         .ok()?;
                                     
+                                    let models = if let Some(subtable) = row.get("subtable") {
+                                        if let Some(sub_rows) = subtable.get("rows").and_then(|v| v.as_array()) {
+                                            sub_rows.iter().filter_map(|sub_row| {
+                                                let sub_cells = sub_row.get("cells").and_then(|v| v.as_array())?;
+                                                if sub_cells.len() < 5 { return None; }
+
+                                                let name = sub_cells.get(0)?.get("value")?.as_str()?.to_string();
+                                                let included_requests = sub_cells.get(1)?.get("value")?.as_str()?.parse::<u32>().ok()?;
+                                                let billed_requests = sub_cells.get(2)?.get("value")?.as_str()?.parse::<u32>().ok()?;
+                                                let gross_amount = sub_cells.get(3)?.get("value")?.as_str()?.trim_start_matches('$').parse::<f64>().ok()?;
+                                                let billed_amount = sub_cells.get(4)?.get("value")?.as_str()?.trim_start_matches('$').parse::<f64>().ok()?;
+
+                                                Some(UsageModelRow {
+                                                    name,
+                                                    included_requests,
+                                                    billed_requests,
+                                                    gross_amount,
+                                                    billed_amount,
+                                                })
+                                            }).collect()
+                                        } else {
+                                            vec![]
+                                        }
+                                    } else {
+                                        vec![]
+                                    };
+
                                     Some(UsageHistoryRow {
                                         date: id,
                                         included_requests,
                                         billed_requests,
                                         gross_amount,
                                         billed_amount,
+                                        models,
                                     })
                                 }).collect();
                                 

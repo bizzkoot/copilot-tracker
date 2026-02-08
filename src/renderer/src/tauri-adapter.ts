@@ -164,6 +164,13 @@ export function initTauriAdapter() {
           billed_requests?: number;
           gross_amount?: number;
           billed_amount?: number;
+          models?: Array<{
+            name: string;
+            included_requests: number;
+            billed_requests: number;
+            gross_amount: number;
+            billed_amount: number;
+          }>;
         }>;
         prediction?: {
           predicted_monthly_requests: number;
@@ -193,6 +200,13 @@ export function initTauriAdapter() {
               billedRequests: entry.billed_requests ?? 0,
               grossAmount: entry.gross_amount ?? 0,
               billedAmount: entry.billed_amount ?? 0,
+              models: entry.models?.map((m) => ({
+                name: m.name,
+                includedRequests: m.included_requests,
+                billedRequests: m.billed_requests,
+                grossAmount: m.gross_amount,
+                billedAmount: m.billed_amount,
+              })),
             })),
           },
           prediction: payload.prediction
@@ -310,6 +324,13 @@ export function initTauriAdapter() {
               billed_requests?: number;
               gross_amount?: number;
               billed_amount?: number;
+              models?: Array<{
+                name: string;
+                included_requests: number;
+                billed_requests: number;
+                gross_amount: number;
+                billed_amount: number;
+              }>;
             }>;
             prediction?: {
               predicted_monthly_requests: number;
@@ -343,6 +364,13 @@ export function initTauriAdapter() {
                 billedRequests: entry.billed_requests ?? 0,
                 grossAmount: entry.gross_amount ?? 0,
                 billedAmount: entry.billed_amount ?? 0,
+                models: entry.models?.map((m) => ({
+                  name: m.name,
+                  includedRequests: m.included_requests,
+                  billedRequests: m.billed_requests,
+                  grossAmount: m.gross_amount,
+                  billedAmount: m.billed_amount,
+                })),
               })),
             },
             prediction: payload.prediction

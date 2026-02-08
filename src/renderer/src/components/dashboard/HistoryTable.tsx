@@ -26,51 +26,128 @@ function formatDateLong(date: Date | string): string {
   }).format(dateObj);
 }
 
-function TableRow({ day }: { day: DailyUsage }) {
+import { useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
+
+// ... existing imports ...
+
+interface TableRowProps {
+  day: DailyUsage;
+  isExpanded: boolean;
+  onToggle: () => void;
+}
+
+function TableRow({ day, isExpanded, onToggle }: TableRowProps) {
   const total = getTotalRequests(day);
   const weekend = isWeekend(day.date);
+  const hasModels = day.models && day.models.length > 0;
 
   return (
-    <tr className="border-b border-border hover:bg-muted/50 transition-colors">
-      <td className="py-3 px-4">
-        <div className="flex items-center gap-2">
-          <span>{formatDateLong(day.date)}</span>
-          {weekend && (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-              Weekend
+    <>
+      <tr
+        className={`border-b border-border hover:bg-muted/50 transition-colors cursor-pointer ${isExpanded ? "bg-muted/30" : ""}`}
+        onClick={onToggle}
+      >
+        <td className="py-3 px-4">
+          <div className="flex items-center gap-2">
+            {hasModels ? (
+              isExpanded ? (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              )
+            ) : (
+              <span className="w-4" />
+            )}
+            <span>{formatDateLong(day.date)}</span>
+            {weekend && (
+              <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                Weekend
+              </span>
+            )}
+          </div>
+        </td>
+        <td className="py-3 px-4 text-right font-medium">
+          {total.toLocaleString()}
+        </td>
+        <td className="py-3 px-4 text-right">
+          {day.includedRequests.toLocaleString()}
+        </td>
+        <td className="py-3 px-4 text-right">
+          {day.billedRequests > 0 ? (
+            <span className="text-orange-500">
+              {day.billedRequests.toLocaleString()}
             </span>
+          ) : (
+            <span className="text-muted-foreground">0</span>
           )}
-        </div>
-      </td>
-      <td className="py-3 px-4 text-right font-medium">
-        {total.toLocaleString()}
-      </td>
-      <td className="py-3 px-4 text-right">
-        {day.includedRequests.toLocaleString()}
-      </td>
-      <td className="py-3 px-4 text-right">
-        {day.billedRequests > 0 ? (
-          <span className="text-orange-500">
-            {day.billedRequests.toLocaleString()}
-          </span>
-        ) : (
-          <span className="text-muted-foreground">0</span>
-        )}
-      </td>
-      <td className="py-3 px-4 text-right">
-        {day.billedAmount > 0 ? (
-          <span className="text-orange-500">
-            {formatCurrency(day.billedAmount)}
-          </span>
-        ) : (
-          <span className="text-muted-foreground">$0.00</span>
-        )}
-      </td>
-    </tr>
+        </td>
+        <td className="py-3 px-4 text-right">
+          {day.billedAmount > 0 ? (
+            <span className="text-orange-500">
+              {formatCurrency(day.billedAmount)}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">$0.00</span>
+          )}
+        </td>
+      </tr>
+      {isExpanded && hasModels && (
+        <tr className="bg-muted/20">
+          <td colSpan={5} className="p-0">
+            <div className="px-4 py-2 pl-12">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs text-muted-foreground border-b border-border/50">
+                    <th className="py-2 text-left font-medium">Model</th>
+                    <th className="py-2 text-right font-medium">Included</th>
+                    <th className="py-2 text-right font-medium">Billed</th>
+                    <th className="py-2 text-right font-medium">Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {day.models!.map((model, idx) => (
+                    <tr
+                      key={idx}
+                      className="border-b border-border/20 last:border-0 hover:bg-muted/30"
+                    >
+                      <td className="py-2 text-muted-foreground">
+                        {model.name}
+                      </td>
+                      <td className="py-2 text-right text-muted-foreground">
+                        {model.includedRequests}
+                      </td>
+                      <td className="py-2 text-right text-muted-foreground">
+                        {model.billedRequests}
+                      </td>
+                      <td className="py-2 text-right text-muted-foreground">
+                        {formatCurrency(model.billedAmount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
 export function HistoryTable({ history, isLoading }: HistoryTableProps) {
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+
+  const toggleRow = (index: number) => {
+    const newExpanded = new Set(expandedRows);
+    if (newExpanded.has(index)) {
+      newExpanded.delete(index);
+    } else {
+      newExpanded.add(index);
+    }
+    setExpandedRows(newExpanded);
+  };
+
   if (isLoading) {
     return (
       <Card>
@@ -136,7 +213,12 @@ export function HistoryTable({ history, isLoading }: HistoryTableProps) {
             </thead>
             <tbody>
               {history.days.slice(0, 10).map((day, index) => (
-                <TableRow key={index} day={day} />
+                <TableRow
+                  key={index}
+                  day={day}
+                  isExpanded={expandedRows.has(index)}
+                  onToggle={() => toggleRow(index)}
+                />
               ))}
             </tbody>
             <tfoot>

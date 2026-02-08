@@ -4,6 +4,8 @@
   "version": "2.1.2",
   "identifier": "com.copilottracker",
   "build": {
+    "beforeDevCommand": "npm run dev:vite",
+    "beforeBuildCommand": "npm run build",
     "frontendDist": "../out/renderer",
     "devUrl": "http://localhost:5173"
   },

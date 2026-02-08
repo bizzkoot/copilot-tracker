@@ -28,6 +28,17 @@ pub struct UsageEntry {
     pub billed_requests: u32,
     pub gross_amount: f64,
     pub billed_amount: f64,
+    #[serde(default)]
+    pub models: Vec<UsageModel>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UsageModel {
+    pub name: String,
+    pub included_requests: u32,
+    pub billed_requests: u32,
+    pub gross_amount: f64,
+    pub billed_amount: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -193,6 +204,7 @@ impl UsageManager {
                     billed_requests: cache.net_quantity.saturating_sub(cache.discount_quantity) as u32,
                     gross_amount: cache.net_billed_amount,
                     billed_amount: cache.net_billed_amount,
+                    models: vec![],
                 }];
             }
         }
@@ -221,6 +233,15 @@ impl UsageManager {
                         chrono::Utc::now().timestamp()
                     }
                 };
+                
+                let models = row.models.iter().map(|m| UsageModel {
+                    name: m.name.clone(),
+                    included_requests: m.included_requests,
+                    billed_requests: m.billed_requests,
+                    gross_amount: m.gross_amount,
+                    billed_amount: m.billed_amount,
+                }).collect();
+
                 UsageEntry {
                     timestamp,
                     used: row.included_requests + row.billed_requests,
@@ -229,6 +250,7 @@ impl UsageManager {
                     billed_requests: row.billed_requests,
                     gross_amount: row.gross_amount,
                     billed_amount: row.billed_amount,
+                    models,
                 }
             })
             .collect();
