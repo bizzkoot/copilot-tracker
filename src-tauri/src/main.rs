@@ -150,7 +150,7 @@ fn build_tray_menu(
     let version = app.package_info().version.to_string();
     let (used, limit) = store.get_usage();
     let usage_history = UsageManager::get_cached_history(app);
-    let prediction = UsageManager::predict_usage_from_history(&usage_history, used, limit);
+    let prediction = UsageManager::predict_usage_from_history(&usage_history, used, limit, settings.prediction_period);
     
     // Calculate metrics for dual-perspective display
     let remaining = limit.saturating_sub(used);
@@ -171,32 +171,29 @@ fn build_tray_menu(
     };
     let days_remaining = days_in_month as f32 - current_day;
     let daily_rate = if current_day > 0.0 { used as f32 / current_day } else { 0.0 };
-    let daily_budget = if days_remaining > 0.0 { remaining as f32 / days_remaining } else { 0.0 };
+    // Floor the daily budget to be conservative (synced with Dashboard)
+    let daily_budget = if days_remaining > 0.0 { (remaining as f32 / days_remaining).floor() } else { 0.0 };
 
     let menu = Menu::new(app).map_err(|e| e.to_string())?;
     
     // === USAGE OVERVIEW SECTION ===
-    let overview_header = MenuItem::with_id(app, "overview_header", "📊 USAGE OVERVIEW", false, None::<&str>)
+    // === USAGE OVERVIEW SECTION ===
+    let overview_header = MenuItem::with_id(app, "overview_header", "📊 QUOTA STATUS", true, None::<&str>)
         .map_err(|e| e.to_string())?;
     menu.append(&overview_header).map_err(|e| e.to_string())?;
     
     if limit > 0 {
-        let consumed_line = MenuItem::with_id(app, "consumed_line", 
-            format!("▶ Consumed: {} ({:.0}%)", used, percentage_used), false, None::<&str>)
+        let quota_line = MenuItem::with_id(app, "quota_line", 
+            format!("   {used} / {limit} requests ({percentage_used:.0}%)"), true, None::<&str>)
             .map_err(|e| e.to_string())?;
-        menu.append(&consumed_line).map_err(|e| e.to_string())?;
+        menu.append(&quota_line).map_err(|e| e.to_string())?;
         
         let remaining_line = MenuItem::with_id(app, "remaining_line", 
-            format!("▶ Remaining: {} ({:.0}%)", remaining, percentage_remaining), false, None::<&str>)
+            format!("   {remaining} remaining ({percentage_remaining:.0}%)"), true, None::<&str>)
             .map_err(|e| e.to_string())?;
         menu.append(&remaining_line).map_err(|e| e.to_string())?;
-        
-        let limit_line = MenuItem::with_id(app, "limit_line", 
-            format!("▶ Limit: {} requests", limit), false, None::<&str>)
-            .map_err(|e| e.to_string())?;
-        menu.append(&limit_line).map_err(|e| e.to_string())?;
     } else {
-        let loading_line = MenuItem::with_id(app, "loading_line", "▶ Loading usage data...", false, None::<&str>)
+        let loading_line = MenuItem::with_id(app, "loading_line", "▶ Loading data...", true, None::<&str>)
             .map_err(|e| e.to_string())?;
         menu.append(&loading_line).map_err(|e| e.to_string())?;
     }
@@ -206,26 +203,26 @@ fn build_tray_menu(
     
     // === CONSUMPTION RATE SECTION ===
     if limit > 0 && current_day > 0.0 {
-        let rate_header = MenuItem::with_id(app, "rate_header", "📈 CONSUMPTION RATE", false, None::<&str>)
+        let rate_header = MenuItem::with_id(app, "rate_header", "📈 ACTIVITY", true, None::<&str>)
             .map_err(|e| e.to_string())?;
         menu.append(&rate_header).map_err(|e| e.to_string())?;
         
         let daily_rate_line = MenuItem::with_id(app, "daily_rate_line", 
-            format!("   Using {:.0} requests/day", daily_rate), false, None::<&str>)
+            format!("   ⚡ Usage: {:.0} req/day", daily_rate), true, None::<&str>)
             .map_err(|e| e.to_string())?;
         menu.append(&daily_rate_line).map_err(|e| e.to_string())?;
         
-        let days_left_line = MenuItem::with_id(app, "days_left_line", 
-            format!("   {:.0} days left in period", days_remaining), false, None::<&str>)
-            .map_err(|e| e.to_string())?;
-        menu.append(&days_left_line).map_err(|e| e.to_string())?;
-        
         if daily_budget > 0.0 {
             let budget_line = MenuItem::with_id(app, "budget_line", 
-                format!("   Daily budget: {:.0} req/day", daily_budget), false, None::<&str>)
+                format!("   🎯 Budget: {:.0} req/day", daily_budget), true, None::<&str>)
                 .map_err(|e| e.to_string())?;
             menu.append(&budget_line).map_err(|e| e.to_string())?;
         }
+
+        let days_left_line = MenuItem::with_id(app, "days_left_line", 
+            format!("   🗓️ {days_remaining:.0} days remaining"), true, None::<&str>)
+            .map_err(|e| e.to_string())?;
+        menu.append(&days_left_line).map_err(|e| e.to_string())?;
         
         menu.append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())?;
@@ -233,46 +230,34 @@ fn build_tray_menu(
 
     // === PREDICTION SECTION ===
     if let Some(prediction) = prediction {
-        let prediction_header = MenuItem::with_id(app, "prediction_header", "📅 Monthly Prediction ▶", false, None::<&str>)
+        let prediction_header = MenuItem::with_id(app, "prediction_header", "🔮 FORECAST", true, None::<&str>)
             .map_err(|e| e.to_string())?;
         menu.append(&prediction_header).map_err(|e| e.to_string())?;
         
-        let percent_of_limit = if limit > 0 {
-            ((prediction.predicted_monthly_requests as f32 / limit as f32) * 100.0).round() as u32
-        } else {
-            0
-        };
-        
-        let prediction_line = MenuItem::with_id(app, "prediction_line",
-            format!("   {} requests ({}% of limit)", prediction.predicted_monthly_requests, percent_of_limit),
-            false, None::<&str>)
-            .map_err(|e| e.to_string())?;
-        menu.append(&prediction_line).map_err(|e| e.to_string())?;
-        
         let status_label = if prediction.predicted_monthly_requests > limit {
-            format!("   ⚠️ May exceed limit by {}", prediction.predicted_monthly_requests - limit)
+            format!("   ⚠️ Exceed by {}", prediction.predicted_monthly_requests - limit)
         } else {
-            format!("   ✅ On track ({} remaining)", limit - prediction.predicted_monthly_requests)
+            format!("   ✅ Safe ({} left)", limit - prediction.predicted_monthly_requests)
         };
-        let status_line = MenuItem::with_id(app, "status_line", status_label, false, None::<&str>)
+        let status_line = MenuItem::with_id(app, "status_line", status_label, true, None::<&str>)
             .map_err(|e| e.to_string())?;
         menu.append(&status_line).map_err(|e| e.to_string())?;
-        
+
         let confidence_icon = match prediction.confidence_level.as_str() {
             "high" => "🟢",
             "medium" => "🟡",
             _ => "🔴",
         };
-        let confidence_line = MenuItem::with_id(app, "confidence_line",
-            format!("   {} {} confidence", confidence_icon, prediction.confidence_level),
-            false, None::<&str>)
+        let forecast_line = MenuItem::with_id(app, "forecast_line",
+            format!("   {confidence_icon} Expected: {} total", prediction.predicted_monthly_requests),
+            true, None::<&str>)
             .map_err(|e| e.to_string())?;
-        menu.append(&confidence_line).map_err(|e| e.to_string())?;
+        menu.append(&forecast_line).map_err(|e| e.to_string())?;
     } else {
-        let no_prediction = MenuItem::with_id(app, "no_prediction", "📅 Monthly Prediction ▶", false, None::<&str>)
+        let prediction_header = MenuItem::with_id(app, "prediction_header", "🔮 FORECAST", true, None::<&str>)
             .map_err(|e| e.to_string())?;
-        menu.append(&no_prediction).map_err(|e| e.to_string())?;
-        let no_data = MenuItem::with_id(app, "no_data", "   Insufficient data for prediction", false, None::<&str>)
+        menu.append(&prediction_header).map_err(|e| e.to_string())?;
+        let no_data = MenuItem::with_id(app, "no_data", "   Insufficient data", true, None::<&str>)
             .map_err(|e| e.to_string())?;
         menu.append(&no_data).map_err(|e| e.to_string())?;
     }
@@ -495,10 +480,13 @@ async fn fetch_usage(
 
     if let Ok(summary) = &result {
         let history = UsageManager::get_cached_history(&app);
+        let store = app.state::<StoreManager>();
+        let settings = store.get_settings();
         let prediction = UsageManager::predict_usage_from_history(
             &history,
             summary.used,
             summary.limit,
+            settings.prediction_period,
         );
         let payload = copilot_tracker::UsagePayload {
             summary: summary.clone(),
@@ -560,7 +548,8 @@ fn get_cached_usage_data(
     };
     
     let history = UsageManager::get_cached_history(&app);
-    let prediction = UsageManager::predict_usage_from_history(&history, used, limit);
+    let settings = store.get_settings();
+    let prediction = UsageManager::predict_usage_from_history(&history, used, limit, settings.prediction_period);
     
     Ok(Some(copilot_tracker::UsagePayload {
         summary,
@@ -1174,10 +1163,13 @@ fn main() {
                     };
                     
                     let history = UsageManager::get_cached_history(&app_handle_for_emit);
+                    let store = app_handle_for_emit.state::<StoreManager>();
+                    let settings = store.get_settings();
                     let prediction = UsageManager::predict_usage_from_history(
                         &history,
                         used,
                         limit,
+                        settings.prediction_period,
                     );
                     
                     log::info!("History entries: {}", history.len());

@@ -304,14 +304,18 @@ export function HistoryTable({ history, isLoading }: HistoryTableProps) {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="text-xs text-muted-foreground border-b border-border/50">
-                            <th className="py-2 text-left font-medium">Model</th>
+                            <th className="py-2 text-left font-medium">
+                              Model
+                            </th>
                             <th className="py-2 text-right font-medium">
                               Included
                             </th>
                             <th className="py-2 text-right font-medium">
                               Billed
                             </th>
-                            <th className="py-2 text-right font-medium">Cost</th>
+                            <th className="py-2 text-right font-medium">
+                              Cost
+                            </th>
                           </tr>
                         </thead>
                         <tbody>

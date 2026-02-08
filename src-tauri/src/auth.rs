@@ -296,10 +296,12 @@ impl AuthManager {
                                   crate::usage::UsageManager::get_cached_history(&app_handle)
                               };
                               
+                              let settings = store.get_settings();
                               let prediction = crate::usage::UsageManager::predict_usage_from_history(
                                   &history,
                                   summary.used,
                                   summary.limit,
+                                  settings.prediction_period,
                               );
                               
                               log::info!("Emitting usage:data event - used: {}, limit: {}, history entries: {}", 

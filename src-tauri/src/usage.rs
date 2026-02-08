@@ -134,7 +134,9 @@ impl UsageManager {
 
                         // Emit full payload
                         let history = Self::get_cached_history(app);
-                        let prediction = Self::predict_usage_from_history(&history, used, limit);
+                        let store = app.state::<crate::store::StoreManager>();
+                        let settings = store.get_settings();
+                        let prediction = Self::predict_usage_from_history(&history, used, limit, settings.prediction_period);
                         
                         let payload = UsagePayload {
                             summary: summary.clone(),
@@ -341,13 +343,81 @@ impl UsageManager {
         history: &[UsageEntry],
         used: u32,
         limit: u32,
+        prediction_period: u32,
     ) -> Option<UsagePrediction> {
         if history.is_empty() {
             return None;
         }
 
+        // Get weights based on period
+        let weights = match prediction_period {
+            7 => vec![1.5, 1.5, 1.2, 1.2, 1.2, 1.0, 1.0],
+            14 => vec![
+                2.0, 1.8, 1.6, 1.4, 1.2, 1.2, 1.0, 1.0, 1.0, 1.0, 0.8, 0.8, 0.6, 0.6,
+            ],
+            21 => vec![
+                2.5, 2.3, 2.1, 1.9, 1.7, 1.5, 1.3, 1.3, 1.2, 1.2, 1.1, 1.1, 1.0, 1.0, 0.9, 0.9,
+                0.8, 0.8, 0.7, 0.7, 0.6,
+            ],
+            _ => vec![1.0], // Fallback
+        };
+
+        // Take only the number of days specified by prediction_period
+        let daily_data = history.iter().take(prediction_period as usize).collect::<Vec<_>>();
+        
+        if daily_data.is_empty() {
+            return None;
+        }
+
+        // 1. Calculate weighted average daily usage
+        let mut weighted_sum = 0.0;
+        let mut total_weight = 0.0;
+
+        for (i, entry) in daily_data.iter().enumerate() {
+            let weight = if i < weights.len() { weights[i] } else { 1.0 };
+            weighted_sum += (entry.used as f64) * weight;
+            total_weight += weight;
+        }
+
+        let weighted_avg_daily = if total_weight > 0.0 {
+            weighted_sum / total_weight
+        } else {
+            0.0
+        };
+
+        // 2. Calculate weekend/weekday ratio
+        let mut weekend_sum = 0.0;
+        let mut weekend_count = 0;
+        let mut weekday_sum = 0.0;
+        let mut weekday_count = 0;
+
+        for entry in &daily_data {
+            let dt = chrono::DateTime::from_timestamp(entry.timestamp, 0)
+                .map(|dt| dt.date_naive())
+                .unwrap_or_else(|| chrono::Utc::now().date_naive());
+            
+            let is_weekend = matches!(dt.weekday(), chrono::Weekday::Sat | chrono::Weekday::Sun);
+            
+            if is_weekend {
+                weekend_sum += entry.used as f64;
+                weekend_count += 1;
+            } else {
+                weekday_sum += entry.used as f64;
+                weekday_count += 1;
+            }
+        }
+
+        let avg_weekend = if weekend_count > 0 { weekend_sum / weekend_count as f64 } else { 0.0 };
+        let avg_weekday = if weekday_count > 0 { weekday_sum / weekday_count as f64 } else { 0.0 };
+        
+        // If no weekday data, ratio is 1.0
+        let weekend_ratio = if avg_weekday > 0.0 { avg_weekend / avg_weekday } else { 1.0 };
+
+        // 3. Calculate remaining days
         let now = chrono::Utc::now();
-        let current_day = now.day() as f32;
+        let today = now.date_naive();
+        let current_day = now.day();
+        
         let days_in_month = if now.month() == 12 {
             31
         } else {
@@ -358,20 +428,40 @@ impl UsageManager {
             (next_month - current_month).num_days() as u32
         };
 
-        if current_day == 0.0 {
-            return None;
+        let remaining_days = days_in_month.saturating_sub(current_day);
+        
+        // Count remaining weekdays and weekends
+        let mut remaining_weekdays = 0;
+        let mut remaining_weekends = 0;
+        
+        for i in 1..=remaining_days {
+            // Need to handle month overflow if we just add days? 
+            // Actually simpler: iterate and check. 
+            // Note: `today` is current day. We want remaining days effectively from tomorrow?
+            // predictor.ts: date.setDate(today.getDate() + i)
+            // So yes, starting from tomorrow.
+            
+            if let Some(date) = today.checked_add_days(chrono::Days::new(i as u64)) {
+                if matches!(date.weekday(), chrono::Weekday::Sat | chrono::Weekday::Sun) {
+                    remaining_weekends += 1;
+                } else {
+                    remaining_weekdays += 1;
+                }
+            }
         }
 
-        let daily_average = used as f32 / current_day;
-        let remaining_days = days_in_month as f32 - current_day;
-        let predicted = used as f32 + (daily_average * remaining_days);
-        let predicted_monthly_requests = predicted.max(0.0).round() as u32;
+        // 4. Predict total monthly usage
+        // usage = current + (avg * weekdays) + (avg * ratio * weekends)
+        let predicted_remaining = (weighted_avg_daily * remaining_weekdays as f64) + 
+                                  (weighted_avg_daily * weekend_ratio * remaining_weekends as f64);
+        
+        let predicted_monthly_requests = (used as f64 + predicted_remaining).round() as u32;
         let excess_requests = predicted_monthly_requests.saturating_sub(limit);
         let predicted_billed_amount = (excess_requests as f64) * 0.04;
 
-        let confidence_level = if history.len() < 3 {
+        let confidence_level = if daily_data.len() < 3 {
             "low"
-        } else if history.len() < 7 {
+        } else if daily_data.len() < 7 {
             "medium"
         } else {
             "high"
@@ -381,7 +471,7 @@ impl UsageManager {
             predicted_monthly_requests,
             predicted_billed_amount,
             confidence_level: confidence_level.to_string(),
-            days_used_for_prediction: history.len() as u32,
+            days_used_for_prediction: daily_data.len() as u32,
         })
     }
 

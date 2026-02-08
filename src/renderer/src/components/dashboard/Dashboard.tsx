@@ -29,9 +29,9 @@ export function Dashboard() {
   const dailyAverage =
     history && history.days.length > 0
       ? history.days.reduce(
-          (sum, day) => sum + day.includedRequests + day.billedRequests,
-          0,
-        ) / history.days.length
+        (sum, day) => sum + day.includedRequests + day.billedRequests,
+        0,
+      ) / history.days.length
       : undefined;
 
   return (
@@ -79,8 +79,8 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* Usage and Prediction Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Usage and Forecast Hero Section */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
         <UsageCard usage={usage} isLoading={isLoading && !usage} />
         <PredictionCard
           prediction={prediction}

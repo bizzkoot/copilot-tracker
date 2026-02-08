@@ -114,14 +114,14 @@ function average(nums: number[]): number {
 /**
  * Get number of days in a month
  */
-function getDaysInMonth(date: Date): number {
+export function getDaysInMonth(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
 }
 
 /**
  * Count remaining weekdays and weekends
  */
-function countRemainingDays(
+export function countRemainingDays(
   today: Date,
   remaining: number,
 ): { remainingWeekdays: number; remainingWeekends: number } {

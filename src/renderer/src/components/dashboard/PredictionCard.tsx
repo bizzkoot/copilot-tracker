@@ -3,13 +3,26 @@
  * Displays end of month usage prediction
  */
 
+import {
+  TrendingUp,
+  AlertTriangle,
+  CheckCircle,
+  Calendar,
+  Zap,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Skeleton } from "../ui/skeleton";
 import { Tooltip } from "../ui/tooltip";
 import type { UsagePrediction, CopilotUsage } from "@renderer/types/usage";
-import { getLimitRequests, formatCurrency } from "@renderer/types/usage";
-import { getConfidenceDescription } from "@renderer/services/predictor";
-import { TrendingUp, AlertTriangle, CheckCircle } from "lucide-react";
+import {
+  getLimitRequests,
+  formatCurrency,
+  getUsedRequests,
+} from "@renderer/types/usage";
+import {
+  getConfidenceDescription,
+  getDaysInMonth,
+} from "@renderer/services/predictor";
 
 interface PredictionCardProps {
   prediction: UsagePrediction | null;
@@ -24,7 +37,7 @@ export function PredictionCard({
 }: PredictionCardProps) {
   if (isLoading) {
     return (
-      <Card>
+      <Card className="h-full">
         <CardHeader>
           <CardTitle className="text-lg">Monthly Prediction</CardTitle>
         </CardHeader>
@@ -39,7 +52,7 @@ export function PredictionCard({
 
   if (!prediction || !usage) {
     return (
-      <Card>
+      <Card className="h-full">
         <CardHeader>
           <CardTitle className="text-lg">Monthly Prediction</CardTitle>
         </CardHeader>
@@ -53,93 +66,127 @@ export function PredictionCard({
   }
 
   const limit = getLimitRequests(usage);
+  const used = getUsedRequests(usage);
   const willExceed = prediction.predictedMonthlyRequests > limit;
   const excessAmount = Math.max(0, prediction.predictedMonthlyRequests - limit);
   const percentOfLimit = (prediction.predictedMonthlyRequests / limit) * 100;
 
+  // Calculate days remaining in the month
+  const today = new Date();
+  const daysInMonth = getDaysInMonth(today);
+  const currentDay = today.getDate();
+  const daysRemaining = Math.max(1, daysInMonth - currentDay);
+
+  // Calculate daily budget
+  const remainingRequests = Math.max(0, limit - used);
+  const dailyBudget = Math.floor(remainingRequests / daysRemaining);
+
   return (
-    <Card>
+    <Card className="h-full border-primary/20 bg-gradient-to-br from-card to-primary/5">
       <CardHeader className="pb-2">
-        <CardTitle className="text-lg flex items-center justify-between">
-          <span>Monthly Prediction</span>
+        <CardTitle className="text-base font-medium text-muted-foreground uppercase tracking-wider flex items-center justify-between">
+          <span>Monthly Forecast</span>
           <Tooltip
             content={getConfidenceDescription(prediction.confidenceLevel)}
           >
             <span
-              className={`text-xs px-2 py-1 rounded-full ${
+              className={`text-[10px] px-2 py-0.5 rounded-full border ${
                 prediction.confidenceLevel === "high"
-                  ? "bg-green-500/20 text-green-500"
+                  ? "bg-green-500/10 text-green-600 border-green-500/20"
                   : prediction.confidenceLevel === "medium"
-                    ? "bg-yellow-500/20 text-yellow-500"
-                    : "bg-red-500/20 text-red-500"
+                    ? "bg-yellow-500/10 text-yellow-600 border-yellow-500/20"
+                    : "bg-red-500/10 text-red-600 border-red-500/20"
               }`}
             >
-              {prediction.confidenceLevel.charAt(0).toUpperCase() +
-                prediction.confidenceLevel.slice(1)}{" "}
-              confidence
+              {prediction.confidenceLevel.toUpperCase()} CONFIDENCE
             </span>
           </Tooltip>
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Predicted Total */}
-        <div className="flex items-center gap-3">
-          {willExceed ? (
-            <TrendingUp className="h-8 w-8 text-orange-500" />
-          ) : percentOfLimit > 75 ? (
-            <AlertTriangle className="h-8 w-8 text-yellow-500" />
-          ) : (
-            <CheckCircle className="h-8 w-8 text-green-500" />
-          )}
+      <CardContent className="space-y-6 pt-2">
+        {/* Forecasted Total */}
+        <div className="flex items-center gap-4">
+          <div
+            className={`p-3 rounded-2xl ${willExceed ? "bg-orange-500/10" : "bg-green-500/10"}`}
+          >
+            {willExceed ? (
+              <TrendingUp className="h-8 w-8 text-orange-500" />
+            ) : percentOfLimit > 75 ? (
+              <AlertTriangle className="h-8 w-8 text-yellow-500" />
+            ) : (
+              <CheckCircle className="h-8 w-8 text-green-500" />
+            )}
+          </div>
           <div>
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold">
+              <span className="text-3xl font-bold tracking-tight">
                 {prediction.predictedMonthlyRequests.toLocaleString()}
               </span>
-              <span className="text-muted-foreground">requests</span>
+              <span className="text-sm text-muted-foreground font-medium uppercase">
+                Expected
+              </span>
             </div>
-            <div className="text-sm text-muted-foreground">
+            <div className="text-sm font-medium text-muted-foreground">
               {percentOfLimit.toFixed(0)}% of monthly limit
             </div>
           </div>
         </div>
 
-        {/* Will Exceed Warning */}
-        {willExceed && (
-          <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
-            <div className="flex items-center gap-2 text-orange-500">
-              <TrendingUp className="h-4 w-4" />
-              <span className="font-medium">May exceed limit</span>
+        {/* Actionable Metrics */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="p-3 rounded-xl bg-secondary/30 border border-border/50">
+            <div className="flex items-center gap-2 mb-1">
+              <Calendar className="h-4 w-4 text-primary" />
+              <span className="text-[10px] font-bold text-muted-foreground uppercase">
+                Ends In
+              </span>
             </div>
-            <div className="mt-1 text-sm text-muted-foreground">
-              Estimated {excessAmount.toLocaleString()} requests over limit
-            </div>
-            {prediction.predictedBilledAmount > 0 && (
-              <div className="mt-1 text-sm font-medium text-orange-500">
-                Est. add-on cost:{" "}
-                {formatCurrency(prediction.predictedBilledAmount)}
-              </div>
-            )}
+            <div className="text-xl font-bold">{daysRemaining} Days</div>
           </div>
-        )}
-
-        {/* Safe Notice */}
-        {!willExceed && percentOfLimit < 75 && (
-          <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-            <div className="flex items-center gap-2 text-green-500">
-              <CheckCircle className="h-4 w-4" />
-              <span className="font-medium">On track</span>
+          <div className="p-3 rounded-xl bg-secondary/30 border border-border/50">
+            <div className="flex items-center gap-2 mb-1">
+              <Zap className="h-4 w-4 text-primary" />
+              <span className="text-[10px] font-bold text-muted-foreground uppercase">
+                Daily Budget
+              </span>
             </div>
-            <div className="mt-1 text-sm text-muted-foreground">
-              Likely to stay within your included quota
+            <div className="text-xl font-bold">
+              {dailyBudget}
+              <span className="text-xs font-normal text-muted-foreground ml-1">
+                req
+              </span>
             </div>
           </div>
-        )}
-
-        {/* Based on data note */}
-        <div className="text-xs text-muted-foreground">
-          Based on {prediction.daysUsedForPrediction} days of usage data
         </div>
+
+        {/* Status Alert */}
+        {willExceed ? (
+          <div className="p-3 rounded-xl bg-orange-500/10 border border-orange-500/20">
+            <div className="flex items-center gap-2 text-orange-600 dark:text-orange-400">
+              <AlertTriangle className="h-4 w-4" />
+              <span className="text-sm font-bold">Capacity Alert</span>
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              Estimated {excessAmount.toLocaleString()} requests over limit.
+              {prediction.predictedBilledAmount > 0 && (
+                <span className="block mt-1 font-bold text-orange-600 dark:text-orange-400">
+                  Est. extra cost:{" "}
+                  {formatCurrency(prediction.predictedBilledAmount)}
+                </span>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/20">
+            <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+              <CheckCircle className="h-4 w-4" />
+              <span className="text-sm font-bold">Safe Consumption</span>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              You are likely to stay within your included quota this month.
+            </p>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -4,7 +4,7 @@
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
-import { Progress } from "../ui/progress";
+import { Gauge } from "../ui/gauge";
 import { Skeleton } from "../ui/skeleton";
 import { Tooltip } from "../ui/tooltip";
 import type { CopilotUsage } from "@renderer/types/usage";
@@ -12,7 +12,6 @@ import {
   getUsedRequests,
   getLimitRequests,
   getUsagePercentage,
-  getProgressColor,
   formatCurrency,
 } from "@renderer/types/usage";
 
@@ -24,14 +23,13 @@ interface UsageCardProps {
 export function UsageCard({ usage, isLoading }: UsageCardProps) {
   if (isLoading) {
     return (
-      <Card>
+      <Card className="h-full">
         <CardHeader>
-          <CardTitle className="text-lg">Current Usage</CardTitle>
+          <CardTitle className="text-lg">Quota Status</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-8 w-32" />
-          <Skeleton className="h-4 w-24" />
+        <CardContent className="flex flex-col items-center justify-center pt-2 pb-8">
+          <Skeleton className="h-[120px] w-[120px] rounded-full" />
+          <Skeleton className="h-6 w-32 mt-6" />
         </CardContent>
       </Card>
     );
@@ -39,15 +37,12 @@ export function UsageCard({ usage, isLoading }: UsageCardProps) {
 
   if (!usage) {
     return (
-      <Card>
+      <Card className="h-full">
         <CardHeader>
-          <CardTitle className="text-lg">Current Usage</CardTitle>
+          <CardTitle className="text-lg">Quota Status</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-muted-foreground">
-            No usage data available. Please check your connection or try again
-            later.
-          </p>
+          <p className="text-muted-foreground">No usage data available.</p>
         </CardContent>
       </Card>
     );
@@ -56,55 +51,56 @@ export function UsageCard({ usage, isLoading }: UsageCardProps) {
   const used = getUsedRequests(usage);
   const limit = getLimitRequests(usage);
   const percentage = getUsagePercentage(usage);
-  const progressColor = getProgressColor(percentage);
+
+  const getGaugeColor = (pct: number) => {
+    if (pct >= 90) return "text-red-500";
+    if (pct >= 75) return "text-yellow-500";
+    return "text-green-500";
+  };
+
   const addOnCost = usage.netBilledAmount;
 
   return (
-    <Card>
+    <Card className="h-full overflow-hidden border-primary/20 bg-gradient-to-br from-card to-primary/5">
       <CardHeader className="pb-2">
-        <CardTitle className="text-lg flex items-center justify-between">
-          <span>Current Usage</span>
-          <span className="text-sm font-normal text-muted-foreground">
-            This billing period
-          </span>
+        <CardTitle className="text-base font-medium text-muted-foreground uppercase tracking-wider">
+          Quota Consumed
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Progress Bar */}
-        <div className="space-y-2">
+      <CardContent className="flex flex-col items-center justify-center pt-2 pb-6 space-y-6">
+        <div className="relative group">
           <Tooltip
             content={`${used.toLocaleString()} of ${limit.toLocaleString()} requests used`}
           >
-            <Progress
+            <Gauge
               value={percentage}
-              className="h-3"
-              indicatorClassName={progressColor}
+              size={140}
+              strokeWidth={12}
+              indicatorClassName={getGaugeColor(percentage)}
+              className="drop-shadow-sm"
             />
           </Tooltip>
         </div>
 
-        {/* Usage Numbers */}
-        <div className="flex items-baseline gap-2">
-          <span className="text-3xl font-bold">{used.toLocaleString()}</span>
-          <span className="text-muted-foreground">
-            / {limit.toLocaleString()}
-          </span>
-          <span
-            className={`text-sm font-medium ${percentage >= 90 ? "text-red-500" : percentage >= 75 ? "text-yellow-500" : "text-green-500"}`}
-          >
-            ({percentage.toFixed(1)}%)
-          </span>
+        <div className="text-center">
+          <div className="flex items-baseline justify-center gap-1">
+            <span className="text-3xl font-bold tracking-tight">
+              {used.toLocaleString()}
+            </span>
+            <span className="text-sm text-muted-foreground font-medium">
+              / {limit.toLocaleString()}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1 font-medium">
+            REQUESTS THIS PERIOD
+          </p>
         </div>
 
-        {/* Add-on Cost */}
-        {addOnCost > 0 ? (
-          <div className="flex items-center gap-2 text-orange-500">
-            <span className="text-sm">Add-on charges:</span>
-            <span className="font-semibold">{formatCurrency(addOnCost)}</span>
-          </div>
-        ) : (
-          <div className="text-sm text-muted-foreground">
-            No add-on charges this period
+        {addOnCost > 0 && (
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-600 dark:text-orange-400">
+            <span className="text-xs font-semibold whitespace-nowrap">
+              Add-on: {formatCurrency(addOnCost)}
+            </span>
           </div>
         )}
       </CardContent>

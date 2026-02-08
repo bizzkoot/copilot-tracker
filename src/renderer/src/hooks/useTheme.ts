@@ -39,7 +39,17 @@ export function useTheme() {
   const toggleTheme = useCallback(() => {
     const root = document.documentElement;
     const isDark = root.classList.contains("dark");
-    setTheme(isDark ? "light" : "dark");
+    const newTheme = isDark ? "light" : "dark";
+
+    // Optimistic update
+    setTheme(newTheme);
+
+    // Sync with backend to prevent reset on other settings updates
+    window.electron.setSettings({ theme: newTheme }).catch((err) => {
+      console.error("Failed to sync theme to backend:", err);
+      // Revert on failure
+      setTheme(isDark ? "dark" : "light");
+    });
   }, [setTheme]);
 
   // Get current effective theme (resolves 'system' to actual value)
