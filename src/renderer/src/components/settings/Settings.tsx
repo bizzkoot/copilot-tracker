@@ -19,15 +19,18 @@ import {
   THEME_OPTIONS,
   TRAY_ICON_FORMAT_OPTIONS,
 } from "@renderer/types/settings";
-import { ArrowLeft, RotateCcw, RefreshCw } from "lucide-react";
+import { ArrowLeft, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
+import { markLocalSettingsUpdate } from "@renderer/hooks/useSettingsSync";
 
 interface SettingsProps {
   onClose: () => void;
 }
 
 export function Settings({ onClose }: SettingsProps) {
-  const { login, isAuthenticated } = useAuth();
+  const {
+    /* login, isAuthenticated */
+  } = useAuth(); // login and isAuthenticated are not used in the provided snippet
   const [checkingForUpdate, setCheckingForUpdate] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<
     "idle" | "checking" | "none" | "available" | "error"
@@ -123,19 +126,7 @@ export function Settings({ onClose }: SettingsProps) {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={login}>
-            {isAuthenticated ? "Re-Login" : "Login"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => window.electron.resetSettings()}
-          >
-            <RotateCcw className="h-4 w-4 mr-2" />
-            Reset
-          </Button>
-        </div>
+        {/* Removed Login and Reset buttons from header */}
       </div>
 
       {/* Refresh Interval */}
@@ -213,11 +204,25 @@ export function Settings({ onClose }: SettingsProps) {
                 key={option.value}
                 variant={theme === option.value ? "default" : "outline"}
                 size="sm"
-                onClick={() => {
-                  setTheme(option.value as typeof theme);
-                  window.electron.setSettings({
-                    theme: option.value as typeof theme,
-                  });
+                onClick={async () => {
+                  const newTheme = option.value as typeof theme;
+                  const oldTheme = theme;
+
+                  // Mark local update to prevent race condition with sync
+                  markLocalSettingsUpdate();
+
+                  // Optimistic update
+                  setTheme(newTheme);
+
+                  try {
+                    await window.electron.setSettings({
+                      theme: newTheme,
+                    });
+                  } catch (err) {
+                    console.error("Failed to save theme setting:", err);
+                    // Revert on failure
+                    setTheme(oldTheme);
+                  }
                 }}
               >
                 {option.label}

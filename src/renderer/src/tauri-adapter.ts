@@ -439,6 +439,7 @@ export function initTauriAdapter() {
       },
       setSettings: async (newSettings: Partial<Settings>) => {
         try {
+          console.log("[TauriAdapter] Setting settings:", newSettings);
           // 1. Get current settings from Rust
           const current = await invoke<RustAppSettings>("get_settings");
 
@@ -479,8 +480,14 @@ export function initTauriAdapter() {
             updateChannel: current.updateChannel,
           };
 
+          console.log(
+            "[TauriAdapter] Sending merged settings to Rust:",
+            merged,
+          );
+
           // 3. Send back to Rust
           await invoke("update_settings", { settings: merged });
+          console.log("[TauriAdapter] Settings updated successfully");
         } catch (e) {
           console.error("Failed to set settings", e);
           throw e;
@@ -645,7 +652,7 @@ function setupMockAdapter() {
     getSettings: async () =>
       ({
         refreshInterval: 60,
-        predictionPeriod: "30days",
+        predictionPeriod: "30days" as any,
         launchAtLogin: false,
         startMinimized: false,
         theme: "system",
