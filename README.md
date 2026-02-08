@@ -364,10 +364,10 @@ Available variables:
 
 | Platform              | Tauri |
 | --------------------- | :---: |
-| macOS (Intel)         |   ✅   |
-| macOS (Apple Silicon) |   ✅   |
-| Windows 64-bit        |   ✅   |
-| Linux (x64)           |   ✅   |
+| macOS (Intel)         |  ✅   |
+| macOS (Apple Silicon) |  ✅   |
+| Windows 64-bit        |  ✅   |
+| Linux (x64)           |  ✅   |
 
 > **Note:** Electron builds were discontinued after v1.5.1. All releases from v1.5.2 onward are Tauri-only.
 
