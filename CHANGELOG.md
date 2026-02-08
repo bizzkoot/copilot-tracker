@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.2.0](https://github.com/bizzkoot/copilot-tracker/compare/v2.1.2...v2.2.0) (2026-02-08)
+
+
+### Features
+
+* Add model-level usage breakdown with expandable history table ([6f4760b](https://github.com/bizzkoot/copilot-tracker/commit/6f4760b39edeb07a1f3440d1dad1eefc8e3bb789))
+* **dashboard:** add model usage totals to Daily Breakdown table footer ([c4ef228](https://github.com/bizzkoot/copilot-tracker/commit/c4ef228ed669c9e42ad536b768c2f60e246d7a2d))
+* **ui/backend:** enhance dashboard, unify prediction logic, and fix theme sync ([e5737c6](https://github.com/bizzkoot/copilot-tracker/commit/e5737c6a9af853087f0dff6b2c2953124cb0e14f))
+* **ui/dashboard:** release - enhance dashboard with EMA trend line and compact layout ([94e7d67](https://github.com/bizzkoot/copilot-tracker/commit/94e7d67016db08dc5b071e38323cb33d848749ff))
+
+
+### Bug Fixes
+
+* **dev:** prevent port 5173 conflict in tauri dev mode ([04dc9cb](https://github.com/bizzkoot/copilot-tracker/commit/04dc9cbd8fda4f5e65b76c7336984631a2427028))
+* resolve date parsing issue and refactor usage fetching ([f552c74](https://github.com/bizzkoot/copilot-tracker/commit/f552c743bfb5d7a9f4fbd2aca3d5ee65ed61f4c8))
+* **settings:** prevent theme race condition on window focus/refresh ([a2f9e07](https://github.com/bizzkoot/copilot-tracker/commit/a2f9e079cb91abf9163b9b5ac524b6aa8f599e30))
+
 ## [2.1.2](https://github.com/bizzkoot/copilot-tracker/compare/v2.1.1...v2.1.2) (2026-02-07)
 
 ### Bug Fixes
