@@ -2,6 +2,93 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Codebase Structure Index
+
+The file map below provides instant orientation. For detailed export signatures and dependencies, read the relevant `.claude/structure/*.yaml` file for the directory you're working in.
+
+After adding, removing, or renaming source files or public classes/functions, update both the file map below and the relevant structure YAML file.
+
+### File Map
+
+## src-tauri/src/ (Rust backend)
+
+src-tauri/src/main.rs - Application entry point with tray icon management
+src-tauri/src/auth.rs - GitHub authentication and data extraction
+src-tauri/src/usage.rs - Usage data fetching and prediction calculations
+src-tauri/src/store.rs - Persistent settings and data storage
+src-tauri/src/tray_icon_renderer.rs - Custom tray icon rendering with fontdue
+src-tauri/src/lib.rs - Module exports and common types
+
+## src/renderer/src/ (React TypeScript frontend)
+
+### components/
+
+src/renderer/src/components/auth/LoginPrompt.tsx - GitHub login interface
+src/renderer/src/components/dashboard/Dashboard.tsx - Main usage dashboard
+src/renderer/src/components/dashboard/UsageCard.tsx - Usage quota display
+src/renderer/src/components/dashboard/UsageChart.tsx - Usage trend visualization
+src/renderer/src/components/dashboard/PredictionCard.tsx - Usage predictions
+src/renderer/src/components/dashboard/HistoryTable.tsx - Historical usage data
+src/renderer/src/components/settings/Settings.tsx - App preferences
+src/renderer/src/components/layout/Layout.tsx - App layout wrapper
+src/renderer/src/components/layout/Header.tsx - Navigation header
+src/renderer/src/components/ui/button.tsx - Reusable button component
+src/renderer/src/components/ui/card.tsx - Reusable card component
+src/renderer/src/components/ui/progress.tsx - Progress bar display
+src/renderer/src/components/ui/skeleton.tsx - Loading placeholder
+src/renderer/src/components/ui/tooltip.tsx - Tooltip component
+src/renderer/src/components/ui/gauge.tsx - Circular gauge display
+src/renderer/src/components/ui/UpdateBanner.tsx - Update notification
+
+### hooks/
+
+src/renderer/src/hooks/useAuth.ts - Authentication management hook
+src/renderer/src/hooks/useUsage.ts - Usage data fetching hook
+src/renderer/src/hooks/useSettingsSync.ts - Settings synchronization hook
+src/renderer/src/hooks/useTheme.ts - Theme management hook
+src/renderer/src/hooks/index.ts - Hook exports
+
+### services/
+
+src/renderer/src/services/api.ts - Tauri/Electron API adapter
+src/renderer/src/services/predictor.ts - Usage prediction calculations
+src/renderer/src/services/index.ts - Service exports
+
+### stores/
+
+src/renderer/src/stores/usageStore.ts - Zustand usage state management
+src/renderer/src/stores/settingsStore.ts - Zustand settings state management
+src/renderer/src/stores/index.ts - Store exports
+
+### types/
+
+src/renderer/src/types/index.ts - Type definitions
+src/renderer/src/types/usage.ts - Usage-related types
+src/renderer/src/types/settings.ts - Settings-related types
+src/renderer/src/types/electron.ts - Electron API types
+
+### lib/
+
+src/renderer/src/lib/utils.ts - Utility functions
+
+### Root files
+
+src/renderer/src/tauri-adapter.ts - Tauri/Electron API bridge
+src/renderer/src/App.tsx - App component entry point
+src/renderer/src/main.tsx - React app bootstrap
+
+## src/main/ (Electron main process)
+
+src/main/index.ts - Electron main process entry point
+src/main/config.ts - Electron configuration and settings
+
+## src/preload/ (Preload scripts)
+
+src/preload/index.ts - Preload script for main process
+src/preload/index.d.ts - Type definitions for preload script
+
+---
+
 ## Project Overview
 
 **Copilot Tracker** is a cross-platform desktop application built with Tauri v2 (Rust backend) and React + TypeScript (frontend). It tracks GitHub Copilot usage by extracting data from GitHub's billing page and displays it in a system tray app with usage predictions.

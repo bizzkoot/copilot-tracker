@@ -342,12 +342,50 @@ function createWindow(): void {
     return { action: "deny" };
   });
 
-  // HMR for renderer
-  if (!app.isPackaged && process.env["ELECTRON_RENDERER_URL"]) {
-    mainWindow.loadURL(process.env["ELECTRON_RENDERER_URL"]);
+  // Load the renderer content
+  // In production (packaged app), always use the built files
+  // In development, use the dev server if available
+  const isDevMode = !app.isPackaged;
+  const devServerUrl = process.env["ELECTRON_RENDERER_URL"];
+  const indexPath = join(__dirname, "../renderer/index.html");
+
+  devLog.log(
+    `[Window] isPackaged: ${app.isPackaged}, isDevMode: ${isDevMode}, devServerUrl: ${devServerUrl || "none"}`,
+  );
+
+  if (isDevMode && devServerUrl) {
+    devLog.log(`[Window] Loading from dev server: ${devServerUrl}`);
+    mainWindow.loadURL(devServerUrl).catch((err) => {
+      devLog.error(
+        "[Window] Failed to load dev server, falling back to file:",
+        err,
+      );
+      mainWindow?.loadFile(indexPath);
+    });
   } else {
-    mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
+    devLog.log(`[Window] Loading from file: ${indexPath}`);
+    mainWindow.loadFile(indexPath);
   }
+
+  // Handle failed loads - if the page fails to load (e.g., white screen on autostart),
+  // reload from file as a fallback
+  mainWindow.webContents.on(
+    "did-fail-load",
+    (_event, errorCode, errorDescription, validatedURL) => {
+      devLog.error(
+        `[Window] Failed to load: ${errorCode} - ${errorDescription} at ${validatedURL}`,
+      );
+
+      // If we tried to load from a URL (likely localhost) and it failed, fall back to file
+      if (
+        validatedURL &&
+        (validatedURL.includes("localhost") || validatedURL.includes("://"))
+      ) {
+        devLog.log("[Window] Load from URL failed, falling back to local file");
+        mainWindow?.loadFile(indexPath);
+      }
+    },
+  );
 }
 
 // ============= System Tray =============

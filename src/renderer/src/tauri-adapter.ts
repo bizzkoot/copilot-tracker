@@ -99,27 +99,58 @@ const convertUsageData = (summary: RustUsageSummary): UsageFetchResult => {
   };
 };
 
-export function initTauriAdapter() {
+/**
+ * Wait for Tauri APIs to be available in the window context.
+ * This fixes a race condition where JavaScript executes before Tauri
+ * has fully injected its APIs, especially when showing a hidden window.
+ */
+async function waitForTauri(maxAttempts = 50, delay = 20): Promise<boolean> {
+  for (let i = 0; i < maxAttempts; i++) {
+    if (window.__TAURI__?.core && window.__TAURI__?.event) {
+      console.log(`[TauriAdapter] Tauri APIs available after ${i * delay}ms`);
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
+  console.warn(
+    `[TauriAdapter] Tauri APIs not available after ${maxAttempts * delay}ms`,
+  );
+  return false;
+}
+
+export async function initTauriAdapter() {
   console.log("Initializing Tauri Adapter...");
 
   try {
-    const isTauri =
-      typeof window !== "undefined" && window.__TAURI__ !== undefined;
-
     // FIX: Check if we are already in an Electron environment
     const isElectron =
       typeof window !== "undefined" && (window as any).electron !== undefined;
 
     // If running in Electron (and not Tauri), do NOT overwrite the API
-    if (isElectron && !isTauri) {
+    if (isElectron && !window.__TAURI__) {
       console.log(
         "Electron environment detected. Skipping Tauri adapter initialization.",
       );
       return;
     }
 
-    if (!isTauri) {
+    // Check if Tauri is even present
+    const hasTauriGlobal =
+      typeof window !== "undefined" && window.__TAURI__ !== undefined;
+
+    if (!hasTauriGlobal) {
       console.log("Not running in Tauri environment. Using mock adapter.");
+      setupMockAdapter();
+      return;
+    }
+
+    // Wait for Tauri APIs to be fully initialized
+    const tauriReady = await waitForTauri();
+
+    if (!tauriReady) {
+      console.warn(
+        "Tauri APIs not available after waiting. Using mock adapter.",
+      );
       setupMockAdapter();
       return;
     }

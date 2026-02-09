@@ -10,7 +10,7 @@ on:
       - main
   schedule:
     # Run every hour to check for release PRs
-    - cron: '0 * * * *'
+    - cron: "0 * * * *"
   workflow_dispatch:
 
 jobs:
@@ -236,8 +236,8 @@ jobs:
         id: find-comment
         with:
           issue-number: ${{ needs.release-please.outputs.pr_number }}
-          comment-author: 'github-actions[bot]'
-          body-includes: '<!-- validation-summary -->'
+          comment-author: "github-actions[bot]"
+          body-includes: "<!-- validation-summary -->"
 
       - name: Create or update comment
         uses: peter-evans/create-or-update-comment@v4
