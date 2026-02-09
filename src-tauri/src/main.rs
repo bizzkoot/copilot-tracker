@@ -966,6 +966,7 @@ fn main() {
                             let _ = window.show();
                             let _ = window.set_focus();
                         }
+                        let _ = app.emit("navigate", "dashboard");
                     }
                     "open_billing" => {
                         let _ = app.opener().open_url(

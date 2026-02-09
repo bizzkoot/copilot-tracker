@@ -12,7 +12,6 @@ import {
 } from "../ui/card";
 import { Button } from "../ui/button";
 import { useSettingsStore } from "@renderer/stores/settingsStore";
-import { useAuth } from "@renderer/hooks/useAuth";
 import {
   REFRESH_INTERVAL_OPTIONS,
   PREDICTION_PERIOD_OPTIONS,
@@ -28,9 +27,6 @@ interface SettingsProps {
 }
 
 export function Settings({ onClose }: SettingsProps) {
-  const {
-    /* login, isAuthenticated */
-  } = useAuth(); // login and isAuthenticated are not used in the provided snippet
   const [checkingForUpdate, setCheckingForUpdate] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<
     "idle" | "checking" | "none" | "available" | "error"

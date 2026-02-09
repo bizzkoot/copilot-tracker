@@ -650,6 +650,7 @@ function updateTrayMenu(usage?: CopilotUsage | null): void {
     label: "Open Dashboard",
     click: (): void => {
       showMainWindow();
+      mainWindow?.webContents.send("navigate", "dashboard");
     },
   });
 
