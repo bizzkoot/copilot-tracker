@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.2](https://github.com/bizzkoot/copilot-tracker/compare/v2.3.1...v2.3.2) (2026-02-10)
+
+
+### Bug Fixes
+
+* **build:** include widget entry in renderer build - release ([be93fce](https://github.com/bizzkoot/copilot-tracker/commit/be93fce9c24befb22b3f431313e64568b4de5ce5))
+* **widget:** update positioning API and improve notification handling ([d37444f](https://github.com/bizzkoot/copilot-tracker/commit/d37444f3a5aea4038b2bbe70b5ac7e98fd27b20c))
+
 ## [2.3.1](https://github.com/bizzkoot/copilot-tracker/compare/v2.3.0...v2.3.1) (2026-02-10)
 
 
