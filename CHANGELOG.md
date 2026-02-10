@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.3.1](https://github.com/bizzkoot/copilot-tracker/compare/v2.3.0...v2.3.1) (2026-02-10)
+
+
+### Bug Fixes
+
+* **ci:** use PAT for release-please to trigger PR checks automatically ([89fae57](https://github.com/bizzkoot/copilot-tracker/commit/89fae579c8fc5e37afbe86f472e58013af127a10))
+* **code-quality:** resolve audit findings from P0 to P3-Low ([10a933f](https://github.com/bizzkoot/copilot-tracker/commit/10a933fd19e6b1cc6f4d70c683e0514d338c63f6))
+* resolve build errors and add comprehensive PR checks ([de023db](https://github.com/bizzkoot/copilot-tracker/commit/de023db9799cee7d4197c0c1042099427506889b))
+
+
+### Other
+
+* trigger release-please PR creation ([1ce840f](https://github.com/bizzkoot/copilot-tracker/commit/1ce840f301408b4f946258259bda2b48f91d1490))
+
 ## [2.3.0](https://github.com/bizzkoot/copilot-tracker/compare/v2.2.0...v2.3.0) (2026-02-10)
 
 
