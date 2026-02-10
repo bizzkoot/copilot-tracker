@@ -8,18 +8,14 @@ use chrono::Datelike;
 use serde::Deserialize;
 use std::sync::{Arc, Mutex};
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::tray::TrayIconBuilder;
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Listener, Manager};
 use tauri_plugin_http::reqwest;
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
 
 use copilot_tracker::{
-    init_store_manager,
-    AuthManager,
-    StoreManager,
-    TrayIconRenderer,
-    UsageManager,
+    init_store_manager, AuthManager, StoreManager, TrayIconRenderer, UsageManager, WidgetPosition,
 };
 
 // ============================================================================
@@ -754,7 +750,7 @@ async fn set_widget_position(app: AppHandle, x: i32, y: i32) -> Result<(), Strin
             .map_err(|e| e.to_string())?;
         // Save position to settings
         let store = app.state::<StoreManager>();
-        let _ = store.set_widget_position(x, y);
+        let _ = store.set_widget_position(WidgetPosition { x, y });
     }
     Ok(())
 }
@@ -1158,14 +1154,21 @@ fn main() {
                     }
                     _ => {}
                 })
-                .on_click_event(move |app, event| {
-                    if event.kind == tauri::tray::ClickKind::Double {
-                        log::info!("Tray icon double-clicked - toggling widget");
-                        let _ = toggle_widget(app.clone());
-                        // Rebuild tray menu to update widget label
-                        let update_state = app.state::<UpdateState>();
-                        let latest = update_state.latest.lock().unwrap();
-                        let _ = rebuild_tray_menu(&app, latest.as_ref());
+                .on_tray_icon_event(move |tray, event| {
+                    match event {
+                        TrayIconEvent::DoubleClick {
+                            button: MouseButton::Left,
+                            ..
+                        } => {
+                            log::info!("Tray icon double-clicked - toggling widget");
+                            let app = tray.app_handle();
+                            let _ = toggle_widget(app.clone());
+                            // Rebuild tray menu to update widget label
+                            let update_state = app.state::<UpdateState>();
+                            let latest = update_state.latest.lock().unwrap();
+                            let _ = rebuild_tray_menu(&app, latest.as_ref());
+                        }
+                        _ => {}
                     }
                 })
                 // Note: Tray icon single click intentionally does NOT show dashboard

@@ -1,0 +1,168 @@
+name: PR Checks
+
+permissions:
+  contents: read
+  pull-requests: write
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+jobs:
+  # ============================================================================
+  # Validate PR - Comprehensive checks before merge
+  # ============================================================================
+  validate-pr:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: macos-latest
+            target: universal-apple-darwin
+            rust_target: aarch64-apple-darwin,x86_64-apple-darwin
+            build_cmd: npm run tauri:build:mac
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            rust_target: x86_64-unknown-linux-gnu
+            build_cmd: npm run tauri:build:linux
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            rust_target: x86_64-pc-windows-msvc
+            build_cmd: npm run tauri:build:win
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install Rust (macOS/Linux)
+        if: runner.os != 'Windows'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Install Rust (Windows)
+        if: runner.os == 'Windows'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Install System Dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Install System Dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          # Rust targets already installed by rust-toolchain action
+          echo "macOS dependencies ready"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run TypeScript type checking
+        run: npm run typecheck
+
+      - name: Run ESLint
+        run: npm run lint
+        continue-on-error: false
+
+      - name: Build - Full Tauri build for ${{ matrix.os }}
+        run: ${{ matrix.build_cmd }}
+        env:
+          TAURI_BUNDLE_SKIP_SIGNING: "true"
+
+      - name: Report validation status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ All validation checks passed on ${{ matrix.os }}"
+          else
+            echo "❌ Validation failed on ${{ matrix.os }}"
+            exit 1
+          fi
+
+  # ============================================================================
+  # Post Validation Summary to PR
+  # ============================================================================
+  post-validation-summary:
+    needs: validate-pr
+    # Run after validation, regardless of result
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Generate validation summary
+        id: summary
+        run: |
+          if [ "${{ needs.validate-pr.result }}" == "success" ]; then
+            echo "summary=✅ **All validation checks passed!**" >> $GITHUB_OUTPUT
+            echo "details=<br><br>### Validation Results<br>✅ TypeScript type checking (all platforms)<br>✅ ESLint (all platforms)<br>✅ Full Tauri build (Windows, macOS, Linux)" >> $GITHUB_OUTPUT
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "summary=❌ **Validation checks failed**" >> $GITHUB_OUTPUT
+            echo "details=<br><br>### Validation Results<br>⚠️ Some validation checks failed. Please check the workflow logs for details.<br><br>**Failed checks may include:**<br>- TypeScript type errors<br>- ESLint violations<br>- Tauri build failures (Windows/macOS/Linux)<br>- Rust compilation errors" >> $GITHUB_OUTPUT
+            echo "status=failure" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Find comment
+        uses: peter-evans/find-comment@v3
+        id: find-comment
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: "github-actions[bot]"
+          body-includes: "<!-- pr-validation-summary -->"
+
+      - name: Create or update comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.find-comment.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          edit-mode: replace
+          body: |
+            <!-- pr-validation-summary -->
+            ## PR Validation ${{ steps.summary.outputs.summary }}
+
+            ${{ steps.summary.outputs.details }}
+
+            <details>
+            <summary>View detailed workflow logs</summary>
+
+            - [TypeScript Type Checking](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            - [ESLint](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            - [Tauri Build - Windows](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            - [Tauri Build - macOS](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            - [Tauri Build - Linux](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+            </details>
+
+            ---
+            *This comment is automatically updated by the PR validation workflow.*
+
+      - name: Fail workflow if validation failed
+        if: steps.summary.outputs.status == 'failure'
+        run: exit 1
