@@ -97,6 +97,7 @@ jobs:
 
       - name: Report validation status
         if: always()
+        shell: bash
         run: |
           if [ "${{ job.status }}" == "success" ]; then
             echo "✅ All validation checks passed on ${{ matrix.os }}"

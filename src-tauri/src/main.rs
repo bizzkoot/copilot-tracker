@@ -422,7 +422,10 @@ async fn show_auth_window(
     app: AppHandle,
     state: tauri::State<'_, AuthManagerState>,
 ) -> Result<bool, String> {
-    let mut auth_manager = state.auth_manager.lock().unwrap();
+    let mut auth_manager = state
+        .auth_manager
+        .lock()
+        .map_err(|e| format!("Failed to acquire auth manager lock: {}", e))?;
     auth_manager.show_auth_window(&app)?;
     Ok(true)
 }
@@ -1178,7 +1181,10 @@ fn main() {
 
             // Store tray icon in state
             let tray_state = app.state::<TrayState>();
-            *tray_state.tray.lock().unwrap() = Some(tray);
+            *tray_state
+                .tray
+                .lock()
+                .map_err(|e| format!("Failed to acquire tray lock: {}", e))? = Some(tray);
 
             // Listen for usage updates and update tray
             let app_handle = app.handle();

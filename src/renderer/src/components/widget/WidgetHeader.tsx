@@ -24,6 +24,7 @@ export function WidgetHeader({
   onDragEnd,
 }: WidgetHeaderProps) {
   const [isDragging, setIsDragging] = useState(false);
+  const isDraggingRef = useRef(false); // Stable ref for event handlers
   const dragStartPos = useRef({ x: 0, y: 0 });
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -31,11 +32,12 @@ export function WidgetHeader({
     if ((e.target as HTMLElement).closest("button")) return;
 
     setIsDragging(true);
+    isDraggingRef.current = true;
     dragStartPos.current = { x: e.clientX, y: e.clientY };
     onDragStart();
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!isDragging) return;
+    const handleMouseMove = async (moveEvent: MouseEvent) => {
+      if (!isDraggingRef.current) return; // Use ref for stable check
 
       const deltaX = moveEvent.clientX - dragStartPos.current.x;
       const deltaY = moveEvent.clientY - dragStartPos.current.y;
@@ -43,15 +45,20 @@ export function WidgetHeader({
       // Use Tauri window API to move the window
       const currentWindow = getCurrentWindow();
       if (currentWindow) {
-        currentWindow.getPosition().then((pos: { x: number; y: number }) => {
-          currentWindow.setPosition(pos.x + deltaX, pos.y + deltaY);
-        });
+        try {
+          const pos = await currentWindow.getPosition();
+          if (!isDraggingRef.current) return; // Check again after await
+          await currentWindow.setPosition(pos.x + deltaX, pos.y + deltaY);
+        } catch (error) {
+          console.error("Failed to move widget:", error);
+        }
       }
 
       dragStartPos.current = { x: moveEvent.clientX, y: moveEvent.clientY };
     };
 
     const handleMouseUp = async () => {
+      isDraggingRef.current = false;
       setIsDragging(false);
       onDragEnd();
 

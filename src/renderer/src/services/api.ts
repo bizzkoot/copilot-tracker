@@ -59,8 +59,19 @@ export const API_SCRIPTS = {
   `,
 
   /**
-   * Method 3: Extract customer ID from HTML via regex patterns
-   * Last resort fallback
+   * Method 3: Extract customer ID from HTML via regex patterns  * Last resort fallback
+   *
+   * SECURITY NOTE: This uses innerHTML which is generally a security risk.
+   * However, this usage is safe because:
+   * 1. Source is GitHub.com billing page (trusted origin, authenticated session)
+   * 2. Regex patterns ONLY extract numeric customer IDs (no script execution)
+   * 3. Extracted data is validated with parseInt() before use
+   * 4. No user input is involved - data comes from GitHub's trusted HTML
+   * 5. Extracted value is never rendered back to DOM or evaluated as code
+   * 6. Runs in isolated Tauri security context (not public web page)
+   *
+   * Risk assessment: LOW - Multiple layers of protection prevent XSS.
+   * This is used as a last resort when API methods fail.
    */
   getCustomerIdFromHTML: `
     return (function() {
