@@ -182,7 +182,7 @@ impl AuthManager {
                                                         let sub_cells = sub_row.get("cells").and_then(|v| v.as_array())?;
                                                         if sub_cells.len() < 5 { return None; }
 
-                                                        let name = sub_cells.get(0)?.get("value")?.as_str()?.to_string();
+                                                        let name = sub_cells.first()?.get("value")?.as_str()?.to_string();
                                                         let included_requests = sub_cells.get(1)?.get("value")?.as_str()?.parse::<u32>().ok()?;
                                                         let billed_requests = sub_cells.get(2)?.get("value")?.as_str()?.parse::<u32>().ok()?;
                                                         let gross_amount = sub_cells.get(3)?.get("value")?.as_str()?.trim_start_matches('$').parse::<f64>().ok()?;
@@ -914,7 +914,7 @@ impl AuthManager {
                                                 let sub_cells = sub_row.get("cells").and_then(|v| v.as_array())?;
                                                 if sub_cells.len() < 5 { return None; }
 
-                                                let name = sub_cells.get(0)?.get("value")?.as_str()?.to_string();
+                                                let name = sub_cells.first()?.get("value")?.as_str()?.to_string();
                                                 let included_requests = sub_cells.get(1)?.get("value")?.as_str()?.parse::<u32>().ok()?;
                                                 let billed_requests = sub_cells.get(2)?.get("value")?.as_str()?.parse::<u32>().ok()?;
                                                 let gross_amount = sub_cells.get(3)?.get("value")?.as_str()?.trim_start_matches('$').parse::<f64>().ok()?;

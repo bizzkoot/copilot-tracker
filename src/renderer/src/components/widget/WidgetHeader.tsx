@@ -48,7 +48,10 @@ export function WidgetHeader({
         try {
           const pos = await currentWindow.getPosition();
           if (!isDraggingRef.current) return; // Check again after await
-          await currentWindow.setPosition(pos.x + deltaX, pos.y + deltaY);
+          await currentWindow.setPosition({
+            x: pos.x + deltaX,
+            y: pos.y + deltaY,
+          });
         } catch (error) {
           console.error("Failed to move widget:", error);
         }

@@ -8,7 +8,7 @@ use chrono::Datelike;
 use serde::Deserialize;
 use std::sync::{Arc, Mutex};
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Listener, Manager};
 use tauri_plugin_http::reqwest;
 use tauri_plugin_notification::NotificationExt;
@@ -593,9 +593,27 @@ fn update_settings(
     settings: copilot_tracker::AppSettings,
 ) -> Result<(), String> {
     let store = app.state::<StoreManager>();
+    let previous = store.get_settings();
     store.update_settings(|s| {
         *s = settings.clone();
     })?;
+
+    if previous.launch_at_login != settings.launch_at_login {
+        use tauri_plugin_autostart::ManagerExt;
+        let result = if settings.launch_at_login {
+            app.autolaunch().enable()
+        } else {
+            app.autolaunch().disable()
+        };
+
+        if let Err(e) = result {
+            log::error!("Failed to set launch at login: {}", e);
+            let _ = store.update_settings(|s| {
+                s.launch_at_login = previous.launch_at_login;
+            });
+            return Err(format!("Failed to set launch at login: {}", e));
+        }
+    }
 
     let _ = app.emit("settings:changed", settings.clone());
     let update_state = app.state::<UpdateState>();
@@ -878,12 +896,15 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
         let _ = app.emit("update:available", info.clone());
         send_status("available", None);
 
-        let _ = app
-            .notification()
-            .builder()
-            .title("Copilot Tracker Update Available")
-            .body(format!("Version {} is available.", info.version))
-            .show();
+        let store = app.state::<StoreManager>();
+        if store.get_show_notifications() {
+            let _ = app
+                .notification()
+                .builder()
+                .title("Copilot Tracker Update Available")
+                .body(format!("Version {} is available.", info.version))
+                .show();
+        }
 
         let _ = rebuild_tray_menu(&app, Some(&info));
     } else {
@@ -1073,13 +1094,17 @@ fn main() {
                                 Ok(summary) => {
                                     log::info!("Refresh successful: {}/{} ({}%)", 
                                         summary.used, summary.limit, summary.percentage);
-                                    // Show notification on success
-                                    let _ = app_handle
-                                        .notification()
-                                        .builder()
-                                        .title("Copilot Tracker")
-                                        .body(format!("Usage updated: {} / {} requests", summary.used, summary.limit))
-                                        .show();
+                                    // Show notification on success (if enabled)
+                                    if let Some(store) = app_handle.try_state::<StoreManager>() {
+                                        if store.get_show_notifications() {
+                                            let _ = app_handle
+                                                .notification()
+                                                .builder()
+                                                .title("Copilot Tracker")
+                                                .body(format!("Usage updated: {} / {} requests", summary.used, summary.limit))
+                                                .show();
+                                        }
+                                    }
                                 }
                                 Err(e) => {
                                     log::error!("Refresh failed: {}", e);
@@ -1111,7 +1136,7 @@ fn main() {
                         // Rebuild tray menu to update widget label
                         let update_state = app.state::<UpdateState>();
                         let latest = update_state.latest.lock().unwrap();
-                        let _ = rebuild_tray_menu(&app, latest.as_ref());
+                        let _ = rebuild_tray_menu(app, latest.as_ref());
                     }
                     "update_check" => {
                         let info = app.state::<UpdateState>().latest.lock().unwrap().clone();
@@ -1158,20 +1183,18 @@ fn main() {
                     _ => {}
                 })
                 .on_tray_icon_event(move |tray, event| {
-                    match event {
-                        TrayIconEvent::DoubleClick {
-                            button: MouseButton::Left,
-                            ..
-                        } => {
-                            log::info!("Tray icon double-clicked - toggling widget");
-                            let app = tray.app_handle();
-                            let _ = toggle_widget(app.clone());
-                            // Rebuild tray menu to update widget label
-                            let update_state = app.state::<UpdateState>();
-                            let latest = update_state.latest.lock().unwrap();
-                            let _ = rebuild_tray_menu(&app, latest.as_ref());
-                        }
-                        _ => {}
+                    if let TrayIconEvent::DoubleClick {
+                        button: MouseButton::Left,
+                        ..
+                    } = event
+                    {
+                        log::info!("Tray icon double-clicked - toggling widget");
+                        let app = tray.app_handle();
+                        let _ = toggle_widget(app.clone());
+                        // Rebuild tray menu to update widget label
+                        let update_state = app.state::<UpdateState>();
+                        let latest = update_state.latest.lock().unwrap();
+                        let _ = rebuild_tray_menu(app, latest.as_ref());
                     }
                 })
                 // Note: Tray icon single click intentionally does NOT show dashboard
@@ -1318,7 +1341,7 @@ fn main() {
             #[cfg(target_os = "windows")]
             {
                 let store = app.state::<StoreManager>();
-                if !store.is_authenticated() {
+                if !store.is_authenticated() && store.get_show_notifications() {
                     let _ = app
                         .notification()
                         .builder()

@@ -112,7 +112,10 @@ export function Widget() {
         const position = await invoke<{ x: number; y: number }>(
           "get_widget_position",
         );
-        await currentWindow.setPosition(position.x, position.y);
+        await currentWindow.setPosition({
+          x: position.x,
+          y: position.y,
+        });
 
         // Default to pinned
         await currentWindow.setAlwaysOnTop(true);

@@ -484,36 +484,3 @@ pub fn init_store_manager(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
-pub fn get_settings(store: tauri::State<StoreManager>) -> AppSettings {
-    store.get_settings()
-}
-
-#[tauri::command]
-pub fn update_settings(store: tauri::State<StoreManager>, settings: AppSettings) -> Result<(), String> {
-    store.update_settings(|s| *s = settings)
-}
-
-#[tauri::command]
-pub fn get_usage_cache(store: tauri::State<StoreManager>) -> Option<UsageCache> {
-    store.get_usage_cache()
-}
-
-#[tauri::command]
-pub fn get_usage_history(store: tauri::State<StoreManager>) -> Vec<UsageEntry> {
-    store.get_usage_history()
-}
-
-#[tauri::command]
-pub fn add_usage_entry(store: tauri::State<StoreManager>, entry: UsageEntry) -> Result<(), String> {
-    let mut history = store.get_usage_history();
-    history.push(entry);
-    store.set_usage_history(history);
-    Ok(())
-}
-
-#[tauri::command]
-pub fn clear_usage_history(store: tauri::State<StoreManager>) -> Result<(), String> {
-    store.set_usage_history(Vec::new());
-    Ok(())
-}

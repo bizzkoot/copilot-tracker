@@ -12,7 +12,7 @@ export interface TauriCurrentWindow {
   hide(): Promise<void>;
   show(): Promise<void>;
   getPosition(): Promise<TauriPosition>;
-  setPosition(x: number, y: number): Promise<void>;
+  setPosition(position: TauriPosition): Promise<void>;
   outerPosition(): Promise<TauriPosition>;
 }
 
