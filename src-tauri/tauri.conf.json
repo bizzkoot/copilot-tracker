@@ -30,6 +30,24 @@
         "resizable": true,
         "visible": false,
         "skipTaskbar": true
+      },
+      {
+        "label": "widget",
+        "title": "Copilot Usage Widget",
+        "url": "/widget.html",
+        "width": 280,
+        "height": 180,
+        "minWidth": 280,
+        "minHeight": 180,
+        "maxWidth": 280,
+        "maxHeight": 180,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "visible": false,
+        "center": false
       }
     ]
   },

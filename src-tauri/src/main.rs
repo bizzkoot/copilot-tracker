@@ -343,6 +343,17 @@ fn build_tray_menu(
     menu.append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
 
+    // Widget menu item
+    let widget_visible = if let Some(widget) = app.get_webview_window("widget") {
+        widget.is_visible().unwrap_or(false)
+    } else {
+        false
+    };
+    let widget_label = if widget_visible { "Hide Widget" } else { "Show Widget" };
+    let widget_item = MenuItem::with_id(app, "toggle_widget", widget_label, true, None::<&str>)
+        .map_err(|e| e.to_string())?;
+    menu.append(&widget_item).map_err(|e| e.to_string())?;
+
     let settings_item = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)
         .map_err(|e| e.to_string())?;
     menu.append(&settings_item).map_err(|e| e.to_string())?;
@@ -705,6 +716,78 @@ fn open_external_url(app: AppHandle, url: String) -> Result<(), String> {
     app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
 
+// ============================================================================
+// Widget Commands
+// ============================================================================
+
+#[tauri::command]
+fn toggle_widget(app: AppHandle) -> Result<bool, String> {
+    if let Some(widget) = app.get_webview_window("widget") {
+        let store = app.state::<StoreManager>();
+        if widget.is_visible().map_err(|e| e.to_string())? {
+            widget.hide().map_err(|e| e.to_string())?;
+            let _ = store.set_widget_visible(false);
+            Ok(false)
+        } else {
+            widget.show().map_err(|e| e.to_string())?;
+            let _ = store.set_widget_visible(true);
+            Ok(true)
+        }
+    } else {
+        Err("Widget window not found".to_string())
+    }
+}
+
+#[tauri::command]
+fn is_widget_visible(app: AppHandle) -> Result<bool, String> {
+    if let Some(widget) = app.get_webview_window("widget") {
+        widget.is_visible().map_err(|e| e.to_string())
+    } else {
+        Ok(false)
+    }
+}
+
+#[tauri::command]
+async fn set_widget_position(app: AppHandle, x: i32, y: i32) -> Result<(), String> {
+    if let Some(widget) = app.get_webview_window("widget") {
+        widget.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }))
+            .map_err(|e| e.to_string())?;
+        // Save position to settings
+        let store = app.state::<StoreManager>();
+        let _ = store.set_widget_position(x, y);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_widget_position(app: AppHandle) -> Result<(i32, i32), String> {
+    if let Some(widget) = app.get_webview_window("widget") {
+        let pos = widget.outer_position().map_err(|e| e.to_string())?;
+        Ok((pos.x, pos.y))
+    } else {
+        Err("Widget window not found".to_string())
+    }
+}
+
+#[tauri::command]
+async fn set_widget_pinned(app: AppHandle, pinned: bool) -> Result<(), String> {
+    if let Some(widget) = app.get_webview_window("widget") {
+        widget.set_always_on_top(pinned).map_err(|e| e.to_string())?;
+        // Save pin state to settings
+        let store = app.state::<StoreManager>();
+        let _ = store.set_widget_pinned(pinned);
+        // Emit event to notify widget window
+        let _ = app.emit("widget:set-pin", pinned);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn is_widget_pinned(app: AppHandle) -> Result<bool, String> {
+    let store = app.state::<StoreManager>();
+    Ok(store.get_widget_pinned())
+}
+
 #[tauri::command]
 async fn check_for_updates(app: AppHandle) -> Result<(), String> {
     let send_status = |status: &str, message: Option<String>| {
@@ -907,6 +990,13 @@ fn main() {
             set_launch_at_login,
             // Tray commands
             update_tray_usage,
+            // Widget commands
+            toggle_widget,
+            is_widget_visible,
+            set_widget_position,
+            get_widget_position,
+            set_widget_pinned,
+            is_widget_pinned,
             // App commands
             get_app_version,
             hide_main_window,
@@ -1017,6 +1107,13 @@ fn main() {
                         }
                         let _ = app.emit("navigate", "settings");
                     }
+                    "toggle_widget" => {
+                        let _ = toggle_widget(app.clone());
+                        // Rebuild tray menu to update widget label
+                        let update_state = app.state::<UpdateState>();
+                        let latest = update_state.latest.lock().unwrap();
+                        let _ = rebuild_tray_menu(&app, latest.as_ref());
+                    }
                     "update_check" => {
                         let info = app.state::<UpdateState>().latest.lock().unwrap().clone();
                         if let Some(info) = info {
@@ -1061,8 +1158,19 @@ fn main() {
                     }
                     _ => {}
                 })
-                // Note: Tray icon click intentionally does NOT show dashboard
+                .on_click_event(move |app, event| {
+                    if event.kind == tauri::tray::ClickKind::Double {
+                        log::info!("Tray icon double-clicked - toggling widget");
+                        let _ = toggle_widget(app.clone());
+                        // Rebuild tray menu to update widget label
+                        let update_state = app.state::<UpdateState>();
+                        let latest = update_state.latest.lock().unwrap();
+                        let _ = rebuild_tray_menu(&app, latest.as_ref());
+                    }
+                })
+                // Note: Tray icon single click intentionally does NOT show dashboard
                 // Dashboard only opens via "Open Dashboard" menu item
+                // Double click toggles the widget visibility
                 .build(app)?;
 
             // Store tray icon in state
@@ -1220,6 +1328,39 @@ fn main() {
             let interval_seconds = settings.refresh_interval.max(10); // Minimum 10 seconds
             polling_state.restart_polling(app_handle.clone(), interval_seconds as u64);
             log::info!("[Startup] Started background polling with interval: {}s", interval_seconds);
+
+            // Initialize widget state from settings
+            let store = app.state::<StoreManager>();
+            let widget_enabled = store.get_widget_enabled();
+            let widget_visible = store.get_widget_visible();
+            let widget_pinned = store.get_widget_pinned();
+            let widget_position = store.get_widget_position();
+            
+            log::info!("Widget state: enabled={}, visible={}, pinned={}, position=({},{})",
+                widget_enabled, widget_visible, widget_pinned, widget_position.x, widget_position.y);
+            
+            // Restore widget state if enabled
+            if widget_enabled {
+                if let Some(widget) = app.get_webview_window("widget") {
+                    // Set position
+                    let _ = widget.set_position(tauri::Position::Physical(
+                        tauri::PhysicalPosition {
+                            x: widget_position.x,
+                            y: widget_position.y
+                        }
+                    ));
+                    
+                    // Set pinned state
+                    let _ = widget.set_always_on_top(widget_pinned);
+                    
+                    // Show widget if it was visible
+                    if widget_visible {
+                        let _ = widget.show();
+                    }
+                    
+                    log::info!("Widget state restored successfully");
+                }
+            }
 
             if !tauri::is_dev() {
                 let app_handle = app.handle().clone();

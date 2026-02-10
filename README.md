@@ -25,6 +25,9 @@ Cross-platform desktop application built with **Tauri**, React, and TypeScript t
 - 🔐 **Secure Auth**: WebView-based GitHub OAuth (no API tokens stored)
 - 🔄 **Auto-Updates**: Automatic updates via GitHub Releases
 - 📡 **Offline Mode**: View cached usage data even without internet
+- 🎨 **Floating Widget**: (NEW) Draggable, always-on-top widget for persistent usage visibility
+- 📌 **Pin Mode**: Toggle between floating above all windows or staying on desktop only
+- 💾 **State Persistence**: Widget position and settings saved across app restarts
 
 ## Screenshots
 
@@ -34,11 +37,38 @@ Cross-platform desktop application built with **Tauri**, React, and TypeScript t
   <img src="assets/Dashboard_Tauri2.gif" alt="Copilot Tracker Dashboard" width="700"/>
 </p>
 
-### System Tray (Windows)
+### System Tray
 
 <p align="center">
   <img src="assets/Taskbar_Tauri2.gif" alt="System Tray Integration" width="500"/>
 </p>
+
+### Floating Widget (NEW)
+
+The floating widget provides persistent visibility of your Copilot usage on **all platforms** (macOS, Windows, and Linux). It's especially useful on Windows where system tray icon visibility may be limited.
+
+<p align="center">
+  <img src="assets/Widget.png" alt="Floating Usage Widget" width="400"/>
+</p>
+
+**Widget Features:**
+- **Draggable**: Click and drag the header to position anywhere on your screen
+- **Pin Mode**: Toggle between always-on-top (pinned) or desktop-only (unpinned) mode
+- **Real-time Updates**: Shows current usage, percentage, and prediction data
+- **Color-coded**: Progress bar changes color based on usage (green → yellow → orange → red)
+- **Persistent**: Position and settings are saved across app restarts
+- **Cross-Platform**: Works on macOS, Windows, and Linux
+
+**How to Use:**
+1. **Show/Hide**: Right-click tray icon → "Show Widget" / "Hide Widget", or double-click the tray icon
+2. **Drag**: Click and hold the widget header to move it anywhere
+3. **Pin Toggle**: Click the pin icon (📌) to switch between floating and desktop-only modes
+4. **Minimize**: Click the minimize button (−) to hide the widget to tray
+5. **Close**: Click the close button (×) to completely hide the widget
+
+**Pin Modes:**
+- **Pinned (📌)**: Widget floats above all windows - constant visibility while working
+- **Unpinned (📍)**: Widget stays on desktop only - less intrusive, visible when viewing desktop
 
 ## Download
 

@@ -1689,7 +1689,7 @@ async function fetchUsageData(): Promise<void> {
             let dateStr = "";
 
             // Helper to find date string in object
-            const findDateInObject = (obj: any): string => {
+            const findDateInObject = (obj: unknown): string => {
               if (!obj) return "";
               if (typeof obj === "string") {
                 if (obj.match(/^\d{4}-\d{2}-\d{2}/)) return obj;

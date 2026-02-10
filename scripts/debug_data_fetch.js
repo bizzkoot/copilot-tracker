@@ -11,7 +11,9 @@ async function debugCopilot() {
       const data = JSON.parse(el.textContent);
       customerId = data?.payload?.customer?.customerId;
     }
-  } catch (e) {}
+  } catch (e) {
+    // Ignore parsing errors
+  }
 
   // Try regex if failed
   if (!customerId) {

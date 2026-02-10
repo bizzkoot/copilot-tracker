@@ -28,7 +28,7 @@ export interface UsageFetchResult {
   history?: UsageHistory;
   prediction?: UsagePrediction;
   error?: string;
-  debugRawRows?: any[]; // Add debug field
+  debugRawRows?: unknown[]; // Add debug field
 }
 
 export interface UpdateCheckStatus {

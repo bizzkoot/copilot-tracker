@@ -59,6 +59,32 @@ pub struct AppSettings {
     /// Tray icon display format
     #[serde(default = "default_tray_icon_format")]
     pub tray_icon_format: String,
+    /// Widget enabled
+    #[serde(default = "default_widget_enabled")]
+    pub widget_enabled: bool,
+    /// Widget position (x, y)
+    #[serde(default = "default_widget_position")]
+    pub widget_position: WidgetPosition,
+    /// Widget pinned (always on top)
+    #[serde(default = "default_widget_pinned")]
+    pub widget_pinned: bool,
+    /// Widget visible
+    #[serde(default = "default_widget_visible")]
+    pub widget_visible: bool,
+}
+
+/// Widget position on screen
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WidgetPosition {
+    pub x: i32,
+    pub y: i32,
+}
+
+impl Default for WidgetPosition {
+    fn default() -> Self {
+        Self { x: 100, y: 100 }
+    }
 }
 
 fn default_thresholds() -> Vec<u32> {
@@ -85,6 +111,22 @@ fn default_tray_icon_format() -> String {
     DEFAULT_TRAY_ICON_FORMAT.to_string()
 }
 
+fn default_widget_enabled() -> bool {
+    false
+}
+
+fn default_widget_pinned() -> bool {
+    true
+}
+
+fn default_widget_visible() -> bool {
+    false
+}
+
+fn default_widget_position() -> WidgetPosition {
+    WidgetPosition::default()
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -102,6 +144,10 @@ impl Default for AppSettings {
             start_minimized: default_start_minimized(),
             theme: default_theme(),
             tray_icon_format: default_tray_icon_format(),
+            widget_enabled: default_widget_enabled(),
+            widget_position: default_widget_position(),
+            widget_pinned: default_widget_pinned(),
+            widget_visible: default_widget_visible(),
         }
     }
 }
@@ -370,6 +416,54 @@ impl StoreManager {
             s.tray_icon_format = format;
         })
     }
+
+    /// Get widget enabled state
+    pub fn get_widget_enabled(&self) -> bool {
+        self.settings.lock().unwrap().widget_enabled
+    }
+
+    /// Set widget enabled state
+    pub fn set_widget_enabled(&self, enabled: bool) -> Result<(), String> {
+        self.update_settings(|s| {
+            s.widget_enabled = enabled;
+        })
+    }
+
+    /// Get widget position
+    pub fn get_widget_position(&self) -> WidgetPosition {
+        self.settings.lock().unwrap().widget_position.clone()
+    }
+
+    /// Set widget position
+    pub fn set_widget_position(&self, position: WidgetPosition) -> Result<(), String> {
+        self.update_settings(|s| {
+            s.widget_position = position;
+        })
+    }
+
+    /// Get widget pinned state
+    pub fn get_widget_pinned(&self) -> bool {
+        self.settings.lock().unwrap().widget_pinned
+    }
+
+    /// Set widget pinned state
+    pub fn set_widget_pinned(&self, pinned: bool) -> Result<(), String> {
+        self.update_settings(|s| {
+            s.widget_pinned = pinned;
+        })
+    }
+
+    /// Get widget visible state
+    pub fn get_widget_visible(&self) -> bool {
+        self.settings.lock().unwrap().widget_visible
+    }
+
+    /// Set widget visible state
+    pub fn set_widget_visible(&self, visible: bool) -> Result<(), String> {
+        self.update_settings(|s| {
+            s.widget_visible = visible;
+        })
+    }
 }
 
 /// Initialize the store manager and attach to app
@@ -387,5 +481,39 @@ pub fn init_store_manager(app: &AppHandle) -> Result<(), String> {
 
     app.manage(store_manager);
 
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_settings(store: tauri::State<StoreManager>) -> AppSettings {
+    store.get_settings()
+}
+
+#[tauri::command]
+pub fn update_settings(store: tauri::State<StoreManager>, settings: AppSettings) -> Result<(), String> {
+    store.update_settings(|s| *s = settings)
+}
+
+#[tauri::command]
+pub fn get_usage_cache(store: tauri::State<StoreManager>) -> Option<UsageCache> {
+    store.get_usage_cache()
+}
+
+#[tauri::command]
+pub fn get_usage_history(store: tauri::State<StoreManager>) -> Vec<UsageEntry> {
+    store.get_usage_history()
+}
+
+#[tauri::command]
+pub fn add_usage_entry(store: tauri::State<StoreManager>, entry: UsageEntry) -> Result<(), String> {
+    let mut history = store.get_usage_history();
+    history.push(entry);
+    store.set_usage_history(history);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn clear_usage_history(store: tauri::State<StoreManager>) -> Result<(), String> {
+    store.set_usage_history(Vec::new());
     Ok(())
 }
