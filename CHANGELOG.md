@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.3.0](https://github.com/bizzkoot/copilot-tracker/compare/v2.2.0...v2.3.0) (2026-02-10)
+
+
+### Features
+
+* **widget:** add floating usage widget with state persistence ([6a7ff9c](https://github.com/bizzkoot/copilot-tracker/commit/6a7ff9cb4323bfd5835e613ab6cb1590cc9ebf44))
+
+
+### Bug Fixes
+
+* **core:** improve startup and init robustness ([70480d4](https://github.com/bizzkoot/copilot-tracker/commit/70480d41b7956d6080dae5c545430bd846f7a330))
+* **tray:** ensure Open Dashboard navigates to main page ([c78ac8c](https://github.com/bizzkoot/copilot-tracker/commit/c78ac8c6d3a362911e1da36bffc417b431a86fb5))
+
 ## [2.2.0](https://github.com/bizzkoot/copilot-tracker/compare/v2.1.2...v2.2.0) (2026-02-08)
 
 ### Features
