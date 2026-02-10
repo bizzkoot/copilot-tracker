@@ -11,6 +11,14 @@ export default defineConfig({
   },
   renderer: {
     publicDir: resolve("src/renderer/public"),
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve("src/renderer/index.html"),
+          widget: resolve("src/renderer/widget.html"),
+        },
+      },
+    },
     resolve: {
       alias: {
         "@renderer": resolve("src/renderer/src"),
