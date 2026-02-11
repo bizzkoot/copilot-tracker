@@ -15,8 +15,17 @@ import { listen, emit } from "@renderer/types/tauri";
 import { getCurrentWindow, PhysicalPosition } from "@tauri-apps/api/window";
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 
+// Access the Electron API from window object
+declare global {
+  interface Window {
+    electron: {
+      getCachedUsage: () => Promise<any>;
+    };
+  }
+}
+
 export function Widget() {
-  const { usage, prediction } = useUsageStore();
+  const { usage, prediction, setUsageData } = useUsageStore();
   const [isPinned, setIsPinned] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -24,6 +33,32 @@ export function Widget() {
   const used = usage ? getUsedRequests(usage) : 0;
   const limit = usage ? getLimitRequests(usage) : 0;
   const percentage = usage ? getUsagePercentage(usage) : 0;
+
+  // Fetch cached usage data when widget mounts
+  // This ensures the widget has data even if it missed the initial usage:data event
+  useEffect(() => {
+    const fetchInitialUsage = async () => {
+      try {
+        console.log("[Widget] Fetching cached usage data on mount...");
+        const result = await window.electron.getCachedUsage();
+
+        if (result && result.success) {
+          console.log("[Widget] Received cached usage data:", result);
+          setUsageData({
+            usage: result.usage,
+            history: result.history,
+            prediction: result.prediction,
+          });
+        } else {
+          console.log("[Widget] No cached usage data available");
+        }
+      } catch (error) {
+        console.error("[Widget] Failed to fetch cached usage:", error);
+      }
+    };
+
+    fetchInitialUsage();
+  }, [setUsageData]);
 
   // Get color class based on percentage
   const getColorClass = () => {
