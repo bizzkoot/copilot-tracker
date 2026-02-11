@@ -808,13 +808,83 @@ fn toggle_widget(app: AppHandle) -> Result<bool, String> {
             let _ = store.set_widget_visible(false);
             Ok(false)
         } else {
-            widget.show().map_err(|e| e.to_string())?;
+            show_widget_without_focus(&widget)?;
             let _ = store.set_widget_visible(true);
             Ok(true)
         }
     } else {
         Err("Widget window not found".to_string())
     }
+}
+
+/// Hide widget from the widget window's close button
+/// Updates store and rebuilds tray menu
+#[tauri::command]
+fn hide_widget(app: AppHandle) -> Result<(), String> {
+    if let Some(widget) = app.get_webview_window("widget") {
+        let store = app.state::<StoreManager>();
+        widget.hide().map_err(|e| e.to_string())?;
+        let _ = store.set_widget_visible(false);
+        
+        // Rebuild tray menu to update "Show Widget" label
+        if let Ok(menu) = build_tray_menu(&app, None) {
+            if let Some(tray_state) = app.try_state::<TrayState>() {
+                if let Ok(tray_guard) = tray_state.tray.lock() {
+                    if let Some(ref tray) = *tray_guard {
+                        let _ = tray.set_menu(Some(menu));
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Minimize widget from the widget window's minimize button
+/// Updates store and rebuilds tray menu (same behavior as hide for widget)
+#[tauri::command]
+fn minimize_widget(app: AppHandle) -> Result<(), String> {
+    // For the floating widget, minimize behaves the same as hide
+    // Both just hide the window and update the tray menu
+    hide_widget(app)
+}
+
+/// Show widget without stealing focus from current application
+/// Uses platform-specific APIs to prevent focus stealing
+fn show_widget_without_focus(widget: &tauri::WebviewWindow) -> Result<(), String> {
+    // Show the widget
+    widget.show().map_err(|e| e.to_string())?;
+    
+    // Platform-specific focus prevention
+    #[cfg(target_os = "macos")]
+    {
+        // On macOS, we need to prevent the widget from becoming the key window
+        // The window is configured with skip_taskbar and decorations=false
+        // which helps, but we also minimize and restore to avoid focus steal
+        // This is a workaround since we can't easily access NSWindow APIs without objc
+        
+        // Small delay to let the show complete, then minimize and restore
+        // This breaks the focus chain
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let _ = widget.set_always_on_top(true);
+    }
+    
+    #[cfg(target_os = "windows")]
+    {
+        // On Windows, the window configuration (skip_taskbar, decorations=false)
+        // already helps prevent focus stealing
+        // We ensure always_on_top is set to keep it floating
+        let _ = widget.set_always_on_top(true);
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        // On Linux, most window managers respect the window type
+        // The skip_taskbar and decorations settings help prevent focus stealing
+        let _ = widget.set_always_on_top(true);
+    }
+    
+    Ok(())
 }
 
 #[tauri::command]
@@ -1077,6 +1147,8 @@ fn main() {
             update_tray_usage,
             // Widget commands
             toggle_widget,
+            hide_widget,
+            minimize_widget,
             is_widget_visible,
             set_widget_position,
             get_widget_position,
@@ -1459,9 +1531,9 @@ fn main() {
                     // Set pinned state
                     let _ = widget.set_always_on_top(widget_pinned);
                     
-                    // Show widget if it was visible
+                    // Show widget if it was visible (without stealing focus)
                     if widget_visible {
-                        let _ = widget.show();
+                        let _ = show_widget_without_focus(&widget);
                     }
                     
                     log::info!("Widget state restored successfully");

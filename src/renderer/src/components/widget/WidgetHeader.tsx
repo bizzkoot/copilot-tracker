@@ -1,10 +1,13 @@
 /**
  * Widget Header Component
  * Draggable header with pin, minimize, and close buttons
+ *
+ * Uses Tauri's data-tauri-drag-region for native window dragging
+ * This is the recommended approach for Tauri v2 frameless windows
  */
 
-import { useState, useRef } from "react";
-import { getCurrentWindow, PhysicalPosition } from "@tauri-apps/api/window";
+import { useEffect, useRef } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 
 interface WidgetHeaderProps {
@@ -24,86 +27,68 @@ export function WidgetHeader({
   onDragStart,
   onDragEnd,
 }: WidgetHeaderProps) {
-  const [isDragging, setIsDragging] = useState(false);
-  const isDraggingRef = useRef(false); // Stable ref for event handlers
-  const dragStartPos = useRef({ x: 0, y: 0 });
+  const headerRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef(false);
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    // Only start drag if clicking on the header area (not buttons)
-    if ((e.target as HTMLElement).closest("button")) return;
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
 
-    setIsDragging(true);
-    isDraggingRef.current = true;
-    dragStartPos.current = { x: e.clientX, y: e.clientY };
-    onDragStart();
+    // Handle drag start
+    const handleMouseDown = (e: MouseEvent) => {
+      // Don't start drag if clicking on buttons
+      if ((e.target as HTMLElement).closest("button")) return;
 
-    const handleMouseMove = async (moveEvent: MouseEvent) => {
-      if (!isDraggingRef.current) return; // Use ref for stable check
-
-      const deltaX = moveEvent.clientX - dragStartPos.current.x;
-      const deltaY = moveEvent.clientY - dragStartPos.current.y;
-
-      // Use Tauri window API to move the window
-      const currentWindow = getCurrentWindow();
-      if (currentWindow) {
-        try {
-          const pos = await currentWindow.outerPosition();
-          if (!isDraggingRef.current) return; // Check again after await
-          await currentWindow.setPosition(
-            new PhysicalPosition({
-              x: pos.x + deltaX,
-              y: pos.y + deltaY,
-            }),
-          );
-        } catch (error) {
-          console.error("Failed to move widget:", error);
-        }
-      }
-
-      dragStartPos.current = { x: moveEvent.clientX, y: moveEvent.clientY };
+      isDraggingRef.current = true;
+      onDragStart();
     };
 
+    // Handle drag end and save position
     const handleMouseUp = async () => {
+      if (!isDraggingRef.current) return;
+
       isDraggingRef.current = false;
-      setIsDragging(false);
       onDragEnd();
 
-      // Save widget position to settings
+      // Save widget position to settings after drag completes
       try {
         const currentWindow = getCurrentWindow();
         const pos = await currentWindow.outerPosition();
-        await tauriInvoke("set_widget_position", { 
-          x: pos.x, 
-          y: pos.y 
+        await tauriInvoke("set_widget_position", {
+          x: pos.x,
+          y: pos.y,
         });
       } catch (error) {
         console.error("Failed to save widget position:", error);
       }
-
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
     };
 
-    document.addEventListener("mousemove", handleMouseMove);
+    header.addEventListener("mousedown", handleMouseDown);
     document.addEventListener("mouseup", handleMouseUp);
-  };
+
+    return () => {
+      header.removeEventListener("mousedown", handleMouseDown);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [onDragStart, onDragEnd]);
 
   return (
     <div
-      className={`flex items-center justify-between px-3 py-2 cursor-grab select-none ${
-        isDragging ? "cursor-grabbing" : ""
-      }`}
+      ref={headerRef}
+      data-tauri-drag-region
+      className="flex items-center justify-between px-3 py-2 cursor-grab select-none active:cursor-grabbing"
       style={{
         background: "rgba(255, 255, 255, 0.05)",
         borderTopLeftRadius: "12px",
         borderTopRightRadius: "12px",
         borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
       }}
-      onMouseDown={handleMouseDown}
     >
       {/* Title */}
-      <div className="flex items-center gap-2">
-        <span className="text-white text-sm font-medium">Copilot Usage</span>
+      <div className="flex items-center gap-2" data-tauri-drag-region>
+        <span className="text-white text-sm font-medium" data-tauri-drag-region>
+          Copilot Usage
+        </span>
       </div>
 
       {/* Buttons */}

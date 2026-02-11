@@ -18,6 +18,7 @@
     "core:window:allow-set-always-on-top",
     "core:window:allow-set-position",
     "core:window:allow-set-skip-taskbar",
+    "core:window:allow-start-dragging",
     "core:app:default",
     "core:app:allow-app-show",
     "core:app:allow-app-hide",

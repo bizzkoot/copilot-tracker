@@ -116,23 +116,21 @@ export function Widget() {
     }
   };
 
-  // Minimize widget
+  // Minimize widget - calls backend to properly update state and tray menu
   const minimizeWidget = async () => {
     try {
-      await emit("widget:minimize");
-      const currentWindow = getCurrentWindow();
-      await currentWindow.hide();
+      // Call the backend command that updates store and rebuilds tray menu
+      await tauriInvoke("minimize_widget");
     } catch (error) {
       console.error("Failed to minimize widget:", error);
     }
   };
 
-  // Close widget
+  // Close widget - calls backend to properly update state and tray menu
   const closeWidget = async () => {
     try {
-      await emit("widget:close");
-      const currentWindow = getCurrentWindow();
-      await currentWindow.hide();
+      // Call the backend command that updates store and rebuilds tray menu
+      await tauriInvoke("hide_widget");
     } catch (error) {
       console.error("Failed to close widget:", error);
     }
