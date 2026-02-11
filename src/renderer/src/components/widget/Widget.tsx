@@ -15,15 +15,6 @@ import { listen, emit } from "@renderer/types/tauri";
 import { getCurrentWindow, PhysicalPosition } from "@tauri-apps/api/window";
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 
-// Access the Electron API from window object
-declare global {
-  interface Window {
-    electron: {
-      getCachedUsage: () => Promise<any>;
-    };
-  }
-}
-
 export function Widget() {
   const { usage, prediction, setUsageData } = useUsageStore();
   const [isPinned, setIsPinned] = useState(true);
@@ -58,6 +49,25 @@ export function Widget() {
     };
 
     fetchInitialUsage();
+  }, [setUsageData]);
+
+  // Listen for usage data updates from backend
+  useEffect(() => {
+    const unsubscribe = window.electron.onUsageData?.((data) => {
+      console.log("[Widget] Received usage:data event:", data);
+
+      if (data.success) {
+        setUsageData({
+          usage: data.usage,
+          history: data.history,
+          prediction: data.prediction,
+        });
+      }
+    });
+
+    return () => {
+      unsubscribe?.();
+    };
   }, [setUsageData]);
 
   // Get color class based on percentage

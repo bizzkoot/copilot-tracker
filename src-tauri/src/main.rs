@@ -839,12 +839,15 @@ async fn set_widget_position(app: AppHandle, x: i32, y: i32) -> Result<(), Strin
 }
 
 #[tauri::command]
-async fn get_widget_position(app: AppHandle) -> Result<(i32, i32), String> {
+async fn get_widget_position(app: AppHandle) -> Result<WidgetPosition, String> {
+    let store = app.state::<StoreManager>();
+    
     if let Some(widget) = app.get_webview_window("widget") {
         let pos = widget.outer_position().map_err(|e| e.to_string())?;
-        Ok((pos.x, pos.y))
+        Ok(WidgetPosition { x: pos.x, y: pos.y })
     } else {
-        Err("Widget window not found".to_string())
+        // Widget window not yet created, return stored position
+        Ok(store.get_widget_position())
     }
 }
 
