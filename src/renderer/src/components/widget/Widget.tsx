@@ -11,8 +11,9 @@ import {
   getUsagePercentage,
 } from "@renderer/types/usage";
 import { WidgetHeader } from "./WidgetHeader";
-import { invoke, listen, emit } from "@renderer/types/tauri";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen, emit } from "@renderer/types/tauri";
+import { getCurrentWindow, PhysicalPosition } from "@tauri-apps/api/window";
+import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 
 export function Widget() {
   const { usage, prediction } = useUsageStore();
@@ -110,13 +111,15 @@ export function Widget() {
         const currentWindow = getCurrentWindow();
 
         // Restore widget position from settings
-        const position = await invoke<{ x: number; y: number }>(
+        const position = await tauriInvoke<{ x: number; y: number }>(
           "get_widget_position",
         );
-        await currentWindow.setPosition({
-          x: position.x,
-          y: position.y,
-        });
+        await currentWindow.setPosition(
+          new PhysicalPosition({
+            x: position.x,
+            y: position.y,
+          }),
+        );
 
         // Default to pinned
         await currentWindow.setAlwaysOnTop(true);

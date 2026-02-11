@@ -4,8 +4,8 @@
  */
 
 import { useState, useRef } from "react";
-import { invoke } from "@renderer/types/tauri";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow, PhysicalPosition } from "@tauri-apps/api/window";
+import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 
 interface WidgetHeaderProps {
   isPinned: boolean;
@@ -47,12 +47,14 @@ export function WidgetHeader({
       const currentWindow = getCurrentWindow();
       if (currentWindow) {
         try {
-          const pos = await currentWindow.getPosition();
+          const pos = await currentWindow.outerPosition();
           if (!isDraggingRef.current) return; // Check again after await
-          await currentWindow.setPosition({
-            x: pos.x + deltaX,
-            y: pos.y + deltaY,
-          });
+          await currentWindow.setPosition(
+            new PhysicalPosition({
+              x: pos.x + deltaX,
+              y: pos.y + deltaY,
+            }),
+          );
         } catch (error) {
           console.error("Failed to move widget:", error);
         }
@@ -69,8 +71,11 @@ export function WidgetHeader({
       // Save widget position to settings
       try {
         const currentWindow = getCurrentWindow();
-        const pos = await currentWindow.getPosition();
-        await invoke("set_widget_position", { x: pos.x, y: pos.y });
+        const pos = await currentWindow.outerPosition();
+        await tauriInvoke("set_widget_position", { 
+          x: pos.x, 
+          y: pos.y 
+        });
       } catch (error) {
         console.error("Failed to save widget position:", error);
       }

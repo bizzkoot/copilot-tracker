@@ -7,18 +7,14 @@
 // Window API Types
 // ============================================================================
 
+import { PhysicalPosition } from "@tauri-apps/api/window";
+
 export interface TauriCurrentWindow {
   setAlwaysOnTop(value: boolean): Promise<void>;
   hide(): Promise<void>;
   show(): Promise<void>;
-  getPosition(): Promise<TauriPosition>;
-  setPosition(position: TauriPosition): Promise<void>;
-  outerPosition(): Promise<TauriPosition>;
-}
-
-export interface TauriPosition {
-  x: number;
-  y: number;
+  outerPosition(): Promise<PhysicalPosition>;
+  setPosition(position: PhysicalPosition): Promise<void>;
 }
 
 // ============================================================================
@@ -46,27 +42,26 @@ export function getCurrentWindow(): TauriCurrentWindow {
       };
     }
   ).__TAURI__?.window;
-  
-  if (tauriWindow && typeof tauriWindow.getCurrent === 'function') {
+
+  if (tauriWindow && typeof tauriWindow.getCurrent === "function") {
     return tauriWindow.getCurrent();
   }
 
   // Last resort: Check if we're in a mock/testing environment
-  if (process.env.NODE_ENV === 'development' || (window as any).electron) {
-    console.warn('Tauri window API not available, using mock');
+  if (process.env.NODE_ENV === "development" || (window as any).electron) {
+    console.warn("Tauri window API not available, using mock");
     // Return a mock implementation for development
     return {
       setAlwaysOnTop: async () => {},
       hide: async () => {},
       show: async () => {},
-      getPosition: async () => ({ x: 100, y: 100 }),
+      outerPosition: async () => new PhysicalPosition({ x: 100, y: 100 }),
       setPosition: async () => {},
-      outerPosition: async () => ({ x: 100, y: 100 }),
     };
   }
 
   throw new Error(
-    'Tauri window API is not available. Make sure you are running in a Tauri context.'
+    "Tauri window API is not available. Make sure you are running in a Tauri context.",
   );
 }
 
