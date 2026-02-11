@@ -118,6 +118,11 @@ export interface ElectronAPI {
   // Platform info
   platform: NodeJS.Platform;
   getVersion: () => Promise<string>;
+
+  // Widget
+  isWidgetEnabled: () => Promise<boolean>;
+  setWidgetEnabled: (enabled: boolean) => Promise<void>;
+  onWidgetEnabledChanged: (callback: (enabled: boolean) => void) => () => void;
 }
 
 // Window API for global access

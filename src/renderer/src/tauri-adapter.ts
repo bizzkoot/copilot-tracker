@@ -651,6 +651,40 @@ export async function initTauriAdapter() {
         };
       },
       getVersion: () => invoke("get_app_version"),
+
+      // Widget
+      isWidgetEnabled: async () => {
+        try {
+          return await invoke<boolean>("is_widget_enabled");
+        } catch (err) {
+          console.error("isWidgetEnabled failed:", err);
+          return false;
+        }
+      },
+      setWidgetEnabled: async (enabled: boolean) => {
+        try {
+          await invoke("set_widget_enabled", { enabled });
+          console.log("[TauriAdapter] Widget enabled set to:", enabled);
+        } catch (err) {
+          console.error("setWidgetEnabled failed:", err);
+          throw err;
+        }
+      },
+      onWidgetEnabledChanged: (callback: (enabled: boolean) => void) => {
+        let unlisten: (() => void) | null = null;
+        listen<boolean>("widget:enabled-changed", (event) => {
+          callback(event.payload);
+        })
+          .then((stop) => {
+            unlisten = stop;
+          })
+          .catch((err) =>
+            console.error("Failed to listen widget:enabled-changed", err),
+          );
+        return () => {
+          unlisten?.();
+        };
+      },
     };
 
     (window as any).electron = electronAPI;
@@ -701,6 +735,9 @@ function setupMockAdapter() {
     onUpdateAvailable: () => () => {},
     onUpdateChecked: () => () => {},
     getVersion: async () => "1.0.0-mock",
+    isWidgetEnabled: async () => false,
+    setWidgetEnabled: async () => {},
+    onWidgetEnabledChanged: () => () => {},
   };
   (window as any).electron = mockAPI;
 }

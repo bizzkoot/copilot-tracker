@@ -12,7 +12,7 @@ import {
 } from "@renderer/types/usage";
 import { WidgetHeader } from "./WidgetHeader";
 import { listen, emit } from "@renderer/types/tauri";
-import { getCurrentWindow, PhysicalPosition } from "@tauri-apps/api/window";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 
 export function Widget() {
@@ -147,24 +147,14 @@ export function Widget() {
     };
   }, []);
 
-  // Set initial pin state and restore widget position
+  // Set initial pin state (position is already restored by backend on startup)
   useEffect(() => {
     const initWidgetState = async () => {
       try {
         const currentWindow = getCurrentWindow();
 
-        // Restore widget position from settings
-        const position = await tauriInvoke<{ x: number; y: number }>(
-          "get_widget_position",
-        );
-        await currentWindow.setPosition(
-          new PhysicalPosition({
-            x: position.x,
-            y: position.y,
-          }),
-        );
-
-        // Default to pinned
+        // Position is already restored by the backend before the widget is shown
+        // We only need to set the initial pin state here
         await currentWindow.setAlwaysOnTop(true);
       } catch (error) {
         console.error("Failed to initialize widget state:", error);

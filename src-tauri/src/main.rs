@@ -805,11 +805,27 @@ fn toggle_widget(app: AppHandle) -> Result<bool, String> {
         let store = app.state::<StoreManager>();
         if widget.is_visible().map_err(|e| e.to_string())? {
             widget.hide().map_err(|e| e.to_string())?;
+            // Fully disable widget on hide (must re-enable from settings)
+            let _ = store.set_widget_enabled(false);
             let _ = store.set_widget_visible(false);
+            // Notify all windows of widget state change
+            let _ = app.emit("widget:enabled-changed", false);
             Ok(false)
         } else {
+            // Restore position before showing
+            let widget_position = store.get_widget_position();
+            let _ = widget.set_position(tauri::Position::Physical(
+                tauri::PhysicalPosition {
+                    x: widget_position.x,
+                    y: widget_position.y
+                }
+            ));
             show_widget_without_focus(&widget)?;
+            // Mark widget as enabled and visible so it restores on restart
+            let _ = store.set_widget_enabled(true);
             let _ = store.set_widget_visible(true);
+            // Notify all windows of widget state change
+            let _ = app.emit("widget:enabled-changed", true);
             Ok(true)
         }
     } else {
@@ -824,7 +840,12 @@ fn hide_widget(app: AppHandle) -> Result<(), String> {
     if let Some(widget) = app.get_webview_window("widget") {
         let store = app.state::<StoreManager>();
         widget.hide().map_err(|e| e.to_string())?;
+        // Fully disable widget when closing (must re-enable from settings)
+        let _ = store.set_widget_enabled(false);
         let _ = store.set_widget_visible(false);
+        
+        // Notify all windows of widget state change
+        let _ = app.emit("widget:enabled-changed", false);
         
         // Rebuild tray menu to update "Show Widget" label
         if let Ok(menu) = build_tray_menu(&app, None) {
@@ -938,6 +959,48 @@ async fn set_widget_pinned(app: AppHandle, pinned: bool) -> Result<(), String> {
 async fn is_widget_pinned(app: AppHandle) -> Result<bool, String> {
     let store = app.state::<StoreManager>();
     Ok(store.get_widget_pinned())
+}
+
+#[tauri::command]
+async fn is_widget_enabled(app: AppHandle) -> Result<bool, String> {
+    let store = app.state::<StoreManager>();
+    Ok(store.get_widget_enabled())
+}
+
+#[tauri::command]
+async fn set_widget_enabled(app: AppHandle, enabled: bool) -> Result<(), String> {
+    let store = app.state::<StoreManager>();
+    store.set_widget_enabled(enabled).map_err(|e| e.to_string())?;
+    
+    // Emit event to notify all windows of widget state change
+    let _ = app.emit("widget:enabled-changed", enabled);
+    
+    // If enabling, also show the widget
+    if enabled {
+        if let Some(widget) = app.get_webview_window("widget") {
+            // Restore position before showing
+            let widget_position = store.get_widget_position();
+            let _ = widget.set_position(tauri::Position::Physical(
+                tauri::PhysicalPosition {
+                    x: widget_position.x,
+                    y: widget_position.y
+                }
+            ));
+            let _ = widget.show();
+            let _ = store.set_widget_visible(true);
+        }
+    } else {
+        // If disabling, hide the widget
+        if let Some(widget) = app.get_webview_window("widget") {
+            let _ = widget.hide();
+            let _ = store.set_widget_visible(false);
+        }
+    }
+    
+    // Rebuild tray menu to update the widget toggle label
+    let _ = rebuild_tray_menu(&app, None);
+    
+    Ok(())
 }
 
 #[tauri::command]
@@ -1154,6 +1217,8 @@ fn main() {
             get_widget_position,
             set_widget_pinned,
             is_widget_pinned,
+            is_widget_enabled,
+            set_widget_enabled,
             // App commands
             get_app_version,
             hide_main_window,

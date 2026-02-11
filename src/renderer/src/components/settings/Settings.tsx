@@ -22,6 +22,79 @@ import { ArrowLeft, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { markLocalSettingsUpdate } from "@renderer/hooks/useSettingsSync";
 
+// Widget settings sub-component
+function WidgetSettings() {
+  const [widgetEnabled, setWidgetEnabled] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch initial widget state
+  useEffect(() => {
+    const fetchWidgetState = async () => {
+      try {
+        const enabled = await window.electron.isWidgetEnabled();
+        setWidgetEnabled(enabled);
+      } catch (err) {
+        console.error("Failed to get widget state:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchWidgetState();
+  }, []);
+
+  // Listen for widget state changes from tray menu
+  useEffect(() => {
+    const cleanup = window.electron.onWidgetEnabledChanged((enabled) => {
+      console.log("[WidgetSettings] Widget state changed from tray:", enabled);
+      setWidgetEnabled(enabled);
+    });
+
+    return cleanup;
+  }, []);
+
+  const handleToggleWidget = async () => {
+    const newValue = !widgetEnabled;
+    setWidgetEnabled(newValue);
+
+    try {
+      await window.electron.setWidgetEnabled(newValue);
+    } catch (err) {
+      console.error("Failed to toggle widget:", err);
+      setWidgetEnabled(!newValue); // Revert on error
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">Floating Widget</CardTitle>
+        <CardDescription>
+          Show a floating widget with usage information
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex-1">
+            <span className="text-sm">Enable widget</span>
+            <p className="text-xs text-muted-foreground mt-1">
+              Display floating widget on your desktop
+            </p>
+          </div>
+          <Button
+            variant={widgetEnabled ? "default" : "outline"}
+            size="sm"
+            onClick={handleToggleWidget}
+            disabled={isLoading}
+          >
+            {widgetEnabled ? "Enabled" : "Disabled"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 interface SettingsProps {
   onClose: () => void;
 }
@@ -375,6 +448,9 @@ export function Settings({ onClose }: SettingsProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Widget */}
+      <WidgetSettings />
 
       {/* About */}
       <Card>
