@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.3.3](https://github.com/bizzkoot/copilot-tracker/compare/v2.3.2...v2.3.3) (2026-02-11)
+
+
+### Bug Fixes
+
+* add robust polling restart with debounce and shutdown protection ([1cc6061](https://github.com/bizzkoot/copilot-tracker/commit/1cc60611e4050ef170ef7a82a84d7b099fed45dd))
+* update widget to use Tauri 2.x official API ([0223424](https://github.com/bizzkoot/copilot-tracker/commit/0223424156c63ffbce2cb065c99c1fcfc0571c3d))
+* **widget:** ensure widget fills full window height to prevent white bottom bar ([8e453ac](https://github.com/bizzkoot/copilot-tracker/commit/8e453ac21bcea71997dd2caa4ece3f22f69e04e9))
+* **widget:** fetch cached usage data on mount to prevent race condition ([54f6f89](https://github.com/bizzkoot/copilot-tracker/commit/54f6f896d139c4cc5b2cdc667784e2f68a912530))
+* **widget:** fix position initialization and restore usage data display ([af8e6c0](https://github.com/bizzkoot/copilot-tracker/commit/af8e6c054662b7cd3a73608f3b9b912eedb0ee3c))
+* **widget:** improve dragging, focus handling, and tray menu sync ([20cc42f](https://github.com/bizzkoot/copilot-tracker/commit/20cc42fa287a923dd9380d0c0de5d63dc4f0ca2f))
+* **widget:** persist position and sync state between tray and settings ([ec42148](https://github.com/bizzkoot/copilot-tracker/commit/ec42148331b2c1c2506826abfdaca97cf00e107d))
+
+
+### Documentation
+
+* **widget:** add new widget image asset ([01d8385](https://github.com/bizzkoot/copilot-tracker/commit/01d83852bb8ca33f2d0b3d88c43f2b0bb1148309))
+
 ## [2.3.2](https://github.com/bizzkoot/copilot-tracker/compare/v2.3.1...v2.3.2) (2026-02-10)
 
 
