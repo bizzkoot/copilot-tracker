@@ -11,7 +11,8 @@ import {
   getUsagePercentage,
 } from "@renderer/types/usage";
 import { WidgetHeader } from "./WidgetHeader";
-import { invoke, listen, emit, getCurrentWindow } from "@renderer/types/tauri";
+import { invoke, listen, emit } from "@renderer/types/tauri";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export function Widget() {
   const { usage, prediction } = useUsageStore();

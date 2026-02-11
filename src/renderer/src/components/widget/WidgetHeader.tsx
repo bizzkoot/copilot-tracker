@@ -4,7 +4,8 @@
  */
 
 import { useState, useRef } from "react";
-import { invoke, getCurrentWindow } from "@renderer/types/tauri";
+import { invoke } from "@renderer/types/tauri";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 interface WidgetHeaderProps {
   isPinned: boolean;

@@ -274,24 +274,31 @@ impl UsageManager {
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
-                        // Only fetch if authenticated
-                        if let Some(store) = app.try_state::<StoreManager>() {
-                            if store.is_authenticated() {
-                                // Create a new usage manager for this poll
-                                let mut usage_manager = UsageManager::new();
+                        // SAFETY: Only access StoreManager if it's available
+                        // Use try_state to avoid panicking if state is not yet managed
+                        match app.try_state::<StoreManager>() {
+                            Some(store) => {
+                                if store.is_authenticated() {
+                                    // Create a new usage manager for this poll
+                                    let mut usage_manager = UsageManager::new();
 
-                                if let Ok(summary) = usage_manager.fetch_usage(&app).await {
-                                    log::info!(
-                                        "[Background Polling] Usage updated: {}/{} ({}%)",
-                                        summary.used,
-                                        summary.limit,
-                                        summary.percentage
-                                    );
+                                    if let Ok(summary) = usage_manager.fetch_usage(&app).await {
+                                        log::info!(
+                                            "[Background Polling] Usage updated: {}/{} ({}%)",
+                                            summary.used,
+                                            summary.limit,
+                                            summary.percentage
+                                        );
+                                    } else {
+                                        log::warn!("[Background Polling] Failed to fetch usage");
+                                    }
                                 } else {
-                                    log::warn!("[Background Polling] Failed to fetch usage");
+                                    log::debug!("[Background Polling] Skipping - not authenticated");
                                 }
-                            } else {
-                                log::debug!("[Background Polling] Skipping - not authenticated");
+                            }
+                            None => {
+                                // StoreManager not yet available - skip this tick
+                                log::warn!("[Background Polling] StoreManager not available, skipping tick");
                             }
                         }
                     }

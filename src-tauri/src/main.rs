@@ -32,24 +32,71 @@ struct TrayState {
 // Background Polling State
 // ============================================================================
 
+/// Debounce window for polling restart (milliseconds)
+const POLLING_RESTART_DEBOUNCE_MS: u64 = 500;
+
 struct PollingState {
     cancel_tx: Mutex<Option<tokio::sync::mpsc::Sender<()>>>,
+    /// Timestamp of last restart to implement debounce
+    last_restart: Mutex<std::time::Instant>,
+    /// Last interval used to avoid duplicate restarts
+    last_interval: Mutex<u64>,
+    /// Flag to prevent restarts during app shutdown
+    is_shutting_down: Mutex<bool>,
 }
 
 impl PollingState {
     fn new() -> Self {
         Self {
             cancel_tx: Mutex::new(None),
+            last_restart: Mutex::new(std::time::Instant::now()),
+            last_interval: Mutex::new(0),
+            is_shutting_down: Mutex::new(false),
         }
     }
 
     /// Start or restart background polling with new interval
+    /// Includes debounce to prevent rapid restarts and shutdown protection
     fn restart_polling(&self, app: AppHandle, interval_seconds: u64) {
+        // Check if we're shutting down - don't start new polling tasks
+        {
+            let shutting_down = self.is_shutting_down.lock().unwrap();
+            if *shutting_down {
+                log::warn!("[PollingState] Ignoring restart request during shutdown");
+                return;
+            }
+        }
+
+        // Debounce: Skip if called with same interval within debounce window
+        {
+            let now = std::time::Instant::now();
+            let mut last_restart = self.last_restart.lock().unwrap();
+            let mut last_interval = self.last_interval.lock().unwrap();
+            
+            if *last_interval == interval_seconds &&
+                now.duration_since(*last_restart) < std::time::Duration::from_millis(POLLING_RESTART_DEBOUNCE_MS) {
+                log::debug!("[PollingState] Skipping duplicate restart request (interval: {}s)", interval_seconds);
+                return;
+            }
+            
+            // Update tracking before restart
+            *last_restart = now;
+            *last_interval = interval_seconds;
+        }
+
         // Cancel existing polling task if any
         if let Ok(mut guard) = self.cancel_tx.lock() {
             if let Some(tx) = guard.take() {
-                let _ = tx.try_send(());
-                log::info!("[PollingState] Cancelled previous polling task");
+                // Properly handle cancellation result
+                match tx.try_send(()) {
+                    Ok(_) => log::info!("[PollingState] Cancelled previous polling task"),
+                    Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {
+                        log::warn!("[PollingState] Cancel channel full, task may already be stopping");
+                    }
+                    Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
+                        log::warn!("[PollingState] Cancel channel closed, task already stopped");
+                    }
+                }
             }
 
             // Start new polling task
@@ -59,12 +106,27 @@ impl PollingState {
         }
     }
 
-    /// Stop background polling
+    /// Stop background polling and mark as shutting down
     fn stop_polling(&self) {
+        // Set shutdown flag FIRST to prevent restart attempts
+        {
+            let mut shutting_down = self.is_shutting_down.lock().unwrap();
+            *shutting_down = true;
+            log::info!("[PollingState] Shutdown flag set");
+        }
+        
+        // Then cancel the polling task
         if let Ok(mut guard) = self.cancel_tx.lock() {
             if let Some(tx) = guard.take() {
-                let _ = tx.try_send(());
-                log::info!("[PollingState] Stopped polling");
+                match tx.try_send(()) {
+                    Ok(_) => log::info!("[PollingState] Stopped polling"),
+                    Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {
+                        log::warn!("[PollingState] Stop request queued (channel full)");
+                    }
+                    Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
+                        log::debug!("[PollingState] Task already stopped (channel closed)");
+                    }
+                }
             }
         }
     }
@@ -1037,11 +1099,13 @@ fn main() {
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             }
 
-            // Initialize store manager
+            // CRITICAL: Initialize store manager FIRST before any operations that need it
+            // This must happen before building tray menu, creating tray icon, or starting polling
             let app_handle = app.handle();
             init_store_manager(app_handle)?;
+            log::info!("StoreManager initialized and managed successfully");
 
-            // Create tray menu
+            // Now safe to build tray menu (it accesses StoreManager)
             let menu = build_tray_menu(app.handle(), None)?;
 
             let initial_image = renderer.render_text_only("1", 16).into_tauri_image();
@@ -1355,11 +1419,18 @@ fn main() {
             let store = app.state::<StoreManager>();
             let settings = store.get_settings();
 
-            // Start background usage polling with user's configured interval
-            let polling_state = app.state::<PollingState>();
-            let interval_seconds = settings.refresh_interval.max(10); // Minimum 10 seconds
-            polling_state.restart_polling(app_handle.clone(), interval_seconds as u64);
-            log::info!("[Startup] Started background polling with interval: {}s", interval_seconds);
+            // CRITICAL: Start background polling AFTER setup completes to prevent race condition
+            // Spawn a delayed task to ensure polling starts after initialization is complete
+            let app_for_polling = app_handle.clone();
+            let polling_interval = settings.refresh_interval.max(10) as u64;
+            tauri::async_runtime::spawn(async move {
+                // Small delay to ensure setup() completes and all state is managed
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                
+                let polling_state = app_for_polling.state::<PollingState>();
+                polling_state.restart_polling(app_for_polling.clone(), polling_interval);
+                log::info!("[Startup] Started background polling with interval: {}s", polling_interval);
+            });
 
             // Initialize widget state from settings
             let store = app.state::<StoreManager>();

@@ -27,21 +27,47 @@ export interface TauriPosition {
 
 /**
  * Get the current Tauri window with type safety
+ * Tauri 2.x uses a different API than v1
  */
 export function getCurrentWindow(): TauriCurrentWindow {
+  // Tauri 2.x: Try the new API first (from @tauri-apps/api/window)
+  if ((window as any).__TAURI_INTERNALS__) {
+    const internals = (window as any).__TAURI_INTERNALS__;
+    if (internals.metadata && internals.metadata.currentWindow) {
+      return internals.metadata.currentWindow;
+    }
+  }
+
+  // Fallback: Try to access via Tauri v1 API for backwards compatibility
   const tauriWindow = (
     window as unknown as {
       __TAURI__?: {
-        window: { getCurrent: () => TauriCurrentWindow };
+        window?: { getCurrent?: () => TauriCurrentWindow };
       };
     }
   ).__TAURI__?.window;
-  if (!tauriWindow) {
-    throw new Error(
-      "Tauri window API is not available. Make sure you are running in a Tauri context.",
-    );
+  
+  if (tauriWindow && typeof tauriWindow.getCurrent === 'function') {
+    return tauriWindow.getCurrent();
   }
-  return tauriWindow.getCurrent();
+
+  // Last resort: Check if we're in a mock/testing environment
+  if (process.env.NODE_ENV === 'development' || (window as any).electron) {
+    console.warn('Tauri window API not available, using mock');
+    // Return a mock implementation for development
+    return {
+      setAlwaysOnTop: async () => {},
+      hide: async () => {},
+      show: async () => {},
+      getPosition: async () => ({ x: 100, y: 100 }),
+      setPosition: async () => {},
+      outerPosition: async () => ({ x: 100, y: 100 }),
+    };
+  }
+
+  throw new Error(
+    'Tauri window API is not available. Make sure you are running in a Tauri context.'
+  );
 }
 
 /**
