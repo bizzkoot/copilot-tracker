@@ -1200,7 +1200,7 @@ fn main() {
     // CONTEXT GENERATION & STORE INITIALIZATION
     // We generate the context here to access config/identifier, then pass it to the runner
     let context = tauri::generate_context!();
-    let identifier = context.config().tauri.bundle.identifier.clone();
+    let identifier = context.config().identifier.clone();
     
     // Resolve app directory manually using helper (Standard paths for Win/Mac/Linux)
     let app_dir = resolve_app_dir(&identifier);
