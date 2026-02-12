@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.4](https://github.com/bizzkoot/copilot-tracker/compare/v2.3.3...v2.3.4) (2026-02-12)
+
+
+### Bug Fixes
+
+* **main:** update identifier retrieval from context configuration ([88455e2](https://github.com/bizzkoot/copilot-tracker/commit/88455e23b328a4458df955d4d6f95e779d0fe91e))
+* Refactor StoreManager initialization to occur before Tauri builder ([763d27a](https://github.com/bizzkoot/copilot-tracker/commit/763d27a40f4b86731a2fc3712b681ed91f94aa3e))
+
 ## [2.3.3](https://github.com/bizzkoot/copilot-tracker/compare/v2.3.2...v2.3.3) (2026-02-11)
 
 
