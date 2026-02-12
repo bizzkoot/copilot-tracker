@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Mutex;
-use tauri::{AppHandle, Manager};
 
 use crate::usage::UsageEntry;
 
@@ -174,6 +173,12 @@ pub struct StoreManager {
 impl StoreManager {
     /// Create a new store manager with the given app directory
     pub fn new(app_dir: PathBuf) -> Result<Self, String> {
+        // Ensure directory exists (moved from init_store_manager)
+        if !app_dir.exists() {
+            std::fs::create_dir_all(&app_dir)
+                .map_err(|e| format!("Failed to create app data dir: {}", e))?;
+        }
+
         let settings_path = app_dir.join(STORE_FILENAME);
         let history_path = app_dir.join(HISTORY_FILENAME);
 
@@ -464,23 +469,5 @@ impl StoreManager {
             s.widget_visible = visible;
         })
     }
-}
-
-/// Initialize the store manager and attach to app
-pub fn init_store_manager(app: &AppHandle) -> Result<(), String> {
-    let app_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
-
-    // Ensure directory exists
-    std::fs::create_dir_all(&app_dir)
-        .map_err(|e| format!("Failed to create app data dir: {}", e))?;
-
-    let store_manager = StoreManager::new(app_dir)?;
-
-    app.manage(store_manager);
-
-    Ok(())
 }
 
