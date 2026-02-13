@@ -76,34 +76,37 @@ export function WidgetHeader({
     <div
       ref={headerRef}
       data-tauri-drag-region
-      className="flex items-center justify-between px-3 py-2 cursor-grab select-none active:cursor-grabbing"
+      className="flex items-center justify-between px-3 py-1.5 cursor-grab select-none active:cursor-grabbing"
       style={{
-        background: "rgba(255, 255, 255, 0.05)",
+        background: "rgba(255, 255, 255, 0.06)",
         borderTopLeftRadius: "12px",
         borderTopRightRadius: "12px",
-        borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
+        borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
       }}
     >
       {/* Title */}
       <div className="flex items-center gap-2" data-tauri-drag-region>
-        <span className="text-white text-sm font-medium" data-tauri-drag-region>
+        <span
+          className="text-white text-sm font-semibold tracking-tight"
+          data-tauri-drag-region
+        >
           Copilot Usage
         </span>
       </div>
 
-      {/* Buttons */}
-      <div className="flex items-center gap-1">
+      {/* Buttons - refined hover states */}
+      <div className="flex items-center gap-0.5">
         {/* Pin Button */}
         <button
           onClick={onTogglePin}
-          className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 transition-colors"
+          className="w-7 h-7 flex items-center justify-center rounded hover:bg-white/12 active:bg-white/18 transition-all duration-150"
           title={isPinned ? "Always on top" : "Desktop only"}
         >
           {isPinned ? (
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
+              width="13"
+              height="13"
               viewBox="0 0 24 24"
               fill="currentColor"
               className="text-white"
@@ -113,12 +116,12 @@ export function WidgetHeader({
           ) : (
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
+              width="13"
+              height="13"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
-              strokeWidth="2"
+              strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
               className="text-white"
@@ -131,17 +134,17 @@ export function WidgetHeader({
         {/* Minimize Button */}
         <button
           onClick={onMinimize}
-          className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 transition-colors"
+          className="w-7 h-7 flex items-center justify-center rounded hover:bg-white/12 active:bg-white/18 transition-all duration-150"
           title="Minimize to tray"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
+            width="13"
+            height="13"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2"
+            strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
             className="text-white"
@@ -150,23 +153,23 @@ export function WidgetHeader({
           </svg>
         </button>
 
-        {/* Close Button */}
+        {/* Close Button - refined hover */}
         <button
           onClick={onClose}
-          className="w-6 h-6 flex items-center justify-center rounded hover:bg-red-500/20 hover:text-red-400 transition-colors"
+          className="w-7 h-7 flex items-center justify-center rounded hover:bg-red-500/25 active:bg-red-500/35 transition-all duration-150"
           title="Close widget"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
+            width="13"
+            height="13"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2"
+            strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="text-white"
+            className="text-white/90 hover:text-red-400 transition-colors"
           >
             <line x1="18" y1="6" x2="6" y2="18" />
             <line x1="6" y1="6" x2="18" y2="18" />

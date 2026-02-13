@@ -70,31 +70,29 @@ export function Widget() {
     };
   }, [setUsageData]);
 
-  // Get color class based on percentage
-  const getColorClass = () => {
-    if (percentage <= 50) return "bg-green-500";
-    if (percentage <= 80) return "bg-yellow-500";
-    if (percentage <= 100) return "bg-orange-500";
-    return "bg-red-500";
+  // Get color based on percentage - refined palette with better contrast
+  const getProgressColor = () => {
+    if (percentage <= 50) return "#10b981"; // emerald-500
+    if (percentage <= 80) return "#f59e0b"; // amber-500
+    if (percentage <= 100) return "#f97316"; // orange-500
+    return "#ef4444"; // red-500
   };
 
-  const progressColor = getColorClass();
+  const progressColor = getProgressColor();
 
-  // Get prediction status
+  // Get prediction status with refined styling
   const getPredictionStatus = () => {
     if (!prediction || !limit) return null;
     const predicted = prediction.predictedMonthlyRequests;
     if (predicted > limit) {
       return {
-        text: `Predicted: ${predicted.toLocaleString()} (may exceed)`,
-        emoji: "⚠️",
-        color: "text-orange-400",
+        text: `Forecast: ${predicted.toLocaleString()} (exceeds limit)`,
+        color: "#fb923c", // orange-400
       };
     }
     return {
-      text: `Predicted: ${predicted.toLocaleString()} (on track)`,
-      emoji: "✅",
-      color: "text-green-400",
+      text: `Forecast: ${predicted.toLocaleString()} (on track)`,
+      color: "#4ade80", // green-400
     };
   };
 
@@ -187,74 +185,98 @@ export function Widget() {
         onDragEnd={() => setIsDragging(false)}
       />
 
-      {/* Content */}
-      <div className="flex-1 px-4 py-3 flex flex-col gap-2">
-        {/* Progress Bar */}
-        <div className="flex items-center gap-2">
-          {/* Custom progress bar with dynamic color */}
-          <div
-            className="flex-1 h-2 rounded-full overflow-hidden"
-            style={{ backgroundColor: "rgba(255, 255, 255, 0.1)" }}
-          >
-            <div
-              className="h-full rounded-full transition-all duration-300"
-              style={{
-                width: `${Math.min(percentage, 100)}%`,
-                backgroundColor:
-                  progressColor === "bg-green-500"
-                    ? "#22c55e"
-                    : progressColor === "bg-yellow-500"
-                      ? "#eab308"
-                      : progressColor === "bg-orange-500"
-                        ? "#f97316"
+      {/* Content - Side-by-side layout (reduced height) */}
+      <div className="flex-1 px-4 py-2.5 flex gap-4">
+        {/* Left Panel: Stacked text */}
+        <div className="flex-1 flex flex-col justify-center gap-1.5 min-w-0">
+          {/* Usage Text - refined typography */}
+          <div className="text-sm text-white leading-tight">
+            <span className="font-semibold tracking-tight">
+              {used.toLocaleString()}
+            </span>
+            <span className="text-white/50 font-normal mx-1">/</span>
+            <span className="text-white/70 font-normal">
+              {limit.toLocaleString()} requests
+            </span>
+          </div>
+
+          {/* Prediction - refined without emoji */}
+          {predictionStatus && (
+            <div className="text-xs leading-tight">
+              <span
+                style={{ color: predictionStatus.color, fontWeight: 500 }}
+              >
+                {predictionStatus.text}
+              </span>
+            </div>
+          )}
+
+          {/* Confidence - refined with colored dot */}
+          {prediction && (
+            <div className="text-xs text-white/60 leading-tight flex items-center gap-1.5">
+              <span
+                className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                style={{
+                  backgroundColor:
+                    prediction.confidenceLevel === "high"
+                      ? "#10b981"
+                      : prediction.confidenceLevel === "medium"
+                        ? "#f59e0b"
                         : "#ef4444",
-              }}
-            />
-          </div>
-          <span className="text-xs font-medium text-white min-w-[35px] text-right">
-            {Math.round(percentage)}%
-          </span>
+                }}
+              />
+              <span className="truncate">
+                Based on {prediction.daysUsedForPrediction} day(s) of data
+              </span>
+            </div>
+          )}
+
+          {/* Last Updated - refined typography */}
+          {lastUpdated && (
+            <div className="text-xs text-white/50 leading-tight font-normal">
+              Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </div>
+          )}
         </div>
 
-        {/* Usage Text */}
-        <div className="text-sm text-white">
-          <span className="font-medium">{used.toLocaleString()}</span>
-          <span className="text-muted-foreground"> / </span>
-          <span className="text-muted-foreground">
-            {limit.toLocaleString()} requests
-          </span>
+        {/* Right Panel: Circular Gauge */}
+        <div className="flex items-center justify-center flex-shrink-0">
+          <div className="relative w-14 h-14">
+            {/* Background Circle */}
+            <svg
+              className="w-full h-full"
+              viewBox="0 0 36 36"
+            >
+              {/* Background track */}
+              <path
+                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                fill="none"
+                stroke="rgba(255, 255, 255, 0.12)"
+                strokeWidth="3"
+                strokeLinecap="round"
+              />
+              {/* Progress arc */}
+              <path
+                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                fill="none"
+                stroke={progressColor}
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeDasharray={`${Math.min(percentage, 100)}, 100`}
+                style={{
+                  transition: "stroke-dasharray 500ms ease-out",
+                  filter: `drop-shadow(0 0 4px ${progressColor}40)`,
+                }}
+              />
+            </svg>
+            {/* Percentage text in center */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-sm font-bold text-white leading-none">
+                {Math.round(percentage)}%
+              </span>
+            </div>
+          </div>
         </div>
-
-        {/* Prediction */}
-        {predictionStatus && (
-          <div className="text-xs text-muted-foreground flex items-start gap-1">
-            <span>{predictionStatus.emoji}</span>
-            <span className={predictionStatus.color}>
-              {predictionStatus.text}
-            </span>
-          </div>
-        )}
-
-        {/* Confidence */}
-        {prediction && (
-          <div className="text-xs text-muted-foreground flex items-center gap-1">
-            <span>
-              {prediction.confidenceLevel === "high" && "🟢"}
-              {prediction.confidenceLevel === "medium" && "🟡"}
-              {prediction.confidenceLevel === "low" && "🔴"}
-            </span>
-            <span>
-              Based on {prediction.daysUsedForPrediction} day(s) of data
-            </span>
-          </div>
-        )}
-
-        {/* Last Updated */}
-        {lastUpdated && (
-          <div className="text-xs text-muted-foreground flex items-center gap-1">
-            <span>Last updated: {lastUpdated.toLocaleTimeString()}</span>
-          </div>
-        )}
       </div>
     </div>
   );
