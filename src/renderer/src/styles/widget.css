@@ -7,4 +7,13 @@ body,
   padding: 0;
   overflow: hidden;
   background-color: transparent !important;
+  /* Ensure the native transparent window is clipped to rounded corners
+     and avoid rectangular alpha-fringing (black outline). */
+  border-radius: 0.75rem; /* match Tailwind's rounded-xl used in component */
+  -webkit-border-radius: 0.75rem;
+  /* Clip any drawing to the rounded shape so the underlying host window
+     transparency renders correctly. */
+  overflow: hidden;
+  /* Use a mask to enforce alpha clipping on some WebKit-based webviews */
+  -webkit-mask-image: radial-gradient(#000 100%, #000 100%);
 }
