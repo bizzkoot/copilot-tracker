@@ -32,6 +32,9 @@ pub struct AppSettings {
     pub last_usage: u32,
     /// Last time usage was fetched (timestamp)
     pub last_fetch_timestamp: i64,
+    /// Last time update check was performed (timestamp)
+    #[serde(default)]
+    pub last_update_check_timestamp: i64,
     /// Whether to launch at login
     pub launch_at_login: bool,
     /// Whether to show notifications
@@ -133,6 +136,7 @@ impl Default for AppSettings {
             usage_limit: 1200, // Default Copilot limit
             last_usage: 0,
             last_fetch_timestamp: 0,
+            last_update_check_timestamp: 0,
             launch_at_login: false,
             show_notifications: true,
             notification_thresholds: default_thresholds(),
@@ -294,6 +298,23 @@ impl StoreManager {
     pub fn get_usage(&self) -> (u32, u32) {
         let settings = self.settings.lock().unwrap();
         (settings.last_usage, settings.usage_limit)
+    }
+
+    /// Get last fetch timestamp
+    pub fn get_last_fetch_timestamp(&self) -> i64 {
+        self.settings.lock().unwrap().last_fetch_timestamp
+    }
+
+    /// Get last update check timestamp
+    pub fn get_last_update_check_timestamp(&self) -> i64 {
+        self.settings.lock().unwrap().last_update_check_timestamp
+    }
+
+    /// Set last update check timestamp
+    pub fn set_last_update_check_timestamp(&self, timestamp: i64) -> Result<(), String> {
+        self.update_settings(|s| {
+            s.last_update_check_timestamp = timestamp;
+        })
     }
 
     /// Set launch at login preference
@@ -470,4 +491,3 @@ impl StoreManager {
         })
     }
 }
-

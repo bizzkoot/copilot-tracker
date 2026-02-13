@@ -180,6 +180,29 @@ struct UpdateInfo {
 #[derive(Default)]
 struct UpdateState {
     latest: Mutex<Option<UpdateInfo>>,
+    last_check_time: Mutex<Option<chrono::DateTime<chrono::Local>>>,
+}
+
+
+
+/// Format a timestamp for display (HH:MM:SS for today, date only for other days)
+fn format_timestamp(date: Option<chrono::DateTime<chrono::Local>>) -> String {
+    match date {
+        None => "Never".to_string(),
+        Some(dt) => {
+            let now = chrono::Local::now();
+            let today = now.date_naive();
+            let date = dt.date_naive();
+
+            if date == today {
+                // Same day - show time in HH:MM:SS format
+                dt.format("%H:%M:%S").to_string()
+            } else {
+                // Different day - show date only
+                dt.format("%b %d").to_string()
+            }
+        }
+    }
 }
 
 /// Format tray icon text based on the specified format
@@ -425,6 +448,20 @@ fn build_tray_menu(
     let refresh = MenuItem::with_id(app, "refresh", "Refresh", true, None::<&str>)
         .map_err(|e| e.to_string())?;
     menu.append(&refresh).map_err(|e| e.to_string())?;
+    
+    // Show last refresh time below Refresh (from persisted store)
+    let store = app.state::<StoreManager>();
+    let last_fetch_timestamp = store.get_last_fetch_timestamp();
+    let last_refresh_time = if last_fetch_timestamp > 0 {
+        chrono::DateTime::from_timestamp(last_fetch_timestamp, 0)
+            .map(|dt| dt.with_timezone(&chrono::Local))
+    } else {
+        None
+    };
+    let last_refresh_label = format!("Last refresh: {}", format_timestamp(last_refresh_time));
+    let last_refresh_item = MenuItem::with_id(app, "last_refresh", last_refresh_label, false, None::<&str>)
+        .map_err(|e| e.to_string())?;
+    menu.append(&last_refresh_item).map_err(|e| e.to_string())?;
 
     menu.append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
@@ -455,6 +492,23 @@ fn build_tray_menu(
     let update_item = MenuItem::with_id(app, "update_check", update_label, true, None::<&str>)
         .map_err(|e| e.to_string())?;
     menu.append(&update_item).map_err(|e| e.to_string())?;
+    
+    // Show last check time below when no update is available (from persisted store)
+    if update.is_none() {
+        let store = app.state::<StoreManager>();
+        let last_check_time = store
+            .get_last_update_check_timestamp();
+        let last_check_dt = if last_check_time > 0 {
+            chrono::DateTime::from_timestamp(last_check_time, 0)
+                .map(|dt| dt.with_timezone(&chrono::Local))
+        } else {
+            None
+        };
+        let last_check_label = format!("Last checked: {}", format_timestamp(last_check_dt));
+        let last_check_item = MenuItem::with_id(app, "last_check", last_check_label, false, None::<&str>)
+            .map_err(|e| e.to_string())?;
+        menu.append(&last_check_item).map_err(|e| e.to_string())?;
+    }
 
     menu.append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
@@ -1043,6 +1097,15 @@ fn process_release_data(
 ) -> Result<(), String> {
     let send_status = send_status;
 
+    // Store the last check time at the start (regardless of outcome)
+    let update_state = app.state::<UpdateState>();
+    let now = chrono::Local::now();
+    *update_state.last_check_time.lock().unwrap() = Some(now);
+    
+    // Persist to store
+    let store = app.state::<StoreManager>();
+    let _ = store.set_last_update_check_timestamp(now.timestamp());
+
     let tag_name = release
         .get("tag_name")
         .and_then(|v| v.as_str())
@@ -1090,7 +1153,6 @@ fn process_release_data(
             release_date: release.get("published_at").and_then(|v| v.as_str()).map(|s| s.to_string()),
         };
 
-        let update_state = app.state::<UpdateState>();
         *update_state.latest.lock().unwrap() = Some(info.clone());
 
         let _ = app.emit("update:available", info.clone());
@@ -1108,9 +1170,20 @@ fn process_release_data(
 
         let _ = rebuild_tray_menu(&app, Some(&info));
     } else {
-        let update_state = app.state::<UpdateState>();
         *update_state.latest.lock().unwrap() = None;
         send_status("none", None);
+        
+        // Show notification that app is up to date
+        let store = app.state::<StoreManager>();
+        if store.get_show_notifications() {
+            let _ = app
+                .notification()
+                .builder()
+                .title("Copilot Tracker")
+                .body(format!("You're running the latest version ({}).", current_version))
+                .show();
+        }
+        
         let _ = rebuild_tray_menu(&app, None);
     }
 
@@ -1139,8 +1212,29 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
             let release = if release_json.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
                 release_json.get("data").cloned().unwrap_or(release_json)
             } else {
-                send_status("error", Some(format!("Webview fetch failed: {}",
-                    release_json.get("error").and_then(|v| v.as_str()).unwrap_or("unknown error")).as_str()));
+                // Store last check time even on error
+                let update_state = app.state::<UpdateState>();
+                let now = chrono::Local::now();
+                *update_state.last_check_time.lock().unwrap() = Some(now);
+                
+                // Persist to store
+                let store = app.state::<StoreManager>();
+                let _ = store.set_last_update_check_timestamp(now.timestamp());
+                
+                let error_msg = format!("Webview fetch failed: {}",
+                    release_json.get("error").and_then(|v| v.as_str()).unwrap_or("unknown error"));
+                send_status("error", Some(&error_msg));
+                
+                // Show error notification
+                if store.get_show_notifications() {
+                    let _ = app
+                        .notification()
+                        .builder()
+                        .title("Copilot Tracker")
+                        .body("Failed to check for updates. Please try again later.")
+                        .show();
+                }
+                let _ = rebuild_tray_menu(&app, None);
                 return Ok(());
             };
             process_release_data(&app, release, &send_status)?;
@@ -1161,7 +1255,27 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
             match response {
                 Ok(resp) => {
                     if !resp.status().is_success() {
+                        // Store last check time even on error
+                        let update_state = app.state::<UpdateState>();
+                        let now = chrono::Local::now();
+                        *update_state.last_check_time.lock().unwrap() = Some(now);
+                        
+                        // Persist to store
+                        let store = app.state::<StoreManager>();
+                        let _ = store.set_last_update_check_timestamp(now.timestamp());
+                        
                         send_status("error", Some(format!("GitHub API returned status: {}", resp.status()).as_str()));
+                        
+                        // Show error notification
+                        if store.get_show_notifications() {
+                            let _ = app
+                                .notification()
+                                .builder()
+                                .title("Copilot Tracker")
+                                .body("Failed to check for updates. Please try again later.")
+                                .show();
+                        }
+                        let _ = rebuild_tray_menu(&app, None);
                         return Ok(());
                     }
                     
@@ -1172,7 +1286,28 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
                         }
                         Err(err) => {
                             log::error!("[Update] Failed to parse response: {}", err);
+                            
+                            // Store last check time even on error
+                            let update_state = app.state::<UpdateState>();
+                            let now = chrono::Local::now();
+                            *update_state.last_check_time.lock().unwrap() = Some(now);
+                            
+                            // Persist to store
+                            let store = app.state::<StoreManager>();
+                            let _ = store.set_last_update_check_timestamp(now.timestamp());
+                            
                             send_status("error", Some(format!("Failed to parse update response: {}", err).as_str()));
+                            
+                            // Show error notification
+                            if store.get_show_notifications() {
+                                let _ = app
+                                    .notification()
+                                    .builder()
+                                    .title("Copilot Tracker")
+                                    .body("Failed to check for updates. Please try again later.")
+                                    .show();
+                            }
+                            let _ = rebuild_tray_menu(&app, None);
                             return Ok(());
                         }
                     };
@@ -1181,10 +1316,31 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
                 }
                 Err(err) => {
                     log::error!("[Update] Both webview and reqwest failed. Reqwest error: {}", err);
+                    
+                    // Store last check time even on error
+                    let update_state = app.state::<UpdateState>();
+                    let now = chrono::Local::now();
+                    *update_state.last_check_time.lock().unwrap() = Some(now);
+                    
+                    // Persist to store
+                    let store = app.state::<StoreManager>();
+                    let _ = store.set_last_update_check_timestamp(now.timestamp());
+                    
                     send_status("error", Some(format!(
                         "Update check failed (webview: {}, reqwest: {})", 
                         webview_err, err
                     ).as_str()));
+                    
+                    // Show error notification
+                    if store.get_show_notifications() {
+                        let _ = app
+                            .notification()
+                            .builder()
+                            .title("Copilot Tracker")
+                            .body("Failed to check for updates. Please check your connection.")
+                            .show();
+                    }
+                    let _ = rebuild_tray_menu(&app, None);
                     return Ok(());
                 }
             }
@@ -1390,6 +1546,12 @@ fn main() {
                                 Ok(summary) => {
                                     log::info!("Refresh successful: {}/{} ({}%)", 
                                         summary.used, summary.limit, summary.percentage);
+                                    
+                                    // Rebuild tray menu to show updated timestamp
+                                    let update_state = app_handle.state::<UpdateState>();
+                                    let latest = update_state.latest.lock().unwrap();
+                                    let _ = rebuild_tray_menu(&app_handle, latest.as_ref());
+                                    
                                     // Show notification on success (if enabled)
                                     if let Some(store) = app_handle.try_state::<StoreManager>() {
                                         if store.get_show_notifications() {
