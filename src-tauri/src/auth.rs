@@ -996,6 +996,127 @@ impl AuthManager {
     pub fn is_authenticated(&self) -> bool {
         self.customer_id.is_some()
     }
+
+    /// Fetch updates via webview using a simpler approach
+    /// This creates a temporary webview that navigates and injects JavaScript
+    pub async fn fetch_github_releases(
+        &mut self,
+        app: &AppHandle,
+    ) -> Result<serde_json::Value, String> {
+        // Create event channel
+        let (tx, mut rx) = mpsc::channel::<HiddenWebviewEvent>(10);
+
+        // Store channel for command handler to use
+        {
+            let mut global_tx = HIDDEN_WEBVIEW_EVENTS.lock().await;
+            *global_tx = Some(tx);
+        }
+
+        // Create temporary hidden webview
+        let url = Url::parse("https://api.github.com")
+            .map_err(|e| format!("Failed to parse URL: {}", e))?;
+
+        let js_code = r#"
+            (async function() {
+                async function sendResult(kind, payload) {
+                    try {
+                        // Tauri v2 event emission via core invoke
+                        if (window.__TAURI__ && window.__TAURI__.core) {
+                            await window.__TAURI__.core.invoke('hidden_webview_event', {
+                                event: kind,
+                                payload: JSON.stringify(payload)
+                            });
+                            console.log('[UpdateCheck] Sent event:', kind);
+                        } else {
+                            console.error('[UpdateCheck] Tauri not available');
+                        }
+                    } catch (e) {
+                        console.error('[UpdateCheck] Failed to send:', e);
+                    }
+                }
+
+                try {
+                    const response = await fetch('https://api.github.com/repos/bizzkoot/copilot-tracker/releases/latest', {
+                        headers: {
+                            'User-Agent': 'Copilot-Tracker-App'
+                        }
+                    });
+
+                    if (!response.ok) {
+                        console.error('Update check failed: HTTP ' + response.status);
+                        await sendResult('update_check:error', { success: false, error: 'HTTP ' + response.status });
+                        return;
+                    }
+
+                    const data = await response.json();
+                    console.log('Update check success:', data);
+
+                    // Send result back via Tauri event
+                    await sendResult('update_check:complete', { success: true, data: data });
+                } catch (error) {
+                    console.error('Update check error:', error);
+                    await sendResult('update_check:error', { success: false, error: error.message || error.toString() });
+                }
+            })()
+        "#;
+
+        // Create minimal hidden webview
+        let window = WebviewWindowBuilder::new(
+            app,
+            "update-check-temp",
+            WebviewUrl::External(url),
+        )
+        .title("Update Check Temp")
+        .skip_taskbar(true)
+        .inner_size(1.0, 1.0)
+        .position(-100.0, -100.0)
+        .visible(false)
+        .initialization_script(js_code)
+        .build()
+        .map_err(|e| format!("Failed to create update check webview: {}", e))?;
+
+        // Wait for update_check:complete event with timeout
+        let timeout_duration = Duration::from_secs(10);
+        let result = tokio::time::timeout(timeout_duration, async {
+            while let Some(event) = rx.recv().await {
+                log::info!("Received update check event: {}", event.event);
+
+                if event.event == "update_check:complete" {
+                    // Clean up global channel
+                    let mut global_tx = HIDDEN_WEBVIEW_EVENTS.lock().await;
+                    *global_tx = None;
+
+                    return serde_json::from_str::<serde_json::Value>(&event.payload)
+                        .map_err(|e| format!("Failed to parse update check result: {}", e));
+                } else if event.event == "update_check:error" {
+                    // Clean up global channel
+                    let mut global_tx = HIDDEN_WEBVIEW_EVENTS.lock().await;
+                    *global_tx = None;
+
+                    // Parse error from payload
+                    let error_payload = serde_json::from_str::<serde_json::Value>(&event.payload)
+                        .map_err(|e| format!("Failed to parse error payload: {}", e))?;
+
+                    let error_msg = error_payload
+                        .get("error")
+                        .and_then(|e| e.as_str())
+                        .unwrap_or("Unknown error")
+                        .to_string();
+
+                    return Err::<serde_json::Value, String>(error_msg);
+                }
+            }
+
+            // If loop completes without result event, it timed out
+            Err::<serde_json::Value, String>("Update check timed out".to_string())
+        }).await
+        .map_err(|_| "Update check timed out".to_string())?;
+
+        // Clean up window
+        let _ = window.close();
+
+        result
+    }
 }
 
 impl Default for AuthManager {

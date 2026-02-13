@@ -608,13 +608,14 @@ dependencies = [
 
 [[package]]
 name = "copilot-tracker"
-version = "2.3.2"
+version = "2.3.4"
 dependencies = [
  "chrono",
  "env_logger",
  "fontdue",
  "log",
  "png",
+ "reqwest 0.12.28",
  "semver",
  "serde",
  "serde_json",

@@ -1029,44 +1029,18 @@ async fn set_widget_enabled(app: AppHandle, enabled: bool) -> Result<(), String>
     Ok(())
 }
 
-#[tauri::command]
-async fn check_for_updates(app: AppHandle) -> Result<(), String> {
-    let send_status = |status: &str, message: Option<String>| {
-        let payload = UpdateCheckStatus {
-            status: status.to_string(),
-            message,
-        };
-        let _ = app.emit("update:checked", payload);
-    };
+// ============================================================================
+// IPC Commands - App
+// ============================================================================
 
-    let client = reqwest::Client::new();
-    let response = client
-        .get("https://api.github.com/repos/bizzkoot/copilot-tracker/releases/latest")
-        .header("User-Agent", "Copilot-Tracker-App")
-        .send()
-        .await
-        .map_err(|e| e.to_string());
+/// Helper function to process release data and emit appropriate events
+fn process_release_data(
+    app: &AppHandle,
+    release: serde_json::Value,
+    send_status: &dyn Fn(&str, Option<&str>),
+) -> Result<(), String> {
+    let send_status = send_status;
 
-    let response = match response {
-        Ok(response) => response,
-        Err(err) => {
-            send_status("error", Some(format!("Network request failed: {err}")));
-            return Ok(());
-        }
-    };
-
-    if !response.status().is_success() {
-        send_status("error", Some("Update check failed".to_string()));
-        return Ok(());
-    }
-
-    let release: serde_json::Value = match response.json().await {
-        Ok(value) => value,
-        Err(err) => {
-            send_status("error", Some(format!("Failed to parse update response: {err}")));
-            return Ok(());
-        }
-    };
     let tag_name = release
         .get("tag_name")
         .and_then(|v| v.as_str())
@@ -1075,18 +1049,18 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
     let latest_version = tag_name.trim_start_matches('v');
     let current_version = app.package_info().version.to_string();
 
-    let latest = match semver::Version::parse(latest_version) {
+    let latest = match semver::Version::parse(&latest_version) {
         Ok(version) => version,
         Err(_) => {
-            send_status("error", Some("Invalid version format".to_string()));
-            return Ok(());
+            send_status("error", Some("Invalid version format"));
+            return Err("Invalid version format".to_string());
         }
     };
     let current = match semver::Version::parse(&current_version) {
         Ok(version) => version,
         Err(_) => {
-            send_status("error", Some("Invalid version format".to_string()));
-            return Ok(());
+            send_status("error", Some("Invalid version format"));
+            return Err("Invalid version format".to_string());
         }
     };
 
@@ -1136,6 +1110,83 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
         *update_state.latest.lock().unwrap() = None;
         send_status("none", None);
         let _ = rebuild_tray_menu(&app, None);
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn check_for_updates(app: AppHandle) -> Result<(), String> {
+    let send_status = |status: &str, message: Option<&str>| {
+        let payload = UpdateCheckStatus {
+            status: status.to_string(),
+            message: message.map(|s| s.to_string()),
+        };
+        let _ = app.emit("update:checked", payload);
+    };
+
+    // Solution #3: Try using webview fetch (browser's network stack)
+    // This avoids Windows SChannel issues with unsigned builds
+    log::info!("[Update] Attempting update check via webview fetch...");
+
+    let mut auth_manager = AuthManager::new();
+    match auth_manager.fetch_github_releases(&app).await {
+        Ok(release_json) => {
+            // Successfully fetched via webview
+            log::info!("[Update] Webview fetch succeeded");
+            let release = if release_json.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
+                release_json.get("data").cloned().unwrap_or(release_json)
+            } else {
+                send_status("error", Some(format!("Webview fetch failed: {}",
+                    release_json.get("error").and_then(|v| v.as_str()).unwrap_or("unknown error")).as_str()));
+                return Ok(());
+            };
+            process_release_data(&app, release, &send_status)?;
+        }
+        Err(webview_err) => {
+            log::warn!("[Update] Webview fetch failed: {}, trying reqwest fallback", webview_err);
+            
+            // Solution #2: Fallback to reqwest with rustls TLS
+            log::info!("[Update] Attempting update check via reqwest with rustls TLS...");
+            
+            let client = reqwest::Client::new();
+            let response = client
+                .get("https://api.github.com/repos/bizzkoot/copilot-tracker/releases/latest")
+                .header("User-Agent", "Copilot-Tracker-App")
+                .send()
+                .await;
+
+            match response {
+                Ok(resp) => {
+                    if !resp.status().is_success() {
+                        send_status("error", Some(format!("GitHub API returned status: {}", resp.status()).as_str()));
+                        return Ok(());
+                    }
+                    
+                    let release = match resp.json().await {
+                        Ok(value) => {
+                            log::info!("[Update] Reqwest fallback succeeded");
+                            value
+                        }
+                        Err(err) => {
+                            log::error!("[Update] Failed to parse response: {}", err);
+                            send_status("error", Some(format!("Failed to parse update response: {}", err).as_str()));
+                            return Ok(());
+                        }
+                    };
+                    
+                    process_release_data(&app, release, &send_status)?;
+                }
+                Err(err) => {
+                    log::error!("[Update] Both webview and reqwest failed. Reqwest error: {}", err);
+                    send_status("error", Some(format!(
+                        "Update check failed (webview: {}, reqwest: {})", 
+                        webview_err, err
+                    ).as_str()));
+                    return Ok(());
+                }
+            }
+        }
     }
 
     Ok(())
