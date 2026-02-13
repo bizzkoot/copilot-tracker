@@ -191,16 +191,9 @@ export function Widget() {
 
   return (
     <div
-      className={`widget-window h-full w-full flex flex-col ${
+      className={`widget-window h-full w-full flex flex-col rounded-xl border border-white/10 bg-[#1e1e1e]/85 shadow-[0_8px_32px_rgba(0,0,0,0.3)] backdrop-blur-[12px] ${
         isDragging ? "cursor-grabbing" : ""
       }`}
-      style={{
-        background: "rgba(30, 30, 30, 0.85)",
-        backdropFilter: "blur(12px)",
-        border: "1px solid rgba(255, 255, 255, 0.1)",
-        borderRadius: "12px",
-        boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)",
-      }}
     >
       {/* Header */}
       <WidgetHeader

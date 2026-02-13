@@ -12,6 +12,12 @@ pub struct TrayImage {
 }
 
 impl TrayImage {
+    /// Creates a new TrayImage with the specified RGBA pixel data and dimensions
+    ///
+    /// # Arguments
+    /// * `rgba` - Vec of RGBA pixel data (4 bytes per pixel)
+    /// * `width` - Image width in pixels
+    /// * `height` - Image height in pixels
     pub fn new(rgba: Vec<u8>, width: u32, height: u32) -> Self {
         Self {
             rgba,
@@ -20,6 +26,9 @@ impl TrayImage {
         }
     }
 
+    /// Converts the TrayImage into a Tauri Image for use in tray icons
+    ///
+    /// Consumes self and transfers ownership of pixel data to the Tauri Image
     pub fn into_tauri_image(self) -> tauri::image::Image<'static> {
         tauri::image::Image::new_owned(self.rgba, self.width, self.height)
     }
@@ -32,10 +41,27 @@ pub struct TrayIconRenderer {
 }
 
 impl TrayIconRenderer {
+    /// Creates a new TrayIconRenderer from font bytes with default scale factor
+    ///
+    /// # Arguments
+    /// * `font_bytes` - Raw bytes of the TrueType/OpenType font
+    /// * `font_px` - Font size in pixels for rendering
+    ///
+    /// # Returns
+    /// Result containing the renderer or an error string
     pub fn from_font_bytes(font_bytes: &[u8], font_px: f32) -> Result<Self, String> {
         Self::from_font_bytes_with_scale(font_bytes, font_px, DEFAULT_SCALE_FACTOR)
     }
 
+    /// Creates a new TrayIconRenderer from font bytes with custom scale factor
+    ///
+    /// # Arguments
+    /// * `font_bytes` - Raw bytes of the TrueType/OpenType font
+    /// * `font_px` - Font size in pixels for rendering
+    /// * `scale_factor` - Scaling multiplier for high-DPI displays (2 for Retina, 1 for standard)
+    ///
+    /// # Returns
+    /// Result containing the renderer or an error string
     pub fn from_font_bytes_with_scale(
         font_bytes: &[u8],
         font_px: f32,
@@ -55,6 +81,14 @@ impl TrayIconRenderer {
         })
     }
 
+    /// Renders text as a tray icon image
+    ///
+    /// # Arguments
+    /// * `text` - The text string to render
+    /// * `size_px` - The desired icon size in pixels
+    ///
+    /// # Returns
+    /// A TrayImage containing the rendered text as RGBA pixel data
     pub fn render_text_only(&self, text: &str, size_px: u32) -> TrayImage {
         // Use configured scale factor (2x for Retina, varies for Windows)
         let scaled_size = size_px * self.scale_factor;

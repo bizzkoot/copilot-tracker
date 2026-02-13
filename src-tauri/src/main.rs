@@ -18,6 +18,8 @@ use copilot_tracker::{
     AuthManager, StoreManager, TrayIconRenderer, UsageManager, WidgetPosition,
 };
 
+const GITHUB_API_URL: &str = "https://api.github.com/repos/bizzkoot/copilot-tracker/releases/latest";
+
 // ============================================================================
 // Helper: Resolve App Directory
 // ============================================================================
@@ -1151,7 +1153,7 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
             
             let client = reqwest::Client::new();
             let response = client
-                .get("https://api.github.com/repos/bizzkoot/copilot-tracker/releases/latest")
+                .get(GITHUB_API_URL)
                 .header("User-Agent", "Copilot-Tracker-App")
                 .send()
                 .await;

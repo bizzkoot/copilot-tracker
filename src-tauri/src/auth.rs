@@ -17,6 +17,8 @@ pub struct HiddenWebviewEvent {
 
 const GITHUB_BILLING_URL: &str = "https://github.com/settings/billing";
 const GITHUB_LOGIN_URL: &str = "https://github.com/login";
+const GITHUB_API_URL: &str = "https://api.github.com/repos/bizzkoot/copilot-tracker/releases/latest";
+const EXTRACTION_TIMEOUT_SECS: u64 = 30;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthState {
@@ -58,6 +60,118 @@ pub struct UsageData {
     pub discount_quantity: u64,
     pub user_premium_request_entitlement: u64,
     pub filtered_user_premium_request_entitlement: u64,
+}
+
+/// Parses a single usage history row from JSON data
+/// Extracts date, request counts, amounts, and model breakdowns
+fn parse_usage_history_row(row: &serde_json::Value) -> Option<UsageHistoryRow> {
+    let id = row.get("id").and_then(|v| v.as_str())?.to_string();
+    let cells = row.get("cells").and_then(|v| v.as_array())?;
+
+    if cells.len() < 5 {
+        return None;
+    }
+
+    let included_requests = cells
+        .get(1)?
+        .get("value")?
+        .as_str()?
+        .parse::<u32>()
+        .ok()?;
+
+    let billed_requests = cells
+        .get(2)?
+        .get("value")?
+        .as_str()?
+        .parse::<u32>()
+        .ok()?;
+
+    let gross_amount = cells
+        .get(3)?
+        .get("value")?
+        .as_str()?
+        .trim_start_matches('$')
+        .parse::<f64>()
+        .ok()?;
+
+    let billed_amount = cells
+        .get(4)?
+        .get("value")?
+        .as_str()?
+        .trim_start_matches('$')
+        .parse::<f64>()
+        .ok()?;
+
+    let models = if let Some(subtable) = row.get("subtable") {
+        if let Some(sub_rows) = subtable.get("rows").and_then(|v| v.as_array()) {
+            sub_rows
+                .iter()
+                .filter_map(parse_usage_model_row)
+                .collect()
+        } else {
+            vec![]
+        }
+    } else {
+        vec![]
+    };
+
+    Some(UsageHistoryRow {
+        date: id,
+        included_requests,
+        billed_requests,
+        gross_amount,
+        billed_amount,
+        models,
+    })
+}
+
+/// Parses a single usage model row from JSON data
+/// Extracts model name, request counts, and amounts
+fn parse_usage_model_row(sub_row: &serde_json::Value) -> Option<UsageModelRow> {
+    let sub_cells = sub_row.get("cells").and_then(|v| v.as_array())?;
+    if sub_cells.len() < 5 {
+        return None;
+    }
+
+    let name = sub_cells
+        .first()?
+        .get("value")?
+        .as_str()?
+        .to_string();
+    let included_requests = sub_cells
+        .get(1)?
+        .get("value")?
+        .as_str()?
+        .parse::<u32>()
+        .ok()?;
+    let billed_requests = sub_cells
+        .get(2)?
+        .get("value")?
+        .as_str()?
+        .parse::<u32>()
+        .ok()?;
+    let gross_amount = sub_cells
+        .get(3)?
+        .get("value")?
+        .as_str()?
+        .trim_start_matches('$')
+        .parse::<f64>()
+        .ok()?;
+    let billed_amount = sub_cells
+        .get(4)?
+        .get("value")?
+        .as_str()?
+        .trim_start_matches('$')
+        .parse::<f64>()
+        .ok()?;
+
+    Some(UsageModelRow {
+        name,
+        included_requests,
+        billed_requests,
+        gross_amount,
+        billed_amount,
+    })
 }
 
 #[derive(Clone)]
@@ -141,77 +255,7 @@ impl AuthManager {
                                         .and_then(|v| v.as_array()) 
                                     {
                                         log::info!("Parsing usage history, found {} rows", rows.len());
-                                        let history: Vec<UsageHistoryRow> = rows.iter().filter_map(|row| {
-                                            let id = row.get("id").and_then(|v| v.as_str())?.to_string();
-                                            let cells = row.get("cells").and_then(|v| v.as_array())?;
-                                            
-                                            // Parse cells: [date, included_requests, billed_requests, gross_amount, billed_amount]
-                                            if cells.len() < 5 {
-                                                return None;
-                                            }
-                                            
-                                            let included_requests = cells.get(1)?
-                                                .get("value")?
-                                                .as_str()?
-                                                .parse::<u32>()
-                                                .ok()?;
-                                            
-                                            let billed_requests = cells.get(2)?
-                                                .get("value")?
-                                                .as_str()?
-                                                .parse::<u32>()
-                                                .ok()?;
-                                            
-                                            let gross_amount = cells.get(3)?
-                                                .get("value")?
-                                                .as_str()?
-                                                .trim_start_matches('$')
-                                                .parse::<f64>()
-                                                .ok()?;
-                                            
-                                            let billed_amount = cells.get(4)?
-                                                .get("value")?
-                                                .as_str()?
-                                                .trim_start_matches('$')
-                                                .parse::<f64>()
-                                                .ok()?;
-                                            
-                                            let models = if let Some(subtable) = row.get("subtable") {
-                                                if let Some(sub_rows) = subtable.get("rows").and_then(|v| v.as_array()) {
-                                                    sub_rows.iter().filter_map(|sub_row| {
-                                                        let sub_cells = sub_row.get("cells").and_then(|v| v.as_array())?;
-                                                        if sub_cells.len() < 5 { return None; }
-
-                                                        let name = sub_cells.first()?.get("value")?.as_str()?.to_string();
-                                                        let included_requests = sub_cells.get(1)?.get("value")?.as_str()?.parse::<u32>().ok()?;
-                                                        let billed_requests = sub_cells.get(2)?.get("value")?.as_str()?.parse::<u32>().ok()?;
-                                                        let gross_amount = sub_cells.get(3)?.get("value")?.as_str()?.trim_start_matches('$').parse::<f64>().ok()?;
-                                                        let billed_amount = sub_cells.get(4)?.get("value")?.as_str()?.trim_start_matches('$').parse::<f64>().ok()?;
-
-                                                        Some(UsageModelRow {
-                                                            name,
-                                                            included_requests,
-                                                            billed_requests,
-                                                            gross_amount,
-                                                            billed_amount,
-                                                        })
-                                                    }).collect()
-                                                } else {
-                                                    vec![]
-                                                }
-                                            } else {
-                                                vec![]
-                                            };
-
-                                            Some(UsageHistoryRow {
-                                                date: id,
-                                                included_requests,
-                                                billed_requests,
-                                                gross_amount,
-                                                billed_amount,
-                                                models,
-                                            })
-                                        }).collect();
+                                        let history: Vec<UsageHistoryRow> = rows.iter().filter_map(parse_usage_history_row).collect();
                                         
                                         log::info!("Successfully parsed {} history rows", history.len());
                                         extracted_usage_history = Some(history);
@@ -834,7 +878,7 @@ impl AuthManager {
         let window = self.create_hidden_webview(app)?;
 
         // Wait for extraction events
-        let timeout = tokio::time::timeout(Duration::from_secs(30), async {
+        let timeout = tokio::time::timeout(Duration::from_secs(EXTRACTION_TIMEOUT_SECS), async {
             let mut customer_id: Option<u64> = None;
             let mut usage_data: Option<UsageData> = None;
             let mut usage_history: Option<Vec<UsageHistoryRow>> = None;
@@ -874,77 +918,7 @@ impl AuthManager {
                                 .and_then(|v| v.get("rows"))
                                 .and_then(|v| v.as_array()) 
                             {
-                                let history: Vec<UsageHistoryRow> = rows.iter().filter_map(|row| {
-                                    let id = row.get("id").and_then(|v| v.as_str())?.to_string();
-                                    let cells = row.get("cells").and_then(|v| v.as_array())?;
-                                    
-                                    if cells.len() < 5 {
-                                        return None;
-                                    }
-                                    
-                                    let included_requests = cells.get(1)?
-                                        .get("value")?
-                                        .as_str()?
-                                        .parse::<u32>()
-                                        .ok()?;
-                                    
-                                    let billed_requests = cells.get(2)?
-                                        .get("value")?
-                                        .as_str()?
-                                        .parse::<u32>()
-                                        .ok()?;
-                                    
-                                    let gross_amount = cells.get(3)?
-                                        .get("value")?
-                                        .as_str()?
-                                        .trim_start_matches('$')
-                                        .parse::<f64>()
-                                        .ok()?;
-                                    
-                                    let billed_amount = cells.get(4)?
-                                        .get("value")?
-                                        .as_str()?
-                                        .trim_start_matches('$')
-                                        .parse::<f64>()
-                                        .ok()?;
-                                    
-                                    let models = if let Some(subtable) = row.get("subtable") {
-                                        if let Some(sub_rows) = subtable.get("rows").and_then(|v| v.as_array()) {
-                                            sub_rows.iter().filter_map(|sub_row| {
-                                                let sub_cells = sub_row.get("cells").and_then(|v| v.as_array())?;
-                                                if sub_cells.len() < 5 { return None; }
-
-                                                let name = sub_cells.first()?.get("value")?.as_str()?.to_string();
-                                                let included_requests = sub_cells.get(1)?.get("value")?.as_str()?.parse::<u32>().ok()?;
-                                                let billed_requests = sub_cells.get(2)?.get("value")?.as_str()?.parse::<u32>().ok()?;
-                                                let gross_amount = sub_cells.get(3)?.get("value")?.as_str()?.trim_start_matches('$').parse::<f64>().ok()?;
-                                                let billed_amount = sub_cells.get(4)?.get("value")?.as_str()?.trim_start_matches('$').parse::<f64>().ok()?;
-
-                                                Some(UsageModelRow {
-                                                    name,
-                                                    included_requests,
-                                                    billed_requests,
-                                                    gross_amount,
-                                                    billed_amount,
-                                                })
-                                            }).collect()
-                                        } else {
-                                            vec![]
-                                        }
-                                    } else {
-                                        vec![]
-                                    };
-
-                                    Some(UsageHistoryRow {
-                                        date: id,
-                                        included_requests,
-                                        billed_requests,
-                                        gross_amount,
-                                        billed_amount,
-                                        models,
-                                    })
-                                }).collect();
-                                
+                                let history: Vec<UsageHistoryRow> = rows.iter().filter_map(parse_usage_history_row).collect();
                                 usage_history = Some(history);
                             }
                         }
@@ -1016,49 +990,49 @@ impl AuthManager {
         let url = Url::parse("https://api.github.com")
             .map_err(|e| format!("Failed to parse URL: {}", e))?;
 
-        let js_code = r#"
-            (async function() {
-                async function sendResult(kind, payload) {
-                    try {
+        let js_code = format!(r#"
+            (async function() {{
+                async function sendResult(kind, payload) {{
+                    try {{
                         // Tauri v2 event emission via core invoke
-                        if (window.__TAURI__ && window.__TAURI__.core) {
-                            await window.__TAURI__.core.invoke('hidden_webview_event', {
+                        if (window.__TAURI__ && window.__TAURI__.core) {{
+                            await window.__TAURI__.core.invoke('hidden_webview_event', {{
                                 event: kind,
                                 payload: JSON.stringify(payload)
-                            });
+                            }});
                             console.log('[UpdateCheck] Sent event:', kind);
-                        } else {
+                        }} else {{
                             console.error('[UpdateCheck] Tauri not available');
-                        }
-                    } catch (e) {
+                        }}
+                    }} catch (e) {{
                         console.error('[UpdateCheck] Failed to send:', e);
-                    }
-                }
+                    }}
+                }}
 
-                try {
-                    const response = await fetch('https://api.github.com/repos/bizzkoot/copilot-tracker/releases/latest', {
-                        headers: {
+                try {{
+                    const response = await fetch('{}', {{
+                        headers: {{
                             'User-Agent': 'Copilot-Tracker-App'
-                        }
-                    });
+                        }}
+                    }});
 
-                    if (!response.ok) {
+                    if (!response.ok) {{
                         console.error('Update check failed: HTTP ' + response.status);
-                        await sendResult('update_check:error', { success: false, error: 'HTTP ' + response.status });
+                        await sendResult('update_check:error', {{ success: false, error: 'HTTP ' + response.status }});
                         return;
-                    }
+                    }}
 
                     const data = await response.json();
                     console.log('Update check success:', data);
 
                     // Send result back via Tauri event
-                    await sendResult('update_check:complete', { success: true, data: data });
-                } catch (error) {
+                    await sendResult('update_check:complete', {{ success: true, data: data }});
+                }} catch (error) {{
                     console.error('Update check error:', error);
-                    await sendResult('update_check:error', { success: false, error: error.message || error.toString() });
-                }
-            })()
-        "#;
+                    await sendResult('update_check:error', {{ success: false, error: error.message || error.toString() }});
+                }}
+            }})()
+        "#, GITHUB_API_URL);
 
         // Create minimal hidden webview
         let window = WebviewWindowBuilder::new(
