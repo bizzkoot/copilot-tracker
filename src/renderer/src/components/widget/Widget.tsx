@@ -5,25 +5,52 @@
 
 import { useEffect, useState } from "react";
 import { useUsageStore } from "@renderer/stores/usageStore";
+import { useTrayIconFormat } from "@renderer/stores/settingsStore";
+import { useSettingsSync } from "@renderer/hooks/useSettingsSync";
 import {
   getUsedRequests,
   getLimitRequests,
   getUsagePercentage,
 } from "@renderer/types/usage";
+import {
+  TRAY_FORMAT_REMAINING_TOTAL,
+  TRAY_FORMAT_REMAINING_PERCENT,
+  TRAY_FORMAT_REMAINING_COMBINED,
+} from "@renderer/types/settings";
 import { WidgetHeader } from "./WidgetHeader";
 import { listen, emit } from "@renderer/types/tauri";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 
+// Helper to determine if we should show remaining values
+const isRemainingFormat = (format: string): boolean => {
+  return (
+    format === TRAY_FORMAT_REMAINING_TOTAL ||
+    format === TRAY_FORMAT_REMAINING_PERCENT ||
+    format === TRAY_FORMAT_REMAINING_COMBINED
+  );
+};
+
 export function Widget() {
+  // Sync settings from main process to keep widget in sync with dashboard/settings
+  useSettingsSync();
+
   const { usage, prediction, lastUpdated, setUsageData } = useUsageStore();
   const [isPinned, setIsPinned] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
+  const trayIconFormat = useTrayIconFormat();
 
   // Calculate usage values
   const used = usage ? getUsedRequests(usage) : 0;
   const limit = usage ? getLimitRequests(usage) : 0;
   const percentage = usage ? getUsagePercentage(usage) : 0;
+
+  // Determine if we should show remaining values based on tray icon format
+  const showRemaining = isRemainingFormat(trayIconFormat);
+
+  // Calculate display value based on tray icon format
+  const displayValue = showRemaining ? limit - used : used;
+  const displayPercentage = showRemaining ? 100 - percentage : percentage;
 
   // Fetch cached usage data when widget mounts
   // This ensures the widget has data even if it missed the initial usage:data event
@@ -192,7 +219,7 @@ export function Widget() {
           {/* Usage Text - refined typography */}
           <div className="text-sm text-white leading-tight">
             <span className="font-semibold tracking-tight">
-              {used.toLocaleString()}
+              {displayValue.toLocaleString()}
             </span>
             <span className="text-white/50 font-normal mx-1">/</span>
             <span className="text-white/70 font-normal">
@@ -203,9 +230,7 @@ export function Widget() {
           {/* Prediction - refined without emoji */}
           {predictionStatus && (
             <div className="text-xs leading-tight">
-              <span
-                style={{ color: predictionStatus.color, fontWeight: 500 }}
-              >
+              <span style={{ color: predictionStatus.color, fontWeight: 500 }}>
                 {predictionStatus.text}
               </span>
             </div>
@@ -234,7 +259,11 @@ export function Widget() {
           {/* Last Updated - refined typography */}
           {lastUpdated && (
             <div className="text-xs text-white/50 leading-tight font-normal">
-              Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              Updated{" "}
+              {lastUpdated.toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
             </div>
           )}
         </div>
@@ -243,10 +272,7 @@ export function Widget() {
         <div className="flex items-center justify-center flex-shrink-0">
           <div className="relative w-14 h-14">
             {/* Background Circle */}
-            <svg
-              className="w-full h-full"
-              viewBox="0 0 36 36"
-            >
+            <svg className="w-full h-full" viewBox="0 0 36 36">
               {/* Background track */}
               <path
                 d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
@@ -262,7 +288,7 @@ export function Widget() {
                 stroke={progressColor}
                 strokeWidth="3"
                 strokeLinecap="round"
-                strokeDasharray={`${Math.min(percentage, 100)}, 100`}
+                strokeDasharray={`${Math.min(displayPercentage, 100)}, 100`}
                 style={{
                   transition: "stroke-dasharray 500ms ease-out",
                   filter: `drop-shadow(0 0 4px ${progressColor}40)`,
@@ -272,7 +298,7 @@ export function Widget() {
             {/* Percentage text in center */}
             <div className="absolute inset-0 flex items-center justify-center">
               <span className="text-sm font-bold text-white leading-none">
-                {Math.round(percentage)}%
+                {Math.round(displayPercentage)}%
               </span>
             </div>
           </div>

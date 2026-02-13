@@ -14,6 +14,21 @@ import {
   getUsagePercentage,
   formatCurrency,
 } from "@renderer/types/usage";
+import { useTrayIconFormat } from "@renderer/stores/settingsStore";
+import {
+  TRAY_FORMAT_REMAINING_TOTAL,
+  TRAY_FORMAT_REMAINING_PERCENT,
+  TRAY_FORMAT_REMAINING_COMBINED,
+} from "@renderer/types/settings";
+
+// Helper to determine if we should show remaining values
+const isRemainingFormat = (format: string): boolean => {
+  return (
+    format === TRAY_FORMAT_REMAINING_TOTAL ||
+    format === TRAY_FORMAT_REMAINING_PERCENT ||
+    format === TRAY_FORMAT_REMAINING_COMBINED
+  );
+};
 
 interface UsageCardProps {
   usage: CopilotUsage | null;
@@ -21,6 +36,8 @@ interface UsageCardProps {
 }
 
 export function UsageCard({ usage, isLoading }: UsageCardProps) {
+  const trayIconFormat = useTrayIconFormat();
+
   if (isLoading) {
     return (
       <Card className="h-full">
@@ -52,6 +69,15 @@ export function UsageCard({ usage, isLoading }: UsageCardProps) {
   const limit = getLimitRequests(usage);
   const percentage = getUsagePercentage(usage);
 
+  // Determine if we should show remaining values based on tray icon format
+  const showRemaining = isRemainingFormat(trayIconFormat);
+
+  // Calculate display values based on tray icon format
+  const displayUsed = showRemaining ? limit - used : used;
+  const displayPercentage = showRemaining ? 100 - percentage : percentage;
+
+  const displayLabel = showRemaining ? "REMAINING" : "CONSUMED";
+
   const getGaugeColor = (pct: number) => {
     if (pct >= 90) return "text-red-500";
     if (pct >= 75) return "text-yellow-500";
@@ -64,7 +90,7 @@ export function UsageCard({ usage, isLoading }: UsageCardProps) {
     <Card className="h-full overflow-hidden border-primary/20 bg-gradient-to-br from-card to-primary/5">
       <CardHeader className="pb-2">
         <CardTitle className="text-base font-medium text-muted-foreground uppercase tracking-wider">
-          Quota Consumed
+          Quota {displayLabel}
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col items-center justify-center pt-2 pb-6 space-y-6">
@@ -73,7 +99,7 @@ export function UsageCard({ usage, isLoading }: UsageCardProps) {
             content={`${used.toLocaleString()} of ${limit.toLocaleString()} requests used`}
           >
             <Gauge
-              value={percentage}
+              value={displayPercentage}
               size={140}
               strokeWidth={12}
               indicatorClassName={getGaugeColor(percentage)}
@@ -85,7 +111,7 @@ export function UsageCard({ usage, isLoading }: UsageCardProps) {
         <div className="text-center">
           <div className="flex items-baseline justify-center gap-1">
             <span className="text-3xl font-bold tracking-tight">
-              {used.toLocaleString()}
+              {displayUsed.toLocaleString()}
             </span>
             <span className="text-sm text-muted-foreground font-medium">
               / {limit.toLocaleString()}

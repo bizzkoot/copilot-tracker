@@ -77,3 +77,5 @@ export const usePredictionPeriod = () =>
   useSettingsStore((state) => state.predictionPeriod);
 export const useNotifications = () =>
   useSettingsStore((state) => state.notifications);
+export const useTrayIconFormat = () =>
+  useSettingsStore((state) => state.trayIconFormat);
