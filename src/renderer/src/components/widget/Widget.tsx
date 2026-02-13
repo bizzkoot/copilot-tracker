@@ -198,6 +198,7 @@ export function Widget() {
       {/* Header */}
       <WidgetHeader
         isPinned={isPinned}
+        showRemaining={showRemaining}
         onTogglePin={togglePin}
         onMinimize={minimizeWidget}
         onClose={closeWidget}

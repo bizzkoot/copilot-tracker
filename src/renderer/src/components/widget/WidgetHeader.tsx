@@ -12,6 +12,7 @@ import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 
 interface WidgetHeaderProps {
   isPinned: boolean;
+  showRemaining: boolean;
   onTogglePin: () => void;
   onMinimize: () => void;
   onClose: () => void;
@@ -21,6 +22,7 @@ interface WidgetHeaderProps {
 
 export function WidgetHeader({
   isPinned,
+  showRemaining,
   onTogglePin,
   onMinimize,
   onClose,
@@ -90,7 +92,7 @@ export function WidgetHeader({
           className="text-white text-sm font-semibold tracking-tight"
           data-tauri-drag-region
         >
-          Copilot Usage
+          Copilot {showRemaining ? "(Remaining)" : "(Consumed)"}
         </span>
       </div>
 
