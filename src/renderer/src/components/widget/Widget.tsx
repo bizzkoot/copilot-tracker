@@ -16,7 +16,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 
 export function Widget() {
-  const { usage, prediction, setUsageData } = useUsageStore();
+  const { usage, prediction, lastUpdated, setUsageData } = useUsageStore();
   const [isPinned, setIsPinned] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -246,6 +246,13 @@ export function Widget() {
             <span>
               Based on {prediction.daysUsedForPrediction} day(s) of data
             </span>
+          </div>
+        )}
+
+        {/* Last Updated */}
+        {lastUpdated && (
+          <div className="text-xs text-muted-foreground flex items-center gap-1">
+            <span>Last updated: {lastUpdated.toLocaleTimeString()}</span>
           </div>
         )}
       </div>
