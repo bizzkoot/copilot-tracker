@@ -17,8 +17,11 @@ use tauri_plugin_opener::OpenerExt;
 use copilot_tracker::{
     AuthManager, StoreManager, TrayIconRenderer, UsageManager, WidgetPosition,
 };
+mod theme;
 
 const GITHUB_API_URL: &str = "https://api.github.com/repos/bizzkoot/copilot-tracker/releases/latest";
+
+use crate::theme::text_color_for_theme_preference;
 
 // ============================================================================
 // Helper: Resolve App Directory
@@ -228,17 +231,47 @@ fn format_tray_text(used: u32, limit: u32, format: &str) -> String {
     }
 }
 
-fn update_tray_icon(state: &TrayState, used: u32, limit: u32, format: &str) -> Result<(), String> {
+fn tray_text_color(theme_preference: &str) -> (u8, u8, u8) {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = theme_preference;
+        text_color_for_theme_preference("system")
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        text_color_for_theme_preference(theme_preference)
+    }
+}
+
+fn update_tray_icon(
+    app: &AppHandle,
+    state: &TrayState,
+    used: u32,
+    limit: u32,
+    format: &str,
+) -> Result<(), String> {
     let text = format_tray_text(used, limit, format);
+    let theme_preference = app.state::<StoreManager>().get_settings().theme;
+    let color = tray_text_color(&theme_preference);
 
     let image = state
         .renderer
-        .render_text_only(&text, 16)
+        .render_text_only(&text, 16, color)
         .into_tauri_image();
 
     let tray_guard = state.tray.lock().map_err(|_| "tray lock poisoned".to_string())?;
     let tray = tray_guard.as_ref().ok_or("tray not initialized".to_string())?;
-    tray.set_icon(Some(image)).map_err(|err| err.to_string())
+    tray.set_icon(Some(image)).map_err(|err| err.to_string())?;
+
+    #[cfg(target_os = "macos")]
+    {
+        tray
+            .set_icon_as_template(true)
+            .map_err(|err| err.to_string())?;
+    }
+
+    Ok(())
 }
 
 /// Helper to update tray icon using current settings from store
@@ -247,7 +280,7 @@ fn update_tray_icon_from_store(app: &AppHandle) -> Result<(), String> {
     let (used, limit) = store.get_usage();
     let format = store.get_tray_icon_format();
     let tray_state = app.state::<TrayState>();
-    update_tray_icon(&tray_state, used, limit, &format)
+    update_tray_icon(app, &tray_state, used, limit, &format)
 }
 
 fn build_tray_menu(
@@ -809,7 +842,7 @@ fn reset_settings(app: AppHandle) -> Result<copilot_tracker::AppSettings, String
 
     // Update tray icon directly to "1" (unauthenticated state)
     let tray_state = app.state::<TrayState>();
-    let _ = update_tray_icon(&tray_state, 1, 0, "currentTotal");
+    let _ = update_tray_icon(&app, &tray_state, 1, 0, "currentTotal");
     log::info!("Updated tray icon to default '1' for unauthenticated state");
 
     // Rebuild tray menu
@@ -1363,7 +1396,7 @@ fn update_tray_usage(
 ) -> Result<(), String> {
     let store = app.state::<StoreManager>();
     let format = store.get_tray_icon_format();
-    update_tray_icon(&state, used, limit, &format)
+    update_tray_icon(&app, &state, used, limit, &format)
 }
 
 // ============================================================================
@@ -1496,12 +1529,14 @@ fn main() {
             // Now safe to build tray menu (it accesses StoreManager)
             let menu = build_tray_menu(app.handle(), None)?;
 
-            let initial_image = renderer.render_text_only("1", 16).into_tauri_image();
+            let theme_preference = app.state::<StoreManager>().get_settings().theme;
+            let color = tray_text_color(&theme_preference);
+            let initial_image = renderer.render_text_only("1", 16, color).into_tauri_image();
 
             let tray = TrayIconBuilder::new()
                 .icon(initial_image)
                 .menu(&menu)
-                // .icon_as_template(true) // Disabled to prevent system overlays on tray icon
+                .icon_as_template(cfg!(target_os = "macos"))
                 .tooltip("Copilot Tracker")
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "quit" => {
@@ -1708,8 +1743,12 @@ fn main() {
                         // macOS: Set activation policy to accessory to remove dock icon
                         #[cfg(target_os = "macos")]
                         {
+                            // Keep the app activation policy as accessory (hide dock icon),
+                            // but DO NOT call `app.hide()` here — hiding the entire app
+                            // also hides the floating widget window. The widget's
+                            // visibility should be managed independently by its own
+                            // commands/close handlers.
                             let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
-                            let _ = app_handle.hide();
                         }
                         
                         // Windows: Hide from taskbar using skipTaskbar

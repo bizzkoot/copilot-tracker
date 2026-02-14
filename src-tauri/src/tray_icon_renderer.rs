@@ -86,10 +86,11 @@ impl TrayIconRenderer {
     /// # Arguments
     /// * `text` - The text string to render
     /// * `size_px` - The desired icon size in pixels
+    /// * `color` - RGB color tuple (r, g, b) for the text (0-255)
     ///
     /// # Returns
     /// A TrayImage containing the rendered text as RGBA pixel data
-    pub fn render_text_only(&self, text: &str, size_px: u32) -> TrayImage {
+    pub fn render_text_only(&self, text: &str, size_px: u32, color: (u8, u8, u8)) -> TrayImage {
         // Use configured scale factor (2x for Retina, varies for Windows)
         let scaled_size = size_px * self.scale_factor;
         let scaled_font_px = self.font_px * self.scale_factor as f32;
@@ -147,11 +148,9 @@ impl TrayIconRenderer {
 
                     if a > 0 {
                         let dst_index = ((dst_y as u32 * width + dst_x as u32) * 4) as usize;
-                        // Use full white with alpha for maximum contrast
-                        // This makes text look white/bright instead of gray
-                        rgba[dst_index] = 255; // R
-                        rgba[dst_index + 1] = 255; // G
-                        rgba[dst_index + 2] = 255; // B
+                        rgba[dst_index] = color.0; // R
+                        rgba[dst_index + 1] = color.1; // G
+                        rgba[dst_index + 2] = color.2; // B
                         rgba[dst_index + 3] = a; // Alpha
                     }
                 }
