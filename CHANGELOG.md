@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.4.0](https://github.com/bizzkoot/copilot-tracker/compare/v2.3.4...v2.4.0) (2026-02-14)
+
+
+### Features
+
+* **tray:** persist refresh/update timestamps to disk ([9ffd5f6](https://github.com/bizzkoot/copilot-tracker/commit/9ffd5f6ded24208197200377adb1e5c36ea17963))
+* **widget:** add reactive header labels for consumed/remaining modes ([0af3dc0](https://github.com/bizzkoot/copilot-tracker/commit/0af3dc07602dd05cae3cca89cc317305363be037))
+
+
+### Bug Fixes
+
+* **dev:** auto-clear stale cargo lock before tauri dev ([3764be6](https://github.com/bizzkoot/copilot-tracker/commit/3764be6e90b3c500d496c9d287970201e3102cc2))
+* redesign widget with circular gauge and compact layout ([a5b7874](https://github.com/bizzkoot/copilot-tracker/commit/a5b787435a029bd74c5715a5173e581c5396e1ef))
+* reflect tray icon format settings in dashboard and widget progress circles ([675e8d8](https://github.com/bizzkoot/copilot-tracker/commit/675e8d829384dcc23890ad3a249fb2a5859e99ef))
+* **tray:** align Windows tray text with system UI theme ([11b38cd](https://github.com/bizzkoot/copilot-tracker/commit/11b38cdbdebb139ce30a49f02b381e73664edbd4))
+* **tray:** improve Linux system theme detection reliability ([079ee7e](https://github.com/bizzkoot/copilot-tracker/commit/079ee7e041b1aa9fd9d940394b64e99f2c07a007))
+* **tray:** use macOS-native template tint and system-aware text color ([a35c32f](https://github.com/bizzkoot/copilot-tracker/commit/a35c32fbc5c5d6f192b31fab6a0efe10935c60cc))
+* **widget:** add last updated timestamp display ([b816cf6](https://github.com/bizzkoot/copilot-tracker/commit/b816cf63ed5df8f068fbb05acab6ce7b9b5e382d))
+* **widget:** clip rounded widget window and mask to remove rectangular outline on transparent windows ([0863db2](https://github.com/bizzkoot/copilot-tracker/commit/0863db2e0a909b65a61c83a5e1431abcfcbe82e7))
+* **windows:** resolve update check failure on unsigned builds ([b4dcdd2](https://github.com/bizzkoot/copilot-tracker/commit/b4dcdd282c09085d863d5155bdcabd9413f26bab)), closes [#31](https://github.com/bizzkoot/copilot-tracker/issues/31)
+
+
+### Documentation
+
+* **readme:** update features and data location, add new assets for dashboard and taskbar ([37c2f98](https://github.com/bizzkoot/copilot-tracker/commit/37c2f98d3da58084d38b1ad7f6f95f5550b725e2))
+
 ## [2.3.4](https://github.com/bizzkoot/copilot-tracker/compare/v2.3.3...v2.3.4) (2026-02-12)
 
 
