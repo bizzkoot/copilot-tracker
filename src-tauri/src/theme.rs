@@ -97,7 +97,63 @@ pub fn detect_system_text_color() -> RgbColor {
 
 #[cfg(target_os = "linux")]
 pub fn detect_system_text_color() -> RgbColor {
-    // Linux desktop environments are fragmented; use a robust best-effort chain.
+    // Linux desktop environments are fragmented; use a layered best-effort chain.
+    // 1) XDG Desktop Portal (best cross-DE signal when available)
+    if let Ok(output) = std::process::Command::new("gdbus")
+        .args([
+            "call",
+            "--session",
+            "--dest",
+            "org.freedesktop.portal.Desktop",
+            "--object-path",
+            "/org/freedesktop/portal/desktop",
+            "--method",
+            "org.freedesktop.portal.Settings.Read",
+            "org.freedesktop.appearance",
+            "color-scheme",
+        ])
+        .output()
+    {
+        if output.status.success() {
+            let value = String::from_utf8_lossy(&output.stdout).to_ascii_lowercase();
+            if value.contains("uint32 1") {
+                return (255, 255, 255);
+            }
+            if value.contains("uint32 2") {
+                return (0, 0, 0);
+            }
+        }
+    }
+
+    // 2) GNOME settings
+    if let Ok(output) = std::process::Command::new("gsettings")
+        .args(["get", "org.gnome.desktop.interface", "color-scheme"])
+        .output()
+    {
+        if output.status.success() {
+            let value = String::from_utf8_lossy(&output.stdout).to_ascii_lowercase();
+            if value.contains("prefer-dark") || value.contains("dark") {
+                return (255, 255, 255);
+            }
+            if value.contains("prefer-light") || value.contains("light") {
+                return (0, 0, 0);
+            }
+        }
+    }
+
+    if let Ok(output) = std::process::Command::new("gsettings")
+        .args(["get", "org.gnome.desktop.interface", "gtk-theme"])
+        .output()
+    {
+        if output.status.success() {
+            let value = String::from_utf8_lossy(&output.stdout).to_ascii_lowercase();
+            if value.contains("dark") {
+                return (255, 255, 255);
+            }
+        }
+    }
+
+    // 3) Environment fallbacks
     if let Ok(theme) = std::env::var("GTK_THEME") {
         if theme.to_ascii_lowercase().contains("dark") {
             return (255, 255, 255);
