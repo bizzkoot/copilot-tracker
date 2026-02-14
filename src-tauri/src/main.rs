@@ -232,13 +232,13 @@ fn format_tray_text(used: u32, limit: u32, format: &str) -> String {
 }
 
 fn tray_text_color(theme_preference: &str) -> (u8, u8, u8) {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     {
         let _ = theme_preference;
         text_color_for_theme_preference("system")
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         text_color_for_theme_preference(theme_preference)
     }

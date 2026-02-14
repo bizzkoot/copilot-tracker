@@ -68,7 +68,7 @@ pub fn detect_system_text_color() -> RgbColor {
 
 #[cfg(target_os = "windows")]
 pub fn detect_system_text_color() -> RgbColor {
-    // On Windows, read registry key for app theme
+    // On Windows, prefer system UI theme (taskbar/tray), then fallback to app theme.
     use winreg::enums::HKEY_CURRENT_USER;
     use winreg::RegKey;
 
@@ -76,6 +76,13 @@ pub fn detect_system_text_color() -> RgbColor {
     if let Ok(personalize) =
         hkcu.open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize")
     {
+        if let Ok(system_light_theme) = personalize.get_value::<u32, _>("SystemUsesLightTheme") {
+            if system_light_theme == 0 {
+                return (255, 255, 255);
+            }
+            return (0, 0, 0);
+        }
+
         if let Ok(light_theme) = personalize.get_value::<u32, _>("AppsUseLightTheme") {
             if light_theme == 0 {
                 return (255, 255, 255);
