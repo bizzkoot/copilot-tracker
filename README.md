@@ -22,6 +22,7 @@ Cross-platform desktop application built with **Tauri**, React, and TypeScript t
 - 🔔 **Smart Notifications**: Configurable alerts when approaching limits
 - 🎯 **System Tray**: Quick access from menu bar (macOS) or system tray with synced Monthly Forecast banner
 - 🎨 **Customizable Tray Icon**: Choose from 7 display formats (current, remaining, percentage, etc.)
+- 🌓 **Adaptive Tray Contrast**: Tray text/icon follows OS appearance (macOS native template tint, Windows system UI theme, Linux best-effort desktop detection)
 - 🔐 **Secure Auth**: WebView-based GitHub OAuth (no API tokens stored)
 - 🔄 **Auto-Updates**: Automatic updates via GitHub Releases
 - 📡 **Offline Mode**: View cached usage data even without internet
@@ -34,21 +35,21 @@ Cross-platform desktop application built with **Tauri**, React, and TypeScript t
 ### Dashboard
 
 <p align="center">
-  <img src="assets/Dashboard_Tauri2.gif" alt="Copilot Tracker Dashboard" width="700"/>
+  <img src="assets/Dashboard_Tauri3.gif" alt="Copilot Tracker Dashboard" width="700"/>
 </p>
 
 ### System Tray
 
 <p align="center">
-  <img src="assets/Taskbar_Tauri2.gif" alt="System Tray Integration" width="500"/>
+  <img src="assets/Taskbar_Tauri3.gif" alt="System Tray Integration" width="500"/>
 </p>
 
-### Floating Widget (NEW)
+### Floating Widget
 
 The floating widget provides persistent visibility of your Copilot usage on **all platforms** (macOS, Windows, and Linux). It's especially useful on Windows where system tray icon visibility may be limited.
 
 <p align="center">
-  <img src="assets/Widget.png" alt="Floating Usage Widget" width="400"/>
+  <img src="assets/Widget2.png" alt="Floating Usage Widget" width="400"/>
 </p>
 
 **Widget Features:**
@@ -108,9 +109,9 @@ Choose the file that matches your operating system from the [latest release](htt
 
 ### Data Location
 
-- **macOS**: `~/Library/Application Support/copilot-tracker/`
-- **Windows**: `%APPDATA%/copilot-tracker/`
-- **Linux**: `~/.config/copilot-tracker/`
+- **macOS**: `~/Library/Application Support/com.copilottracker/`
+- **Windows**: `%LOCALAPPDATA%\com.copilottracker\`
+- **Linux**: `$XDG_DATA_HOME/com.copilottracker/` (or `~/.local/share/com.copilottracker/`)
 
 </details>
 
