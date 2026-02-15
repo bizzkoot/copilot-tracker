@@ -417,21 +417,21 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           # Build universal macOS binary (Apple Silicon + Intel)
-          npm run tauri:build:mac
+          npm run build:mac
         env:
           TAURI_BUNDLE_SKIP_SIGNING: "true"
 
       - name: Build Tauri App (Linux)
         if: runner.os == 'Linux'
         run: |
-          npm run tauri:build:linux
+          npm run build:linux
         env:
           TAURI_BUNDLE_SKIP_SIGNING: "true"
 
       - name: Build Tauri App (Windows)
         if: runner.os == 'Windows'
         run: |
-          npm run tauri:build:win
+          npm run build:win
         env:
           TAURI_BUNDLE_SKIP_SIGNING: "true"
 
