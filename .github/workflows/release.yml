@@ -410,28 +410,25 @@ jobs:
       - name: Install Frontend Dependencies
         run: npm ci
 
-      - name: Build Frontend for Tauri
-        run: npm run build
-
       - name: Build Tauri App (macOS)
         if: runner.os == 'macOS'
         run: |
           # Build universal macOS binary (Apple Silicon + Intel)
-          npm run build:mac
+          npm run build:web && npx tauri build
         env:
           TAURI_BUNDLE_SKIP_SIGNING: "true"
 
       - name: Build Tauri App (Linux)
         if: runner.os == 'Linux'
         run: |
-          npm run build:linux
+          npm run build:web && npx tauri build
         env:
           TAURI_BUNDLE_SKIP_SIGNING: "true"
 
       - name: Build Tauri App (Windows)
         if: runner.os == 'Windows'
         run: |
-          npm run build:win
+          npm run build:web && npx tauri build
         env:
           TAURI_BUNDLE_SKIP_SIGNING: "true"
 

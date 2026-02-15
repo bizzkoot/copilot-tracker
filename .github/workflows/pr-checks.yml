@@ -27,15 +27,15 @@ jobs:
           - os: macos-latest
             target: universal-apple-darwin
             rust_target: aarch64-apple-darwin,x86_64-apple-darwin
-            build_cmd: npm run build:mac
+            build_cmd: npm run build:web && npx tauri build
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             rust_target: x86_64-unknown-linux-gnu
-            build_cmd: npm run build:linux
+            build_cmd: npm run build:web && npx tauri build
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             rust_target: x86_64-pc-windows-msvc
-            build_cmd: npm run build:win
+            build_cmd: npm run build:web && npx tauri build
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v4
