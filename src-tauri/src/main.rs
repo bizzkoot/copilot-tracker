@@ -1087,6 +1087,18 @@ async fn set_widget_enabled(app: AppHandle, enabled: bool) -> Result<(), String>
     let store = app.state::<StoreManager>();
     store.set_widget_enabled(enabled).map_err(|e| e.to_string())?;
     
+    log::info!("[Widget] set_widget_enabled called: enabled={}", enabled);
+    
+    // Always set widget_visible state regardless of window availability
+    // This ensures the state persists even if window is not ready yet
+    if enabled {
+        let _ = store.set_widget_visible(true);
+        log::info!("[Widget] Set widget_visible=true");
+    } else {
+        let _ = store.set_widget_visible(false);
+        log::info!("[Widget] Set widget_visible=false");
+    }
+    
     // Emit event to notify all windows of widget state change
     let _ = app.emit("widget:enabled-changed", enabled);
     
@@ -1102,13 +1114,15 @@ async fn set_widget_enabled(app: AppHandle, enabled: bool) -> Result<(), String>
                 }
             ));
             let _ = widget.show();
-            let _ = store.set_widget_visible(true);
+            log::info!("[Widget] Widget window shown");
+        } else {
+            log::warn!("[Widget] Widget window not found when enabling");
         }
     } else {
         // If disabling, hide the widget
         if let Some(widget) = app.get_webview_window("widget") {
             let _ = widget.hide();
-            let _ = store.set_widget_visible(false);
+            log::info!("[Widget] Widget window hidden");
         }
     }
     
@@ -1540,6 +1554,18 @@ fn main() {
                 .tooltip("Copilot Tracker")
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "quit" => {
+                        // Save widget state before shutdown
+                        let store = app.state::<StoreManager>();
+                        let widget_enabled = store.get_widget_enabled();
+
+                        if let Some(widget) = app.get_webview_window("widget") {
+                            let is_visible = widget.is_visible().unwrap_or(false);
+                            let _ = store.set_widget_visible(is_visible);
+                            log::info!("[Shutdown] Widget enabled={}, saving visibility: {}", widget_enabled, is_visible);
+                        } else {
+                            log::info!("[Shutdown] Widget window not found, widget_enabled={}", widget_enabled);
+                        }
+
                         // Stop background polling before app exit
                         let polling_state = app.state::<PollingState>();
                         polling_state.stop_polling();
@@ -1871,10 +1897,10 @@ fn main() {
             let widget_visible = store.get_widget_visible();
             let widget_pinned = store.get_widget_pinned();
             let widget_position = store.get_widget_position();
-            
-            log::info!("Widget state: enabled={}, visible={}, pinned={}, position=({},{})",
+
+            log::info!("[Startup] Widget state loaded: enabled={}, visible={}, pinned={}, position=({},{})",
                 widget_enabled, widget_visible, widget_pinned, widget_position.x, widget_position.y);
-            
+
             // Restore widget state if enabled
             if widget_enabled {
                 if let Some(widget) = app.get_webview_window("widget") {
@@ -1885,17 +1911,24 @@ fn main() {
                             y: widget_position.y
                         }
                     ));
-                    
+
                     // Set pinned state
                     let _ = widget.set_always_on_top(widget_pinned);
-                    
+
                     // Show widget if it was visible (without stealing focus)
                     if widget_visible {
+                        log::info!("[Startup] Showing widget (was visible on last shutdown)");
                         let _ = show_widget_without_focus(&widget);
+                    } else {
+                        log::info!("[Startup] Widget enabled but was hidden on last shutdown, not showing");
                     }
-                    
-                    log::info!("Widget state restored successfully");
+
+                    log::info!("[Startup] Widget state restored successfully");
+                } else {
+                    log::warn!("[Startup] Widget enabled but window not found!");
                 }
+            } else {
+                log::info!("[Startup] Widget is disabled, not restoring");
             }
 
             if !tauri::is_dev() {

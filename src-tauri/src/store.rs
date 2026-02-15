@@ -228,6 +228,12 @@ impl StoreManager {
         std::fs::write(path, content)
             .map_err(|e| format!("Failed to write settings file: {}", e))?;
 
+        // Ensure data is flushed to disk (important for shutdown scenarios)
+        let file = std::fs::File::open(path)
+            .map_err(|e| format!("Failed to open settings file for sync: {}", e))?;
+        file.sync_all()
+            .map_err(|e| format!("Failed to sync settings file: {}", e))?;
+
         Ok(())
     }
 
