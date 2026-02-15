@@ -606,6 +606,12 @@ impl AuthManager {
                   window.location.href = "https://copilot-auth-success.local/success#payload=" + hash;
                 } else {
                   console.error('[AuthInjector] Failed to extract customer ID:', result.error);
+                  // Emit event to notify renderer of extraction failure
+                  if (window.__TAURI__?.event) {
+                    window.__TAURI__.event.emit('auth:extraction-failed', { 
+                      error: result.error || 'Unknown extraction error' 
+                    });
+                  }
                 }
               }
             })();

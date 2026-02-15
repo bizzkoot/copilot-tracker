@@ -58,6 +58,7 @@ export interface MainToRendererEvents {
   "auth:state-changed": (state: AuthState) => void;
   "auth:session-expired": () => void;
   "auth:ready": () => void;
+  "auth:extraction-failed": (data: { error: string }) => void;
   "usage:data": (data: UsageFetchResult) => void;
   "usage:loading": (loading: boolean) => void;
   "settings:changed": (settings: Settings) => void;
@@ -89,6 +90,7 @@ export interface AppAPI {
   onAuthStateChanged: (callback: (state: AuthState) => void) => () => void;
   onSessionExpired: (callback: () => void) => () => void;
   onAlreadyAuthenticated: (callback: () => void) => () => void;
+  onAuthExtractionFailed: (callback: (error: string) => void) => () => void;
 
   // Usage
   fetchUsage: () => void;

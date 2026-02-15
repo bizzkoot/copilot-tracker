@@ -334,6 +334,21 @@ export async function initTauriAdapter() {
           unlisten?.();
         };
       },
+      onAuthExtractionFailed: (callback: (error: string) => void) => {
+        let unlisten: (() => void) | null = null;
+        listen<{ error: string }>("auth:extraction-failed", (event) => {
+          callback(event.payload.error);
+        })
+          .then((stop) => {
+            unlisten = stop;
+          })
+          .catch((err) =>
+            console.error("Failed to listen auth:extraction-failed", err),
+          );
+        return () => {
+          unlisten?.();
+        };
+      },
 
       // Usage
       fetchUsage: async () => {
@@ -767,6 +782,7 @@ function setupMockAdapter() {
     },
     onSessionExpired: () => () => {},
     onAlreadyAuthenticated: () => () => {},
+    onAuthExtractionFailed: () => () => {},
     fetchUsage: async () => {},
     refreshUsage: async () => {},
     getCachedUsage: async () => null,

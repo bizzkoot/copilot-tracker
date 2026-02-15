@@ -12,6 +12,7 @@ const isDev = import.meta.env.DEV;
 export function useAuth() {
   const authState = useUsageStore((state) => state.authState);
   const setAuthState = useUsageStore((state) => state.setAuthState);
+  const setError = useUsageStore((state) => state.setError);
   const reset = useUsageStore((state) => state.reset);
 
   // Login - opens GitHub auth window
@@ -73,6 +74,17 @@ export function useAuth() {
       },
     );
 
+    // Listen for auth extraction failures
+    const unsubExtractionFailed = window.electron.onAuthExtractionFailed?.(
+      (error: string) => {
+        console.error("[Auth] Extraction failed:", error);
+        setError(
+          "Unable to retrieve Copilot data. GitHub may have changed their interface. Please try again or report this issue.",
+        );
+        setAuthState("error");
+      },
+    );
+
     // Initial auth check
     checkAuth();
 
@@ -80,6 +92,7 @@ export function useAuth() {
       unsubAuthState?.();
       unsubSessionExpired?.();
       unsubAlreadyAuthenticated?.();
+      unsubExtractionFailed?.();
     };
   }, [setAuthState, checkAuth]);
 
