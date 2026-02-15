@@ -11,7 +11,7 @@ import {
   AuthState,
   UpdateInfo,
   UpdateCheckStatus,
-  ElectronAPI,
+  AppAPI,
   DEFAULT_TRAY_FORMAT,
 } from "./types";
 
@@ -107,19 +107,25 @@ const convertUsageData = (summary: RustUsageSummary): UsageFetchResult => {
 async function waitForTauri(maxAttempts = 50, delay = 20): Promise<boolean> {
   for (let i = 0; i < maxAttempts; i++) {
     if (window.__TAURI__?.core && window.__TAURI__?.event) {
-      console.log(`[TauriAdapter] Tauri APIs available after ${i * delay}ms`);
+      if (import.meta.env.DEV) {
+        console.log(`[TauriAdapter] Tauri APIs available after ${i * delay}ms`);
+      }
       return true;
     }
     await new Promise((resolve) => setTimeout(resolve, delay));
   }
-  console.warn(
-    `[TauriAdapter] Tauri APIs not available after ${maxAttempts * delay}ms`,
-  );
+  if (import.meta.env.DEV) {
+    console.warn(
+      `[TauriAdapter] Tauri APIs not available after ${maxAttempts * delay}ms`,
+    );
+  }
   return false;
 }
 
 export async function initTauriAdapter() {
-  console.log("Initializing Tauri Adapter...");
+  if (import.meta.env.DEV) {
+    console.log("Initializing Tauri Adapter...");
+  }
 
   try {
     // FIX: Check if we are already in an Electron environment
@@ -128,9 +134,11 @@ export async function initTauriAdapter() {
 
     // If running in Electron (and not Tauri), do NOT overwrite the API
     if (isElectron && !window.__TAURI__) {
-      console.log(
-        "Electron environment detected. Skipping Tauri adapter initialization.",
-      );
+      if (import.meta.env.DEV) {
+        console.log(
+          "Electron environment detected. Skipping Tauri adapter initialization.",
+        );
+      }
       return;
     }
 
@@ -139,7 +147,9 @@ export async function initTauriAdapter() {
       typeof window !== "undefined" && window.__TAURI__ !== undefined;
 
     if (!hasTauriGlobal) {
-      console.log("Not running in Tauri environment. Using mock adapter.");
+      if (import.meta.env.DEV) {
+        console.log("Not running in Tauri environment. Using mock adapter.");
+      }
       setupMockAdapter();
       return;
     }
@@ -148,9 +158,11 @@ export async function initTauriAdapter() {
     const tauriReady = await waitForTauri();
 
     if (!tauriReady) {
-      console.warn(
-        "Tauri APIs not available after waiting. Using mock adapter.",
-      );
+      if (import.meta.env.DEV) {
+        console.warn(
+          "Tauri APIs not available after waiting. Using mock adapter.",
+        );
+      }
       setupMockAdapter();
       return;
     }
@@ -159,10 +171,12 @@ export async function initTauriAdapter() {
     const event = window.__TAURI__?.event;
 
     if (!core || !event) {
-      console.error(
-        "Tauri core or event module missing, falling back to mock adapter.",
-        { core, event },
-      );
+      if (import.meta.env.DEV) {
+        console.error(
+          "Tauri core or event module missing, falling back to mock adapter.",
+          { core, event },
+        );
+      }
       setupMockAdapter();
       return;
     }
@@ -261,7 +275,7 @@ export async function initTauriAdapter() {
       );
     }
 
-    const electronAPI: ElectronAPI = {
+    const electronAPI: AppAPI = {
       platform: (window.__TAURI__ as any)?.os?.platform() || "darwin",
 
       // Auth
@@ -276,10 +290,14 @@ export async function initTauriAdapter() {
           const state: AuthState = result.is_authenticated
             ? "authenticated"
             : "unauthenticated";
-          console.log("[TauriAdapter] Manual checkAuth result:", state);
+          if (import.meta.env.DEV) {
+            console.log("[TauriAdapter] Manual checkAuth result:", state);
+          }
           notifyAuthListeners(state);
         } catch (err) {
-          console.error("checkAuth failed:", err);
+          if (import.meta.env.DEV) {
+            console.error("checkAuth failed:", err);
+          }
           notifyAuthListeners("error");
         }
       },
@@ -324,7 +342,9 @@ export async function initTauriAdapter() {
           const result = convertUsageData(summary);
           notifyUsageListeners(result);
         } catch (err) {
-          console.error("fetchUsage failed:", err);
+          if (import.meta.env.DEV) {
+            console.error("fetchUsage failed:", err);
+          }
           notifyUsageListeners({
             success: false,
             error: String(err),
@@ -337,7 +357,9 @@ export async function initTauriAdapter() {
           const result = convertUsageData(summary);
           notifyUsageListeners(result);
         } catch (err) {
-          console.error("refreshUsage failed:", err);
+          if (import.meta.env.DEV) {
+            console.error("refreshUsage failed:", err);
+          }
           notifyUsageListeners({
             success: false,
             error: String(err),
@@ -421,7 +443,9 @@ export async function initTauriAdapter() {
           };
           return result;
         } catch (err) {
-          console.error("getCachedUsage failed:", err);
+          if (import.meta.env.DEV) {
+            console.error("getCachedUsage failed:", err);
+          }
           return null;
         }
       },
@@ -438,7 +462,11 @@ export async function initTauriAdapter() {
           .then((stop) => {
             unlisten = stop;
           })
-          .catch((err) => console.error("Failed to listen usage:loading", err));
+          .catch((err) => {
+            if (import.meta.env.DEV) {
+              console.error("Failed to listen usage:loading", err);
+            }
+          });
         return () => {
           unlisten?.();
         };
@@ -464,13 +492,17 @@ export async function initTauriAdapter() {
               DEFAULT_TRAY_FORMAT) as Settings["trayIconFormat"],
           };
         } catch (e) {
-          console.error("Failed to get settings", e);
+          if (import.meta.env.DEV) {
+            console.error("Failed to get settings", e);
+          }
           throw e;
         }
       },
       setSettings: async (newSettings: Partial<Settings>) => {
         try {
-          console.log("[TauriAdapter] Setting settings:", newSettings);
+          if (import.meta.env.DEV) {
+            console.log("[TauriAdapter] Setting settings:", newSettings);
+          }
           // 1. Get current settings from Rust
           const current = await invoke<RustAppSettings>("get_settings");
 
@@ -511,23 +543,33 @@ export async function initTauriAdapter() {
             updateChannel: current.updateChannel,
           };
 
-          console.log(
-            "[TauriAdapter] Sending merged settings to Rust:",
-            merged,
-          );
+          if (import.meta.env.DEV) {
+            console.log(
+              "[TauriAdapter] Sending merged settings to Rust:",
+              merged,
+            );
+          }
 
           // 3. Send back to Rust
           await invoke("update_settings", { settings: merged });
-          console.log("[TauriAdapter] Settings updated successfully");
+          if (import.meta.env.DEV) {
+            console.log("[TauriAdapter] Settings updated successfully");
+          }
         } catch (e) {
-          console.error("Failed to set settings", e);
+          if (import.meta.env.DEV) {
+            console.error("Failed to set settings", e);
+          }
           throw e;
         }
       },
       resetSettings: async () => {
-        console.log("[TauriAdapter] Resetting all settings and data...");
+        if (import.meta.env.DEV) {
+          console.log("[TauriAdapter] Resetting all settings and data...");
+        }
         const rustSettings = await invoke<RustAppSettings>("reset_settings");
-        console.log("[TauriAdapter] Backend reset complete");
+        if (import.meta.env.DEV) {
+          console.log("[TauriAdapter] Backend reset complete");
+        }
 
         const settings: Settings = {
           refreshInterval:
@@ -547,18 +589,24 @@ export async function initTauriAdapter() {
         notifySettingsListeners(settings);
 
         // Force a checkAuth to ensure the auth state is properly updated
-        console.log(
-          "[TauriAdapter] Reset complete - forcing auth check to verify unauthenticated state...",
-        );
+        if (import.meta.env.DEV) {
+          console.log(
+            "[TauriAdapter] Reset complete - forcing auth check to verify unauthenticated state...",
+          );
+        }
         try {
           const result = await invoke<RustAuthState>("check_auth_status");
           const state: AuthState = result.is_authenticated
             ? "authenticated"
             : "unauthenticated";
-          console.log("[TauriAdapter] Post-reset checkAuth result:", state);
+          if (import.meta.env.DEV) {
+            console.log("[TauriAdapter] Post-reset checkAuth result:", state);
+          }
           notifyAuthListeners(state);
         } catch (err) {
-          console.error("[TauriAdapter] Post-reset checkAuth failed:", err);
+          if (import.meta.env.DEV) {
+            console.error("[TauriAdapter] Post-reset checkAuth failed:", err);
+          }
           notifyAuthListeners("error");
         }
       },
@@ -664,9 +712,13 @@ export async function initTauriAdapter() {
       setWidgetEnabled: async (enabled: boolean) => {
         try {
           await invoke("set_widget_enabled", { enabled });
-          console.log("[TauriAdapter] Widget enabled set to:", enabled);
+          if (import.meta.env.DEV) {
+            console.log("[TauriAdapter] Widget enabled set to:", enabled);
+          }
         } catch (err) {
-          console.error("setWidgetEnabled failed:", err);
+          if (import.meta.env.DEV) {
+            console.error("setWidgetEnabled failed:", err);
+          }
           throw err;
         }
       },
@@ -688,16 +740,22 @@ export async function initTauriAdapter() {
     };
 
     (window as any).electron = electronAPI;
-    console.log("Tauri Adapter initialized successfully.");
+    if (import.meta.env.DEV) {
+      console.log("Tauri Adapter initialized successfully.");
+    }
   } catch (err) {
-    console.error("Critical error initializing Tauri Adapter:", err);
+    if (import.meta.env.DEV) {
+      console.error("Critical error initializing Tauri Adapter:", err);
+    }
     setupMockAdapter();
   }
 }
 
 function setupMockAdapter() {
-  console.warn("Setting up Mock/Fallback Adapter");
-  const mockAPI: ElectronAPI = {
+  if (import.meta.env.DEV) {
+    console.warn("Setting up Mock/Fallback Adapter");
+  }
+  const mockAPI: AppAPI = {
     platform: "darwin",
     login: async () => {},
     logout: async () => {},

@@ -1,6 +1,6 @@
 /**
- * Electron API Types
- * Type definitions for IPC communication between main and renderer
+ * App API Types
+ * Type definitions for the Tauri bridge exposed on window.electron
  */
 
 import type { CopilotUsage, UsageHistory, UsagePrediction } from "./usage";
@@ -28,7 +28,7 @@ export interface UsageFetchResult {
   history?: UsageHistory;
   prediction?: UsagePrediction;
   error?: string;
-  debugRawRows?: unknown[]; // Add debug field
+  debugRawRows?: unknown[];
 }
 
 export interface UpdateCheckStatus {
@@ -80,8 +80,8 @@ export interface RendererToMainEvents {
   "window:hide": () => void;
 }
 
-// Electron API exposed to renderer
-export interface ElectronAPI {
+// App API exposed to renderer
+export interface AppAPI {
   // Auth
   login: () => void;
   logout: () => void;
@@ -128,6 +128,6 @@ export interface ElectronAPI {
 // Window API for global access
 declare global {
   interface Window {
-    electron: ElectronAPI;
+    electron: AppAPI;
   }
 }

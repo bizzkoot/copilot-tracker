@@ -26,9 +26,11 @@
     "core:menu:default",
     "core:tray:default",
     "store:default",
-    "http:default",
+    {
+      "identifier": "http:default",
+      "allow": ["https://github.com/*", "https://api.github.com/*"]
+    },
     "notification:default",
-    "shell:allow-execute",
     "shell:allow-open",
     "autostart:default"
   ]

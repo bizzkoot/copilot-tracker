@@ -5,5 +5,5 @@
 
 export * from "./usage";
 export * from "./settings";
-export * from "./electron";
 export * from "./tauri";
+export * from "./app";

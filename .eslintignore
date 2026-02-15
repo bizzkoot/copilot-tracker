@@ -5,3 +5,4 @@ resources
 temp
 build
 *.d.ts
+scripts/debug_data_fetch.js

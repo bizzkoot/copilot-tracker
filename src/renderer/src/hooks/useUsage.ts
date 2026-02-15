@@ -5,8 +5,6 @@
 
 import { useCallback, useEffect } from "react";
 import { useUsageStore } from "../stores/usageStore";
-import { useSettingsStore } from "../stores/settingsStore";
-import { generatePrediction } from "../services/predictor";
 
 export function useUsage() {
   const {
@@ -19,28 +17,16 @@ export function useUsage() {
     setUsageData,
     setIsLoading,
     setError,
-    setPrediction,
   } = useUsageStore();
 
-  const predictionPeriod = useSettingsStore((state) => state.predictionPeriod);
-  // refreshInterval is managed by the main process, not needed here
-
-  // Update prediction when usage, history, or period changes
-  useEffect(() => {
-    if (usage && history) {
-      const newPrediction = generatePrediction(
-        usage,
-        history,
-        predictionPeriod,
-      );
-      setPrediction(newPrediction);
-    }
-  }, [usage, history, predictionPeriod, setPrediction]);
+  // refreshInterval and prediction are managed by the main process
 
   // Fetch usage data from main process
   const fetchUsage = useCallback(async () => {
     if (typeof window.electron === "undefined") {
-      console.warn("Electron API not available");
+      if (import.meta.env.DEV) {
+        console.warn("Electron API not available");
+      }
       return;
     }
 
@@ -70,7 +56,9 @@ export function useUsage() {
       try {
         const cached = await window.electron.getCachedUsage();
         if (cached && cached.success) {
-          console.log("[useUsage] Loaded cached data on mount:", cached);
+          if (import.meta.env.DEV) {
+            console.log("[useUsage] Loaded cached data on mount:", cached);
+          }
           setUsageData({
             usage: cached.usage,
             history: cached.history,
@@ -78,17 +66,21 @@ export function useUsage() {
           });
         }
       } catch (err) {
-        console.error("[useUsage] Failed to load cached data:", err);
+        if (import.meta.env.DEV) {
+          console.error("[useUsage] Failed to load cached data:", err);
+        }
       }
     };
     loadCachedData();
 
     // Listen for usage data
     const unsubUsage = window.electron.onUsageData?.((data) => {
-      console.log("[FRONTEND] Received usage data:", data);
+      if (import.meta.env.DEV) {
+        console.log("[FRONTEND] Received usage data:", data);
+      }
 
       // DEBUG: Log raw rows from backend if available
-      if (data.debugRawRows) {
+      if (data.debugRawRows && import.meta.env.DEV) {
         console.log(
           "[FRONTEND] RAW ROWS FROM API:",
           JSON.stringify(data.debugRawRows, null, 2),
@@ -97,11 +89,13 @@ export function useUsage() {
 
       if (data.success) {
         if (data.history && data.history.days) {
-          console.log("[FRONTEND] History days:", data.history.days);
-          console.log(
-            "[FRONTEND] Dates:",
-            data.history.days.map((d) => String(d.date)),
-          );
+          if (import.meta.env.DEV) {
+            console.log("[FRONTEND] History days:", data.history.days);
+            console.log(
+              "[FRONTEND] Dates:",
+              data.history.days.map((d) => String(d.date)),
+            );
+          }
         }
         setUsageData({
           usage: data.usage,

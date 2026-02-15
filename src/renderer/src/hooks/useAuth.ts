@@ -5,7 +5,9 @@
 
 import { useCallback, useEffect } from "react";
 import { useUsageStore } from "../stores/usageStore";
-import type { AuthState } from "../types/electron";
+import type { AuthState } from "../types/app";
+
+const isDev = import.meta.env.DEV;
 
 export function useAuth() {
   const authState = useUsageStore((state) => state.authState);
@@ -14,14 +16,20 @@ export function useAuth() {
 
   // Login - opens GitHub auth window
   const login = useCallback(() => {
-    console.log(
-      "[Auth] login() called, electron available:",
-      typeof window.electron !== "undefined",
-    );
+    if (isDev) {
+      console.log(
+        "[Auth] login() called, electron available:",
+        typeof window.electron !== "undefined",
+      );
+    }
     if (typeof window.electron !== "undefined") {
       window.electron.login();
     } else {
-      console.error("[Auth] window.electron is undefined - IPC not available");
+      if (isDev) {
+        console.error(
+          "[Auth] window.electron is undefined - IPC not available",
+        );
+      }
     }
   }, []);
 

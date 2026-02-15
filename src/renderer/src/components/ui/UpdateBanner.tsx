@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Download, X } from "lucide-react";
 import { Button } from "./button";
 import { Card } from "./card";
-import { UpdateInfo } from "@renderer/types/electron";
+import { UpdateInfo } from "@renderer/types/app";
 
 export function UpdateBanner() {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);

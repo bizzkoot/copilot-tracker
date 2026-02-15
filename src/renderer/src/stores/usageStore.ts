@@ -9,7 +9,7 @@ import type {
   UsageHistory,
   UsagePrediction,
 } from "../types/usage";
-import type { AuthState } from "../types/electron";
+import type { AuthState } from "../types/app";
 
 interface UsageState {
   // Auth state
