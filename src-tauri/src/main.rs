@@ -554,6 +554,18 @@ fn build_tray_menu(
     menu.append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
 
+    // GitHub Links
+    let github_stars = MenuItem::with_id(app, "github_repo", "⭐ Star on GitHub", true, None::<&str>)
+        .map_err(|e| e.to_string())?;
+    menu.append(&github_stars).map_err(|e| e.to_string())?;
+
+    let github_issues = MenuItem::with_id(app, "github_issues", "🐛 Report Issue", true, None::<&str>)
+        .map_err(|e| e.to_string())?;
+    menu.append(&github_issues).map_err(|e| e.to_string())?;
+
+    menu.append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+
     let version_item =
         MenuItem::with_id(app, "version", format!("Version {}", version), false, None::<&str>)
             .map_err(|e| e.to_string())?;
@@ -1698,6 +1710,18 @@ fn main() {
                                 log::info!("[Settings] Restarted polling with new interval: {}s (was: {}s)", interval_seconds, old_interval);
                             }
                         }
+                    }
+                    "github_repo" => {
+                        let _ = app.opener().open_url(
+                            "https://github.com/bizzkoot/copilot-tracker",
+                            None::<&str>,
+                        );
+                    }
+                    "github_issues" => {
+                        let _ = app.opener().open_url(
+                            "https://github.com/bizzkoot/copilot-tracker/issues",
+                            None::<&str>,
+                        );
                     }
                     _ => {}
                 })

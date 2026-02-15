@@ -25,6 +25,7 @@
     "build:linux": "npm run build:web && tauri build --target x86_64-unknown-linux-gnu"
   },
   "dependencies": {
+    "@radix-ui/react-tabs": "^1.1.13",
     "@tauri-apps/api": "^2.10.1",
     "canvas": "^3.2.1",
     "class-variance-authority": "^0.7.0",
@@ -40,12 +41,12 @@
   "devDependencies": {
     "@swc/core": "^1.15.11",
     "@tauri-apps/cli": "^2.0.0",
-    "@typescript-eslint/eslint-plugin": "^7.18.0",
-    "@typescript-eslint/parser": "^7.18.0",
     "@types/node": "^20.14.8",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@types/semver": "^7.7.1",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.19",
     "cross-env": "^10.1.0",
