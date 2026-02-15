@@ -702,7 +702,7 @@ function setupMockAdapter() {
     login: async () => {},
     logout: async () => {},
     checkAuth: async () => {},
-    onAuthStateChanged: (cb) => {
+    onAuthStateChanged: (cb: (state: AuthState) => void) => {
       // Immediate mock response for testing
       setTimeout(() => cb("unauthenticated"), 100);
       return () => {};

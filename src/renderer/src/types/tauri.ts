@@ -17,6 +17,21 @@ export interface TauriCurrentWindow {
   setPosition(position: PhysicalPosition): Promise<void>;
 }
 
+interface TauriInternals {
+  metadata?: {
+    currentWindow?: TauriCurrentWindow;
+  };
+}
+
+function getTauriInternals(): TauriInternals | null {
+  const internals = (window as unknown as { __TAURI_INTERNALS__?: unknown })
+    .__TAURI_INTERNALS__;
+  if (!internals || typeof internals !== "object") {
+    return null;
+  }
+  return internals as TauriInternals;
+}
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -27,11 +42,9 @@ export interface TauriCurrentWindow {
  */
 export function getCurrentWindow(): TauriCurrentWindow {
   // Tauri 2.x: Try the new API first (from @tauri-apps/api/window)
-  if ((window as any).__TAURI_INTERNALS__) {
-    const internals = (window as any).__TAURI_INTERNALS__;
-    if (internals.metadata && internals.metadata.currentWindow) {
-      return internals.metadata.currentWindow;
-    }
+  const internals = getTauriInternals();
+  if (internals?.metadata?.currentWindow) {
+    return internals.metadata.currentWindow;
   }
 
   // Fallback: Try to access via Tauri v1 API for backwards compatibility
@@ -48,7 +61,10 @@ export function getCurrentWindow(): TauriCurrentWindow {
   }
 
   // Last resort: Check if we're in a mock/testing environment
-  if (process.env.NODE_ENV === "development" || (window as any).electron) {
+  const hasElectron = Boolean(
+    (window as unknown as { electron?: unknown }).electron,
+  );
+  if (process.env.NODE_ENV === "development" || hasElectron) {
     console.warn("Tauri window API not available, using mock");
     // Return a mock implementation for development
     return {

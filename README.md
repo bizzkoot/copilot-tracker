@@ -75,7 +75,7 @@ The floating widget provides persistent visibility of your Copilot usage on **al
 
 Choose the file that matches your operating system from the [latest release](https://github.com/bizzkoot/copilot-tracker/releases/latest):
 
-### Tauri Builds (Recommended - v1.4.2+)
+### Tauri Builds
 
 **Modern, lightweight builds with better performance and smaller file sizes**
 
@@ -87,15 +87,7 @@ Choose the file that matches your operating system from the [latest release](htt
 | **Linux** (any distribution)      | `Copilot.Tracker_X.X.X_amd64.AppImage` (Tauri)     |
 | **Linux** (Debian/Ubuntu)         | `Copilot.Tracker_X.X.X_amd64.deb` (Tauri)          |
 
-### Electron Builds (Discontinued)
-
-**⚠️ Electron builds stopped at v1.5.1. Only Tauri builds are released from v1.5.2 onward.**
-
-> **Note:**
->
-> - **Tauri builds** are the only supported platform going forward (smaller, faster, more secure).
-> - Electron builds for macOS, Windows, and Linux were discontinued after v1.5.1.
-> - No new Electron releases will be published.
+Only Tauri builds are published from v1.5.2 onward.
 
 <details>
 <summary><strong>🔒 Privacy & Security</strong></summary>
@@ -289,17 +281,20 @@ cd copilot-tracker
 # Install dependencies
 npm install
 
-# Start Tauri development server
-npm run tauri:dev
+# Start development server (Tauri)
+npm run dev
+
+# Start web-only dev server (Vite)
+npm run dev:web
 ```
 
 ### Build
 
 ```bash
-# Tauri builds (all platforms)
-npm run tauri:build:mac     # macOS (universal binary)
-npm run tauri:build:win     # Windows
-npm run tauri:build:linux   # Linux
+# Builds (all platforms)
+npm run build:mac     # macOS (universal binary)
+npm run build:win     # Windows
+npm run build:linux   # Linux
 ```
 
 ## Building for Production
@@ -330,14 +325,15 @@ rustup target add aarch64-apple-darwin x86_64-apple-darwin
 ### Build Commands
 
 ```bash
-# Tauri builds
-npm run tauri:build           # Current platform
-npm run tauri:build:mac       # macOS universal binary
-npm run tauri:build:win       # Windows (x64)
-npm run tauri:build:linux     # Linux (x64)
+# Builds
+npm run build                 # Current platform
+npm run build:mac             # macOS universal binary
+npm run build:win             # Windows (x64)
+npm run build:linux           # Linux (x64)
 
 # Lint and format
 npm run lint                  # Check code style
+npm run lint:rust              # Rust lint (clippy)
 npm run format                # Auto-format code
 npm run typecheck             # TypeScript type checking
 ```
@@ -379,17 +375,14 @@ Available variables:
 
 ## Project Status
 
-✅ **Status**: v1.5.1 - Tauri Only
+✅ **Status**: v2.4.0 - Tauri only
 
 ## Version History
 
-- **v1.5.1** (Latest) - Tauri only, Electron builds discontinued
+- **v2.4.0** (Latest) - Tauri-only
 - **v1.5.0** - Added customizable tray icon formats
-- **v1.4.2** - Tauri build for all platforms, Electron macOS only
-- **v1.4.1** - Last version with Electron Windows/Linux support
-- **v1.0.0** - Initial release (Electron-only)
-
-> **Breaking Change:** Electron builds stopped at v1.5.1. Only Tauri builds are released from v1.5.2 onward.
+- **v1.4.2** - Tauri build for all platforms
+- **v1.0.0** - Initial release
 
 ## Platform Support
 
@@ -399,8 +392,6 @@ Available variables:
 | macOS (Apple Silicon) |  ✅   |
 | Windows 64-bit        |  ✅   |
 | Linux (x64)           |  ✅   |
-
-> **Note:** Electron builds were discontinued after v1.5.1. All releases from v1.5.2 onward are Tauri-only.
 
 ## Roadmap
 
@@ -414,7 +405,7 @@ Available variables:
 - [x] Phase 7: Settings and preferences
 - [x] Phase 8: Notifications
 - [x] Phase 9: Packaging and distribution
-- [x] v1.0.0 Release (Electron)
+- [x] v1.0.0 Release
 - [x] v1.4.2 - Tauri migration
 - [ ] Multi-account support
 

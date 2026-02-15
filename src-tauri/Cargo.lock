@@ -644,7 +644,7 @@ dependencies = [
 
 [[package]]
 name = "copilot-tracker"
-version = "2.3.4"
+version = "2.4.0"
 dependencies = [
  "chrono",
  "cocoa",

@@ -109,7 +109,7 @@ src/
 - `tsconfig.node.json` - Main process TypeScript config
 - `tailwind.config.js` - Tailwind with custom theme
 - `postcss.config.js` - PostCSS configuration
-- `electron.vite.config.ts` - Build configuration
+- `temp/electron/electron.vite.config.ts` - Legacy Electron build configuration
 
 ---
 
@@ -694,7 +694,7 @@ copilot-tracker/
 ├── package.json              # Dependencies
 ├── tsconfig.json            # TypeScript config
 ├── tailwind.config.js       # Tailwind config
-└── electron.vite.config.ts  # Build config
+└── temp/electron/electron.vite.config.ts  # Legacy build config
 ```
 
 **Total Files Created**: 40+ files
