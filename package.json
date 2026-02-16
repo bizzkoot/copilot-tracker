@@ -1,6 +1,6 @@
 {
   "name": "copilot-tracker",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "description": "Copilot Usage Tracker - Tauri App",
   "main": "./out/main/index.js",
   "author": "",
