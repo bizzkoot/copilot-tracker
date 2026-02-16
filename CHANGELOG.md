@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.4.1](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.0...v2.4.1) (2026-02-16)
+
+
+### Bug Fixes
+
+* **app:** harden Tauri permissions and remove Electron tooling ([0ccc8b3](https://github.com/bizzkoot/copilot-tracker/commit/0ccc8b31ef7666ab5fa63b5bf196c6479e349fc7))
+* **auth:** add extraction failure event handling ([b9f0013](https://github.com/bizzkoot/copilot-tracker/commit/b9f001362964664802419858e31a9253d67cd97b))
+* **build:** configure Vite output directory to match Tauri frontendDist ([cca2128](https://github.com/bizzkoot/copilot-tracker/commit/cca2128dd9d2735f801fe63b60894ab2284719cd))
+* **build:** move legacy Electron code to temp and align Tauri scripts ([a0f89be](https://github.com/bizzkoot/copilot-tracker/commit/a0f89be130d88b9c6d9323cfeaa0bc25c8902560))
+* **ci:** correct build script references in workflows ([9134648](https://github.com/bizzkoot/copilot-tracker/commit/9134648507fa0f7ef7d2450b471e9feace4dc4da))
+* **ci:** simplify Tauri build commands to avoid target specification issues ([f2bb18e](https://github.com/bizzkoot/copilot-tracker/commit/f2bb18ebf99d32c81612bbb0eac286c79c1e250f))
+* **widget:** persist widget visibility state across app restarts ([7bb25ff](https://github.com/bizzkoot/copilot-tracker/commit/7bb25ff5c919a4fad2728915d53b3ced0a07ea61))
+
 ## [2.4.0](https://github.com/bizzkoot/copilot-tracker/compare/v2.3.4...v2.4.0) (2026-02-14)
 
 
