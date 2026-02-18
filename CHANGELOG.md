@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.2](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.1...v2.4.2) (2026-02-18)
+
+
+### Bug Fixes
+
+* **ci:** restore universal builds and add manual upload workflow ([2f92c52](https://github.com/bizzkoot/copilot-tracker/commit/2f92c524a38e00a67d9483ce355fe3c2352a5b7f))
+
 ## [2.4.1](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.0...v2.4.1) (2026-02-18)
 
 
