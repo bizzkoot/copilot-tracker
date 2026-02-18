@@ -350,6 +350,8 @@ jobs:
     needs: [release-please, verify-versions]
     if: ${{ needs.release-please.outputs.release_created }}
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -414,21 +416,21 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           # Build universal macOS binary (Apple Silicon + Intel)
-          npm run build:web && npx tauri build
+          npm run build:web && npx tauri build --target universal-apple-darwin
         env:
           TAURI_BUNDLE_SKIP_SIGNING: "true"
 
       - name: Build Tauri App (Linux)
         if: runner.os == 'Linux'
         run: |
-          npm run build:web && npx tauri build
+          npm run build:web && npx tauri build --target x86_64-unknown-linux-gnu
         env:
           TAURI_BUNDLE_SKIP_SIGNING: "true"
 
       - name: Build Tauri App (Windows)
         if: runner.os == 'Windows'
         run: |
-          npm run build:web && npx tauri build
+          npm run build:web && npx tauri build --target x86_64-pc-windows-msvc
         env:
           TAURI_BUNDLE_SKIP_SIGNING: "true"
 

@@ -1,0 +1,119 @@
+name: Manual Upload to Release
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to upload to (e.g., v2.4.1)'
+        required: true
+        type: string
+      platforms:
+        description: 'Platforms to build'
+        required: true
+        type: choice
+        options:
+          - all
+          - macos-only
+          - linux-only
+          - windows-only
+        default: all
+
+jobs:
+  build-and-upload:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+        include:
+          - os: macos-latest
+            target: universal-apple-darwin
+            rust_target: aarch64-apple-darwin,x86_64-apple-darwin
+            artifacts: |
+              src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+              src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            rust_target: x86_64-unknown-linux-gnu
+            artifacts: |
+              src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb
+              src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            rust_target: x86_64-pc-windows-msvc
+            artifacts: |
+              src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+              src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install Rust (macOS/Linux)
+        if: runner.os != 'Windows'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Install Rust (Windows)
+        if: runner.os == 'Windows'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Install System Dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Install Frontend Dependencies
+        run: npm ci
+
+      - name: Build Tauri App (macOS)
+        if: runner.os == 'macOS' && (inputs.platforms == 'all' || inputs.platforms == 'macos-only')
+        run: |
+          # Build universal macOS binary (Apple Silicon + Intel)
+          npm run build:web && npx tauri build --target universal-apple-darwin
+        env:
+          TAURI_BUNDLE_SKIP_SIGNING: "true"
+
+      - name: Build Tauri App (Linux)
+        if: runner.os == 'Linux' && (inputs.platforms == 'all' || inputs.platforms == 'linux-only')
+        run: |
+          npm run build:web && npx tauri build --target x86_64-unknown-linux-gnu
+        env:
+          TAURI_BUNDLE_SKIP_SIGNING: "true"
+
+      - name: Build Tauri App (Windows)
+        if: runner.os == 'Windows' && (inputs.platforms == 'all' || inputs.platforms == 'windows-only')
+        run: |
+          npm run build:web && npx tauri build --target x86_64-pc-windows-msvc
+        env:
+          TAURI_BUNDLE_SKIP_SIGNING: "true"
+
+      - name: Upload Tauri Release Assets
+        if: inputs.platforms == 'all' || contains(inputs.platforms, runner.os)
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ matrix.artifacts }}
+          tag_name: ${{ inputs.tag }}
