@@ -28,6 +28,8 @@ import {
   Palette,
   Monitor,
   Info,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { GitHubIcon } from "@renderer/components/icons/GitHubIcon";
 import { useEffect, useState } from "react";
@@ -48,6 +50,9 @@ export function Settings({ onClose }: SettingsProps) {
   const [appVersion, setAppVersion] = useState("Loading...");
   const [widgetEnabled, setWidgetEnabled] = useState(false);
   const [widgetLoading, setWidgetLoading] = useState(true);
+  const [openAccordionSection, setOpenAccordionSection] = useState<
+    string | null
+  >(null);
 
   const {
     refreshInterval,
@@ -483,72 +488,26 @@ export function Settings({ onClose }: SettingsProps) {
         </TabsContent>
 
         {/* About Tab */}
-        <TabsContent value="about" className="space-y-4 mt-4">
-          {/* App Info Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">About</CardTitle>
-              <CardDescription>App information and updates</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Version & Author */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold">Copilot Tracker</span>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="text-sm text-muted-foreground"
-                      title="App version"
-                    >
-                      v{appVersion}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={handleCheckForUpdate}
-                      disabled={checkingForUpdate}
-                      title="Check for updates"
-                      className="h-8 w-8"
-                    >
-                      <RefreshCw
-                        className={`h-4 w-4 ${checkingForUpdate ? "animate-spin" : ""}`}
-                      />
-                    </Button>
-                  </div>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  <span title="Author">bizzkoot</span>
-                  <span className="mx-1">•</span>
-                  <span title="License">MIT License</span>
+        <TabsContent value="about" className="mt-4">
+          <div className="flex flex-col items-center text-center space-y-6">
+            {/* Hero Section */}
+            <div className="w-full max-w-lg space-y-4 pb-6 border-b">
+              <div className="space-y-3">
+                <p className="text-lg text-muted-foreground">
+                  Version {appVersion}
+                  <span className="mx-2">•</span>
+                  by bizzkoot
+                  <span className="mx-2">•</span>
+                  MIT License
                 </p>
-                {updateStatusMessage && (
-                  <p
-                    className={`text-xs ${
-                      updateStatus === "error"
-                        ? "text-destructive"
-                        : updateStatus === "available"
-                          ? "text-primary"
-                          : "text-muted-foreground"
-                    }`}
-                  >
-                    {updateStatusMessage}
-                  </p>
-                )}
-              </div>
 
-              {/* Description */}
-              <div className="pt-2 border-t">
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  A modern, cross-platform GitHub Copilot usage monitoring
-                  application built with Tauri, React, and TypeScript. Track
-                  your Copilot premium requests in real-time with smart
-                  predictions, system tray integration, and customizable
-                  notifications.
+                <p className="text-base text-foreground">
+                  Track your Copilot usage, not your limits
                 </p>
               </div>
 
-              {/* GitHub Links */}
-              <div className="flex flex-wrap gap-2">
+              {/* Quick Actions */}
+              <div className="flex flex-wrap items-center justify-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
@@ -559,7 +518,7 @@ export function Settings({ onClose }: SettingsProps) {
                   }
                   title="Star on GitHub"
                 >
-                  <GitHubIcon className="mr-2" />
+                  <GitHubIcon className="mr-2 h-4 w-4" />
                   Star
                 </Button>
                 <Button
@@ -572,7 +531,7 @@ export function Settings({ onClose }: SettingsProps) {
                   }
                   title="Report an issue"
                 >
-                  <Bug className="h-4 w-4 mr-2" />
+                  <Bug className="mr-2 h-4 w-4" />
                   Issue
                 </Button>
                 <Button
@@ -585,122 +544,299 @@ export function Settings({ onClose }: SettingsProps) {
                   }
                   title="Open GitHub Billing"
                 >
-                  <ExternalLink className="h-4 w-4 mr-2" />
+                  <ExternalLink className="mr-2 h-4 w-4" />
                   Billing
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCheckForUpdate}
+                  disabled={checkingForUpdate}
+                  title="Check for updates"
+                >
+                  <RefreshCw
+                    className={`mr-2 h-4 w-4 ${checkingForUpdate ? "animate-spin" : ""}`}
+                  />
+                  Updates
+                </Button>
               </div>
-            </CardContent>
-          </Card>
 
-          {/* Features Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Key Features</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                <div className="flex items-start gap-2">
-                  <span className="text-primary">📊</span>
-                  <span className="text-muted-foreground">
-                    Real-time usage tracking with gauge visualization
-                  </span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-primary">🔮</span>
-                  <span className="text-muted-foreground">
-                    Smart monthly predictions based on usage trends
-                  </span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-primary">🔔</span>
-                  <span className="text-muted-foreground">
-                    Configurable alerts when approaching limits
-                  </span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-primary">🎯</span>
-                  <span className="text-muted-foreground">
-                    System tray integration with custom display formats
-                  </span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-primary">🎨</span>
-                  <span className="text-muted-foreground">
-                    Floating widget for persistent usage visibility
-                  </span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-primary">🌓</span>
-                  <span className="text-muted-foreground">
-                    Dark/Light theme with automatic detection
-                  </span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-primary">🔐</span>
-                  <span className="text-muted-foreground">
-                    Secure WebView-based GitHub OAuth
-                  </span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-primary">🔄</span>
-                  <span className="text-muted-foreground">
-                    Automatic updates via GitHub Releases
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              {/* Update Status */}
+              {updateStatusMessage && (
+                <p
+                  className={`text-sm ${
+                    updateStatus === "error"
+                      ? "text-destructive"
+                      : updateStatus === "available"
+                        ? "text-primary"
+                        : "text-muted-foreground"
+                  }`}
+                >
+                  {updateStatusMessage}
+                </p>
+              )}
+            </div>
 
-          {/* Tech Stack Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Built With</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  "Tauri 2.0",
-                  "React 18",
-                  "TypeScript",
-                  "Tailwind CSS",
-                  "shadcn/ui",
-                  "Zustand",
-                  "Recharts",
-                ].map((tech) => (
-                  <span
-                    key={tech}
-                    className="px-2 py-1 bg-muted rounded text-xs text-muted-foreground"
-                  >
-                    {tech}
-                  </span>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+            {/* Accordion Sections */}
+            <div className="w-full max-w-2xl space-y-3">
+              {/* Features Section */}
+              <Card
+                className="overflow-hidden"
+                onClick={() =>
+                  setOpenAccordionSection(
+                    openAccordionSection === "features" ? null : "features",
+                  )
+                }
+              >
+                <button className="w-full">
+                  <CardHeader className="py-4 px-5 hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <span>✨</span>
+                        <span>What it does</span>
+                      </CardTitle>
+                      {openAccordionSection === "features" ? (
+                        <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                      )}
+                    </div>
+                  </CardHeader>
+                </button>
+                {openAccordionSection === "features" && (
+                  <CardContent className="px-5 pb-4 pt-0 border-t">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm pt-4">
+                      <div className="flex items-start gap-2">
+                        <span className="text-primary">📊</span>
+                        <span className="text-muted-foreground">
+                          Real-time usage tracking with gauge visualization
+                        </span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-primary">🔮</span>
+                        <span className="text-muted-foreground">
+                          Smart monthly predictions based on usage trends
+                        </span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-primary">🔔</span>
+                        <span className="text-muted-foreground">
+                          Configurable alerts when approaching limits
+                        </span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-primary">🎯</span>
+                        <span className="text-muted-foreground">
+                          System tray integration with custom display formats
+                        </span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-primary">🎨</span>
+                        <span className="text-muted-foreground">
+                          Floating widget for persistent usage visibility
+                        </span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-primary">🌓</span>
+                        <span className="text-muted-foreground">
+                          Dark/Light theme with automatic detection
+                        </span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-primary">🔐</span>
+                        <span className="text-muted-foreground">
+                          Secure WebView-based GitHub OAuth
+                        </span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-primary">🔄</span>
+                        <span className="text-muted-foreground">
+                          Automatic updates via GitHub Releases
+                        </span>
+                      </div>
+                    </div>
+                  </CardContent>
+                )}
+              </Card>
 
-          {/* Privacy & Support Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Privacy & Support</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                <strong>Privacy First:</strong> No API tokens stored.
-                Authentication happens via secure WebView directly with GitHub.
-                All data is stored locally on your machine. No tracking or
-                analytics collected.
-              </p>
-              <p className="text-sm text-muted-foreground">
-                <strong>Support:</strong> Found a bug or have a feature request?
-                Use the Issue button above to reach out on GitHub.
-              </p>
-              <p className="text-xs text-muted-foreground pt-2 border-t">
-                This application is not officially affiliated with GitHub or
-                Microsoft. It uses GitHub&apos;s internal billing APIs which may
-                change without notice.
-              </p>
-            </CardContent>
-          </Card>
+              {/* Tech Stack Section */}
+              <Card
+                className="overflow-hidden"
+                onClick={() =>
+                  setOpenAccordionSection(
+                    openAccordionSection === "tech" ? null : "tech",
+                  )
+                }
+              >
+                <button className="w-full">
+                  <CardHeader className="py-4 px-5 hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <span>🛠️</span>
+                        <span>How it&apos;s built</span>
+                      </CardTitle>
+                      {openAccordionSection === "tech" ? (
+                        <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                      )}
+                    </div>
+                  </CardHeader>
+                </button>
+                {openAccordionSection === "tech" && (
+                  <CardContent className="px-5 pb-4 pt-0 border-t">
+                    <div className="pt-4 text-sm leading-relaxed">
+                      <div className="text-foreground font-semibold mb-4 text-center">
+                        Copilot Tracker Architecture
+                      </div>
+                      <div className="space-y-4 text-left">
+                        <div>
+                          <div className="text-foreground font-medium flex items-center gap-2 mb-2">
+                            <span>⚛️</span>
+                            <span>Frontend</span>
+                          </div>
+                          <div className="pl-7 space-y-1 text-muted-foreground">
+                            <div>• React 18 + TypeScript</div>
+                            <div>• Tailwind CSS</div>
+                            <div>• shadcn/ui</div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="text-foreground font-medium flex items-center gap-2 mb-2">
+                            <span>📦</span>
+                            <span>State & Visualization</span>
+                          </div>
+                          <div className="pl-7 space-y-1 text-muted-foreground">
+                            <div>• Zustand (state management)</div>
+                            <div>• Recharts (charts)</div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="text-foreground font-medium flex items-center gap-2 mb-2">
+                            <span>🦀</span>
+                            <span>Backend</span>
+                          </div>
+                          <div className="pl-7 space-y-1 text-muted-foreground">
+                            <div>• Tauri 2.0 (Rust)</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                )}
+              </Card>
+
+              {/* Privacy Section */}
+              <Card
+                className="overflow-hidden"
+                onClick={() =>
+                  setOpenAccordionSection(
+                    openAccordionSection === "privacy" ? null : "privacy",
+                  )
+                }
+              >
+                <button className="w-full">
+                  <CardHeader className="py-4 px-5 hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <span>🔒</span>
+                        <span>Privacy policy</span>
+                      </CardTitle>
+                      {openAccordionSection === "privacy" ? (
+                        <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                      )}
+                    </div>
+                  </CardHeader>
+                </button>
+                {openAccordionSection === "privacy" && (
+                  <CardContent className="px-5 pb-4 pt-0 border-t space-y-3">
+                    <div className="pt-4 space-y-3">
+                      <p className="text-sm text-muted-foreground">
+                        <strong className="text-foreground">
+                          Privacy First:
+                        </strong>{" "}
+                        No API tokens stored. Authentication happens via secure
+                        WebView directly with GitHub. All data is stored locally
+                        on your machine. No tracking or analytics collected.
+                      </p>
+                      <p className="text-xs text-muted-foreground pt-2 border-t">
+                        This application is not officially affiliated with
+                        GitHub or Microsoft. It uses GitHub&apos;s internal
+                        billing APIs which may change without notice.
+                      </p>
+                    </div>
+                  </CardContent>
+                )}
+              </Card>
+
+              {/* Support Section */}
+              <Card
+                className="overflow-hidden"
+                onClick={() =>
+                  setOpenAccordionSection(
+                    openAccordionSection === "support" ? null : "support",
+                  )
+                }
+              >
+                <button className="w-full">
+                  <CardHeader className="py-4 px-5 hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <span>💬</span>
+                        <span>Support</span>
+                      </CardTitle>
+                      {openAccordionSection === "support" ? (
+                        <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                      )}
+                    </div>
+                  </CardHeader>
+                </button>
+                {openAccordionSection === "support" && (
+                  <CardContent className="px-5 pb-4 pt-0 border-t">
+                    <div className="pt-4 space-y-3">
+                      <p className="text-sm text-muted-foreground">
+                        Found a bug or have a feature request?
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            window.electron.openExternal(
+                              "https://github.com/bizzkoot/copilot-tracker/issues",
+                            );
+                          }}
+                        >
+                          <Bug className="mr-2 h-4 w-4" />
+                          Report Issue
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            window.electron.openExternal(
+                              "https://github.com/bizzkoot/copilot-tracker/discussions",
+                            );
+                          }}
+                        >
+                          <ExternalLink className="mr-2 h-4 w-4" />
+                          Discussions
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                )}
+              </Card>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
     </div>
