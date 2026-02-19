@@ -225,12 +225,16 @@ impl StoreManager {
         let content = serde_json::to_string_pretty(settings)
             .map_err(|e| format!("Failed to serialize settings: {}", e))?;
 
-        std::fs::write(path, content)
+        // Use a single file handle for both write and sync to avoid race conditions
+        // on Windows where the file may still be locked after std::fs::write closes
+        use std::io::Write;
+        let mut file = std::fs::File::create(path)
+            .map_err(|e| format!("Failed to create settings file: {}", e))?;
+
+        file.write_all(content.as_bytes())
             .map_err(|e| format!("Failed to write settings file: {}", e))?;
 
         // Ensure data is flushed to disk (important for shutdown scenarios)
-        let file = std::fs::File::open(path)
-            .map_err(|e| format!("Failed to open settings file for sync: {}", e))?;
         file.sync_all()
             .map_err(|e| format!("Failed to sync settings file: {}", e))?;
 
@@ -253,8 +257,18 @@ impl StoreManager {
         let content = serde_json::to_string_pretty(history)
             .map_err(|e| format!("Failed to serialize history: {}", e))?;
 
-        std::fs::write(path, content)
+        // Use a single file handle for both write and sync to avoid race conditions
+        // on Windows where the file may still be locked after std::fs::write closes
+        use std::io::Write;
+        let mut file = std::fs::File::create(path)
+            .map_err(|e| format!("Failed to create history file: {}", e))?;
+
+        file.write_all(content.as_bytes())
             .map_err(|e| format!("Failed to write history file: {}", e))?;
+
+        // Ensure data is flushed to disk (important for shutdown scenarios)
+        file.sync_all()
+            .map_err(|e| format!("Failed to sync history file: {}", e))?;
 
         Ok(())
     }
