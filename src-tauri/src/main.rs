@@ -1375,9 +1375,8 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
     {
         log::info!("[Update] Windows detected: trying webview fetch first");
 
-        let webview_error: String;
         let mut auth_manager = AuthManager::new();
-        match auth_manager.fetch_github_releases(&app).await {
+        let webview_error: String = match auth_manager.fetch_github_releases(&app).await {
             Ok(release_json) => {
                 if release_json
                     .get("success")
@@ -1389,16 +1388,14 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
                     return Ok(());
                 }
 
-                webview_error = release_json
+                release_json
                     .get("error")
                     .and_then(|v| v.as_str())
                     .unwrap_or("unknown webview error")
-                    .to_string();
+                    .to_string()
             }
-            Err(err) => {
-                webview_error = err;
-            }
-        }
+            Err(err) => err,
+        };
 
         log::warn!(
             "[Update] Windows webview fetch failed: {}. Trying reqwest...",
@@ -1514,7 +1511,7 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
         );
 
         let _ = rebuild_tray_menu(&app, None);
-        return Ok(());
+        Ok(())
     }
 
     // Non-Windows platforms (macOS, Linux): Use webview fetch as primary method
