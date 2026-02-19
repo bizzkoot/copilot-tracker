@@ -7,7 +7,8 @@ use url::Url;
 use crate::StoreManager;
 
 /// Global channel for hidden webview events
-static HIDDEN_WEBVIEW_EVENTS: TokioMutex<Option<mpsc::Sender<HiddenWebviewEvent>>> = TokioMutex::const_new(None);
+static HIDDEN_WEBVIEW_EVENTS: TokioMutex<Option<mpsc::Sender<HiddenWebviewEvent>>> =
+    TokioMutex::const_new(None);
 
 #[derive(Debug, Clone)]
 pub struct HiddenWebviewEvent {
@@ -17,7 +18,8 @@ pub struct HiddenWebviewEvent {
 
 const GITHUB_BILLING_URL: &str = "https://github.com/settings/billing";
 const GITHUB_LOGIN_URL: &str = "https://github.com/login";
-const GITHUB_API_URL: &str = "https://api.github.com/repos/bizzkoot/copilot-tracker/releases/latest";
+const GITHUB_API_URL: &str =
+    "https://api.github.com/repos/bizzkoot/copilot-tracker/releases/latest";
 const EXTRACTION_TIMEOUT_SECS: u64 = 30;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,19 +74,9 @@ fn parse_usage_history_row(row: &serde_json::Value) -> Option<UsageHistoryRow> {
         return None;
     }
 
-    let included_requests = cells
-        .get(1)?
-        .get("value")?
-        .as_str()?
-        .parse::<u32>()
-        .ok()?;
+    let included_requests = cells.get(1)?.get("value")?.as_str()?.parse::<u32>().ok()?;
 
-    let billed_requests = cells
-        .get(2)?
-        .get("value")?
-        .as_str()?
-        .parse::<u32>()
-        .ok()?;
+    let billed_requests = cells.get(2)?.get("value")?.as_str()?.parse::<u32>().ok()?;
 
     let gross_amount = cells
         .get(3)?
@@ -104,10 +96,7 @@ fn parse_usage_history_row(row: &serde_json::Value) -> Option<UsageHistoryRow> {
 
     let models = if let Some(subtable) = row.get("subtable") {
         if let Some(sub_rows) = subtable.get("rows").and_then(|v| v.as_array()) {
-            sub_rows
-                .iter()
-                .filter_map(parse_usage_model_row)
-                .collect()
+            sub_rows.iter().filter_map(parse_usage_model_row).collect()
         } else {
             vec![]
         }
@@ -133,11 +122,7 @@ fn parse_usage_model_row(sub_row: &serde_json::Value) -> Option<UsageModelRow> {
         return None;
     }
 
-    let name = sub_cells
-        .first()?
-        .get("value")?
-        .as_str()?
-        .to_string();
+    let name = sub_cells.first()?.get("value")?.as_str()?.to_string();
     let included_requests = sub_cells
         .get(1)?
         .get("value")?
@@ -197,21 +182,24 @@ impl AuthManager {
         // If window exists, just show it
         if let Some(window) = &self.auth_window {
             if window.is_visible().unwrap_or(false) {
-                window.show()
+                window
+                    .show()
                     .map_err(|e| format!("Failed to show window: {}", e))?;
-                window.set_focus()
+                window
+                    .set_focus()
                     .map_err(|e| format!("Failed to focus window: {}", e))?;
                 let url = Url::parse(GITHUB_LOGIN_URL)
                     .map_err(|e| format!("Failed to parse URL: {}", e))?;
-                window.navigate(url)
+                window
+                    .navigate(url)
                     .map_err(|e| format!("Failed to navigate: {}", e))?;
                 return Ok(());
             }
         }
 
         // Create new auth window
-        let url = Url::parse(GITHUB_LOGIN_URL)
-            .map_err(|e| format!("Failed to parse URL: {}", e))?;
+        let url =
+            Url::parse(GITHUB_LOGIN_URL).map_err(|e| format!("Failed to parse URL: {}", e))?;
 
         let app_handle = app.clone();
         let window = WebviewWindowBuilder::new(app, "auth", WebviewUrl::External(url))
@@ -221,7 +209,7 @@ impl AuthManager {
             // Check for HTTPS interception redirect
             if url_str.contains("copilot-auth-success.local") {
                 log::info!("Intercepted auth success URL: {}", url_str);
-                
+
                 let mut extracted_id = None;
                 let mut extracted_usage_data = None;
                 let mut extracted_usage_history = None;
@@ -234,7 +222,7 @@ impl AuthManager {
                                 // Extract ID
                                 if let Some(id) = json.get("id").and_then(|v| v.as_u64()) {
                                     extracted_id = Some(id);
-                                    
+
                                     // Extract Usage Data
                                     if let Some(usage_card) = json.get("usageCard").and_then(|v| v.get("data")) {
                                         log::info!("Raw usage card data: {:?}", usage_card);
@@ -252,11 +240,11 @@ impl AuthManager {
                                         .and_then(|v| v.get("data"))
                                         .and_then(|v| v.get("table"))
                                         .and_then(|v| v.get("rows"))
-                                        .and_then(|v| v.as_array()) 
+                                        .and_then(|v| v.as_array())
                                     {
                                         log::info!("Parsing usage history, found {} rows", rows.len());
                                         let history: Vec<UsageHistoryRow> = rows.iter().filter_map(parse_usage_history_row).collect();
-                                        
+
                                         log::info!("Successfully parsed {} history rows", history.len());
                                         extracted_usage_history = Some(history);
                                     }
@@ -279,22 +267,22 @@ impl AuthManager {
                      let store = app_handle.state::<StoreManager>();
                      if store.set_customer_id(id).is_ok() {
                          log::info!("Successfully authenticated with Customer ID: {}", id);
-                         
+
                          // Save usage data and history
                           let mut usage_summary = None;
                           let mut usage_entries = vec![];
 
                           if let Some(usage) = extracted_usage_data {
-                              log::info!("Extracted usage data: net_quantity={}, discount_quantity={}, entitlement={}", 
+                              log::info!("Extracted usage data: net_quantity={}, discount_quantity={}, entitlement={}",
                                   usage.net_quantity, usage.discount_quantity, usage.user_premium_request_entitlement);
-                              
+
                               let used = usage.discount_quantity as u32;
                               let limit = usage.user_premium_request_entitlement as u32;
-                              
+
                               if used == 0 && limit == 0 {
                                   log::warn!("Usage data shows 0/0 - API may have returned empty data");
                               }
-                              
+
                               let _ = store.set_usage(used, limit);
 
                               // Update cache
@@ -308,7 +296,7 @@ impl AuthManager {
                                   timestamp: chrono::Utc::now().timestamp(),
                               };
                               store.set_usage_cache(cache);
-                              
+
                               // Create summary
                               let remaining = limit.saturating_sub(used);
                               let percentage = if limit > 0 { (used as f32 / limit as f32) * 100.0 } else { 0.0 };
@@ -339,7 +327,7 @@ impl AuthManager {
                               } else {
                                   crate::usage::UsageManager::get_cached_history(&app_handle)
                               };
-                              
+
                               let settings = store.get_settings();
                               let prediction = crate::usage::UsageManager::predict_usage_from_history(
                                   &history,
@@ -347,16 +335,16 @@ impl AuthManager {
                                   summary.limit,
                                   settings.prediction_period,
                               );
-                              
-                              log::info!("Emitting usage:data event - used: {}, limit: {}, history entries: {}", 
+
+                              log::info!("Emitting usage:data event - used: {}, limit: {}, history entries: {}",
                                   summary.used, summary.limit, history.len());
-                              
+
                               let payload = crate::usage::UsagePayload {
                                   summary: summary.clone(),
                                   history,
                                   prediction,
                               };
-                              
+
                               let _ = app_handle.emit("usage:data", payload);
                               let _ = app_handle.emit("usage:updated", &summary);
                           } else {
@@ -364,7 +352,7 @@ impl AuthManager {
                           }
 
                          let _ = app_handle.emit("auth:state-changed", "authenticated");
-                         
+
                          // Trigger refresh to get fresh usage data (same as tray menu refresh)
                          let app_handle_refresh = app_handle.clone();
                          tauri::async_runtime::spawn(async move {
@@ -372,7 +360,7 @@ impl AuthManager {
                              let mut usage_manager = crate::usage::UsageManager::new();
                              match usage_manager.fetch_usage(&app_handle_refresh).await {
                                  Ok(summary) => {
-                                     log::info!("Auto-refresh after auth succeeded: {}/{} (tray should update via usage:updated event)", 
+                                     log::info!("Auto-refresh after auth succeeded: {}/{} (tray should update via usage:updated event)",
                                          summary.used, summary.limit);
                                  }
                                  Err(e) => {
@@ -380,7 +368,7 @@ impl AuthManager {
                                  }
                              }
                          });
-                         
+
                          // Close auth window
                          if let Some(auth_window) = app_handle.get_webview_window("auth") {
                              let _ = auth_window.close();
@@ -417,7 +405,7 @@ impl AuthManager {
               // Monitor URL changes for billing page detection
               let currentUrl = location.href;
               console.log('[AuthInjector] Initial URL:', currentUrl);
-              
+
               function checkUrl() {
                 const newUrl = location.href;
                 if (newUrl === 'https://github.com/' || newUrl === 'https://github.com') {
@@ -435,19 +423,19 @@ impl AuthManager {
                   }
                 }
               }
-              
+
               // Monitor URL changes using MutationObserver
               const urlObserver = new MutationObserver(function() {
                 checkUrl();
               });
-              
+
               // Observe changes to the document
               urlObserver.observe(document, { subtree: true, childList: true });
-              
+
               // Also check on popstate events
               window.addEventListener('popstate', checkUrl);
               window.addEventListener('hashchange', checkUrl);
-              
+
               if (location.href === 'https://github.com/' || location.href === 'https://github.com') {
                 console.log('[AuthInjector] Detected homepage, redirecting to billing...');
                 window.location.href = 'https://github.com/settings/billing';
@@ -458,7 +446,7 @@ impl AuthManager {
                 console.log('[AuthInjector] Already on billing page, starting extraction in 1.5s');
                 setTimeout(extractAndSend, 1500);
               }
-              
+
               async function getUserId() {
                 console.log('[AuthInjector] Attempting to get User ID via API...');
                 try {
@@ -478,7 +466,7 @@ impl AuthManager {
                   return { success: false, error: error.message };
                 }
               }
-              
+
               function getCustomerIdFromDOM() {
                 console.log('[AuthInjector] Attempting to get Customer ID from DOM...');
                 try {
@@ -500,7 +488,7 @@ impl AuthManager {
                   return { success: false, error: error.message };
                 }
               }
-              
+
               function getCustomerIdFromHTML() {
                 console.log('[AuthInjector] Attempting to get Customer ID from HTML regex...');
                 try {
@@ -526,7 +514,7 @@ impl AuthManager {
                   return { success: false, error: error.message };
                 }
               }
-              
+
               async function extractCustomerId() {
                 console.log('[AuthInjector] Starting extraction chain...');
                 let result = await getUserId();
@@ -584,23 +572,23 @@ impl AuthManager {
                   return { success: false, error: error.message };
                 }
               }
-              
+
               async function extractAndSend() {
                 console.log('[AuthInjector] Running extractAndSend...');
                 const result = await extractCustomerId();
                 if (result.success && result.id) {
                   console.log('[AuthInjector] Extraction success, ID:', result.id, 'fetching usage data...');
-                  
+
                   const usageCard = await fetchUsageCard(result.id);
                   const usageTable = await fetchUsageTable(result.id);
-                  
+
                   console.log('[AuthInjector] Creating payload...');
                   const payload = {
                       id: result.id,
                       usageCard: usageCard,
                       usageTable: usageTable
                   };
-                  
+
                   console.log('[AuthInjector] Redirecting with payload...');
                   const hash = encodeURIComponent(JSON.stringify(payload));
                   window.location.href = "https://copilot-auth-success.local/success#payload=" + hash;
@@ -608,8 +596,8 @@ impl AuthManager {
                   console.error('[AuthInjector] Failed to extract customer ID:', result.error);
                   // Emit event to notify renderer of extraction failure
                   if (window.__TAURI__?.event) {
-                    window.__TAURI__.event.emit('auth:extraction-failed', { 
-                      error: result.error || 'Unknown extraction error' 
+                    window.__TAURI__.event.emit('auth:extraction-failed', {
+                      error: result.error || 'Unknown extraction error'
                     });
                   }
                 }
@@ -667,15 +655,11 @@ impl AuthManager {
         &mut self,
         app: &AppHandle,
     ) -> Result<tauri::WebviewWindow, String> {
-        let url = Url::parse(GITHUB_BILLING_URL)
-            .map_err(|e| format!("Failed to parse URL: {}", e))?;
+        let url =
+            Url::parse(GITHUB_BILLING_URL).map_err(|e| format!("Failed to parse URL: {}", e))?;
 
-        let builder = WebviewWindowBuilder::new(
-            app,
-            "hidden-auth",
-            WebviewUrl::External(url),
-        )
-        .title("Hidden Auth");
+        let builder = WebviewWindowBuilder::new(app, "hidden-auth", WebviewUrl::External(url))
+            .title("Hidden Auth");
 
         // Platform-specific configuration
         #[cfg(target_os = "windows")]
@@ -706,14 +690,14 @@ impl AuthManager {
         .initialization_script(r#"
             (function() {
               console.log('[HiddenAuth] Script initialized');
-              
+
               async function sendResult(kind, payload) {
                 try {
                   // Tauri v2 event emission via core invoke
                   if (window.__TAURI__ && window.__TAURI__.core) {
-                    await window.__TAURI__.core.invoke('hidden_webview_event', { 
-                      event: kind, 
-                      payload: JSON.stringify(payload) 
+                    await window.__TAURI__.core.invoke('hidden_webview_event', {
+                      event: kind,
+                      payload: JSON.stringify(payload)
                     });
                     console.log('[HiddenAuth] Sent event:', kind);
                   } else {
@@ -841,13 +825,13 @@ impl AuthManager {
                 console.log('[HiddenAuth] Fetching usage data...');
                 const usageCard = await fetchUsageCard(customerResult.id);
                 const usageTable = await fetchUsageTable(customerResult.id);
-                
-                await sendResult('auth:extraction:usage', { 
+
+                await sendResult('auth:extraction:usage', {
                   customerId: customerResult.id,
-                  usageCard, 
-                  usageTable 
+                  usageCard,
+                  usageTable
                 });
-                
+
                 await sendResult('auth:extraction:complete', { success: true });
                 console.log('[HiddenAuth] Extraction complete');
               }
@@ -873,7 +857,7 @@ impl AuthManager {
     ) -> Result<ExtractionResult, String> {
         // Create event channel
         let (tx, mut rx) = mpsc::channel::<HiddenWebviewEvent>(10);
-        
+
         // Store channel for command handler to use
         {
             let mut global_tx = HIDDEN_WEBVIEW_EVENTS.lock().await;
@@ -892,27 +876,55 @@ impl AuthManager {
 
             while let Some(event) = rx.recv().await {
                 log::info!("Received hidden webview event: {}", event.event);
-                
+
                 match event.event.as_str() {
                     "auth:extraction:customer" => {
-                        if let Ok(result) = serde_json::from_str::<serde_json::Value>(&event.payload) {
-                            if result.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
+                        if let Ok(result) =
+                            serde_json::from_str::<serde_json::Value>(&event.payload)
+                        {
+                            if result
+                                .get("success")
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(false)
+                            {
                                 customer_id = result.get("id").and_then(|v| v.as_u64());
                             } else {
-                                error = result.get("error").and_then(|v| v.as_str()).map(|s| s.to_string());
+                                error = result
+                                    .get("error")
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| s.to_string());
                             }
                         }
                     }
                     "auth:extraction:usage" => {
-                        if let Ok(result) = serde_json::from_str::<serde_json::Value>(&event.payload) {
+                        if let Ok(result) =
+                            serde_json::from_str::<serde_json::Value>(&event.payload)
+                        {
                             // Parse usage card
-                            if let Some(usage_card) = result.get("usageCard").and_then(|v| v.get("data")) {
+                            if let Some(usage_card) =
+                                result.get("usageCard").and_then(|v| v.get("data"))
+                            {
                                 usage_data = Some(UsageData {
-                                    net_billed_amount: usage_card.get("netBilledAmount").and_then(|v| v.as_f64()).unwrap_or(0.0),
-                                    net_quantity: usage_card.get("netQuantity").and_then(|v| v.as_u64()).unwrap_or(0),
-                                    discount_quantity: usage_card.get("discountQuantity").and_then(|v| v.as_u64()).unwrap_or(0),
-                                    user_premium_request_entitlement: usage_card.get("userPremiumRequestEntitlement").and_then(|v| v.as_u64()).unwrap_or(0),
-                                    filtered_user_premium_request_entitlement: usage_card.get("filteredUserPremiumRequestEntitlement").and_then(|v| v.as_u64()).unwrap_or(0),
+                                    net_billed_amount: usage_card
+                                        .get("netBilledAmount")
+                                        .and_then(|v| v.as_f64())
+                                        .unwrap_or(0.0),
+                                    net_quantity: usage_card
+                                        .get("netQuantity")
+                                        .and_then(|v| v.as_u64())
+                                        .unwrap_or(0),
+                                    discount_quantity: usage_card
+                                        .get("discountQuantity")
+                                        .and_then(|v| v.as_u64())
+                                        .unwrap_or(0),
+                                    user_premium_request_entitlement: usage_card
+                                        .get("userPremiumRequestEntitlement")
+                                        .and_then(|v| v.as_u64())
+                                        .unwrap_or(0),
+                                    filtered_user_premium_request_entitlement: usage_card
+                                        .get("filteredUserPremiumRequestEntitlement")
+                                        .and_then(|v| v.as_u64())
+                                        .unwrap_or(0),
                                 });
                             }
 
@@ -922,9 +934,10 @@ impl AuthManager {
                                 .and_then(|v| v.get("data"))
                                 .and_then(|v| v.get("table"))
                                 .and_then(|v| v.get("rows"))
-                                .and_then(|v| v.as_array()) 
+                                .and_then(|v| v.as_array())
                             {
-                                let history: Vec<UsageHistoryRow> = rows.iter().filter_map(parse_usage_history_row).collect();
+                                let history: Vec<UsageHistoryRow> =
+                                    rows.iter().filter_map(parse_usage_history_row).collect();
                                 usage_history = Some(history);
                             }
                         }
@@ -943,11 +956,12 @@ impl AuthManager {
                 usage_history,
                 error,
             }
-        }).await;
+        })
+        .await;
 
         // Clean up
         let _ = window.close();
-        
+
         // Clear the global channel
         {
             let mut global_tx = HIDDEN_WEBVIEW_EVENTS.lock().await;
@@ -996,7 +1010,8 @@ impl AuthManager {
         let url = Url::parse("https://api.github.com")
             .map_err(|e| format!("Failed to parse URL: {}", e))?;
 
-        let js_code = format!(r#"
+        let js_code = format!(
+            r#"
             (async function() {{
                 async function sendResult(kind, payload) {{
                     try {{
@@ -1042,18 +1057,17 @@ impl AuthManager {
                     await sendResult('update_check:error', {{ success: false, error: error.message || error.toString(), stack: error.stack || null }});
                 }}
             }})()
-        "#, GITHUB_API_URL);
+        "#,
+            GITHUB_API_URL
+        );
 
         // Create minimal hidden webview
-        let builder = WebviewWindowBuilder::new(
-            app,
-            "update-check-temp",
-            WebviewUrl::External(url),
-        )
-        .title("Update Check Temp")
-        .skip_taskbar(true)
-        .inner_size(1.0, 1.0)
-        .initialization_script(js_code);
+        let builder =
+            WebviewWindowBuilder::new(app, "update-check-temp", WebviewUrl::External(url))
+                .title("Update Check Temp")
+                .skip_taskbar(true)
+                .inner_size(1.0, 1.0)
+                .initialization_script(js_code);
 
         // On Windows make the tiny webview visible (1x1 transparent off-screen) so JS will run reliably.
         #[cfg(target_os = "windows")]
@@ -1093,8 +1107,9 @@ impl AuthManager {
                     *global_tx = None;
 
                     // Parse error from payload
-                    let error_payload = serde_json::from_str::<serde_json::Value>(&event.payload)
-                        .map_err(|e| format!("Failed to parse error payload: {}", e))?;
+                    let error_payload =
+                        serde_json::from_str::<serde_json::Value>(&event.payload)
+                            .map_err(|e| format!("Failed to parse error payload: {}", e))?;
 
                     let error_msg = error_payload
                         .get("error")
@@ -1108,7 +1123,8 @@ impl AuthManager {
 
             // If loop completes without result event, it timed out
             Err::<serde_json::Value, String>("Update check timed out".to_string())
-        }).await
+        })
+        .await
         .map_err(|_| "Update check timed out".to_string())?;
 
         // Clean up window

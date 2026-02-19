@@ -10,16 +10,15 @@ use std::sync::{Arc, Mutex};
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Listener, Manager};
-use tauri_plugin_http::{reqwest, fetch};
+use tauri_plugin_http::reqwest;
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
 
-use copilot_tracker::{
-    AuthManager, StoreManager, TrayIconRenderer, UsageManager, WidgetPosition,
-};
+use copilot_tracker::{AuthManager, StoreManager, TrayIconRenderer, UsageManager, WidgetPosition};
 mod theme;
 
-const GITHUB_API_URL: &str = "https://api.github.com/repos/bizzkoot/copilot-tracker/releases/latest";
+const GITHUB_API_URL: &str =
+    "https://api.github.com/repos/bizzkoot/copilot-tracker/releases/latest";
 
 use crate::theme::text_color_for_theme_preference;
 
@@ -43,7 +42,9 @@ fn resolve_app_dir(identifier: &str) -> std::path::PathBuf {
     #[cfg(target_os = "linux")]
     let base = std::env::var("XDG_DATA_HOME")
         .map(std::path::PathBuf::from)
-        .or_else(|_| std::env::var("HOME").map(|h| std::path::PathBuf::from(h).join(".local/share")))
+        .or_else(|_| {
+            std::env::var("HOME").map(|h| std::path::PathBuf::from(h).join(".local/share"))
+        })
         .unwrap_or_else(|_| std::env::current_dir().unwrap());
 
     base.join(identifier)
@@ -103,13 +104,18 @@ impl PollingState {
             let now = std::time::Instant::now();
             let mut last_restart = self.last_restart.lock().unwrap();
             let mut last_interval = self.last_interval.lock().unwrap();
-            
-            if *last_interval == interval_seconds &&
-                now.duration_since(*last_restart) < std::time::Duration::from_millis(POLLING_RESTART_DEBOUNCE_MS) {
-                log::debug!("[PollingState] Skipping duplicate restart request (interval: {}s)", interval_seconds);
+
+            if *last_interval == interval_seconds
+                && now.duration_since(*last_restart)
+                    < std::time::Duration::from_millis(POLLING_RESTART_DEBOUNCE_MS)
+            {
+                log::debug!(
+                    "[PollingState] Skipping duplicate restart request (interval: {}s)",
+                    interval_seconds
+                );
                 return;
             }
-            
+
             // Update tracking before restart
             *last_restart = now;
             *last_interval = interval_seconds;
@@ -122,7 +128,9 @@ impl PollingState {
                 match tx.try_send(()) {
                     Ok(_) => log::info!("[PollingState] Cancelled previous polling task"),
                     Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {
-                        log::warn!("[PollingState] Cancel channel full, task may already be stopping");
+                        log::warn!(
+                            "[PollingState] Cancel channel full, task may already be stopping"
+                        );
                     }
                     Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
                         log::warn!("[PollingState] Cancel channel closed, task already stopped");
@@ -133,7 +141,10 @@ impl PollingState {
             // Start new polling task
             let cancel_tx = UsageManager::start_polling(app, interval_seconds);
             *guard = Some(cancel_tx);
-            log::info!("[PollingState] Started polling with interval: {}s", interval_seconds);
+            log::info!(
+                "[PollingState] Started polling with interval: {}s",
+                interval_seconds
+            );
         }
     }
 
@@ -145,7 +156,7 @@ impl PollingState {
             *shutting_down = true;
             log::info!("[PollingState] Shutdown flag set");
         }
-        
+
         // Then cancel the polling task
         if let Ok(mut guard) = self.cancel_tx.lock() {
             if let Some(tx) = guard.take() {
@@ -185,8 +196,6 @@ struct UpdateState {
     latest: Mutex<Option<UpdateInfo>>,
     last_check_time: Mutex<Option<chrono::DateTime<chrono::Local>>>,
 }
-
-
 
 /// Format a timestamp for display (HH:MM:SS for today, date only for other days)
 fn format_timestamp(date: Option<chrono::DateTime<chrono::Local>>) -> String {
@@ -260,14 +269,18 @@ fn update_tray_icon(
         .render_text_only(&text, 16, color)
         .into_tauri_image();
 
-    let tray_guard = state.tray.lock().map_err(|_| "tray lock poisoned".to_string())?;
-    let tray = tray_guard.as_ref().ok_or("tray not initialized".to_string())?;
+    let tray_guard = state
+        .tray
+        .lock()
+        .map_err(|_| "tray lock poisoned".to_string())?;
+    let tray = tray_guard
+        .as_ref()
+        .ok_or("tray not initialized".to_string())?;
     tray.set_icon(Some(image)).map_err(|err| err.to_string())?;
 
     #[cfg(target_os = "macos")]
     {
-        tray
-            .set_icon_as_template(true)
+        tray.set_icon_as_template(true)
             .map_err(|err| err.to_string())?;
     }
 
@@ -292,13 +305,22 @@ fn build_tray_menu(
     let version = app.package_info().version.to_string();
     let (used, limit) = store.get_usage();
     let usage_history = UsageManager::get_cached_history(app);
-    let prediction = UsageManager::predict_usage_from_history(&usage_history, used, limit, settings.prediction_period);
-    
+    let prediction = UsageManager::predict_usage_from_history(
+        &usage_history,
+        used,
+        limit,
+        settings.prediction_period,
+    );
+
     // Calculate metrics for dual-perspective display
     let remaining = limit.saturating_sub(used);
-    let percentage_used = if limit > 0 { (used as f32 / limit as f32) * 100.0 } else { 0.0 };
+    let percentage_used = if limit > 0 {
+        (used as f32 / limit as f32) * 100.0
+    } else {
+        0.0
+    };
     let percentage_remaining = 100.0 - percentage_used;
-    
+
     // Calculate daily metrics
     let now = chrono::Utc::now();
     let current_day = now.day() as f32;
@@ -307,79 +329,125 @@ fn build_tray_menu(
     } else {
         let next_month = chrono::NaiveDate::from_ymd_opt(now.year(), now.month() + 1, 1)
             .unwrap_or_else(|| chrono::NaiveDate::from_ymd_opt(now.year() + 1, 1, 1).unwrap());
-        let current_month =
-            chrono::NaiveDate::from_ymd_opt(now.year(), now.month(), 1).unwrap();
+        let current_month = chrono::NaiveDate::from_ymd_opt(now.year(), now.month(), 1).unwrap();
         (next_month - current_month).num_days() as u32
     };
     let days_remaining = days_in_month as f32 - current_day;
-    let daily_rate = if current_day > 0.0 { used as f32 / current_day } else { 0.0 };
+    let daily_rate = if current_day > 0.0 {
+        used as f32 / current_day
+    } else {
+        0.0
+    };
     // Floor the daily budget to be conservative (synced with Dashboard)
-    let daily_budget = if days_remaining > 0.0 { (remaining as f32 / days_remaining).floor() } else { 0.0 };
+    let daily_budget = if days_remaining > 0.0 {
+        (remaining as f32 / days_remaining).floor()
+    } else {
+        0.0
+    };
 
     let menu = Menu::new(app).map_err(|e| e.to_string())?;
-    
+
     // === USAGE OVERVIEW SECTION ===
     // === USAGE OVERVIEW SECTION ===
-    let overview_header = MenuItem::with_id(app, "overview_header", "📊 QUOTA STATUS", true, None::<&str>)
-        .map_err(|e| e.to_string())?;
+    let overview_header = MenuItem::with_id(
+        app,
+        "overview_header",
+        "📊 QUOTA STATUS",
+        true,
+        None::<&str>,
+    )
+    .map_err(|e| e.to_string())?;
     menu.append(&overview_header).map_err(|e| e.to_string())?;
-    
+
     if limit > 0 {
-        let quota_line = MenuItem::with_id(app, "quota_line", 
-            format!("   {used} / {limit} requests ({percentage_used:.0}%)"), true, None::<&str>)
-            .map_err(|e| e.to_string())?;
+        let quota_line = MenuItem::with_id(
+            app,
+            "quota_line",
+            format!("   {used} / {limit} requests ({percentage_used:.0}%)"),
+            true,
+            None::<&str>,
+        )
+        .map_err(|e| e.to_string())?;
         menu.append(&quota_line).map_err(|e| e.to_string())?;
-        
-        let remaining_line = MenuItem::with_id(app, "remaining_line", 
-            format!("   {remaining} remaining ({percentage_remaining:.0}%)"), true, None::<&str>)
-            .map_err(|e| e.to_string())?;
+
+        let remaining_line = MenuItem::with_id(
+            app,
+            "remaining_line",
+            format!("   {remaining} remaining ({percentage_remaining:.0}%)"),
+            true,
+            None::<&str>,
+        )
+        .map_err(|e| e.to_string())?;
         menu.append(&remaining_line).map_err(|e| e.to_string())?;
     } else {
-        let loading_line = MenuItem::with_id(app, "loading_line", "▶ Loading data...", true, None::<&str>)
-            .map_err(|e| e.to_string())?;
+        let loading_line =
+            MenuItem::with_id(app, "loading_line", "▶ Loading data...", true, None::<&str>)
+                .map_err(|e| e.to_string())?;
         menu.append(&loading_line).map_err(|e| e.to_string())?;
     }
-    
+
     menu.append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
-    
+
     // === CONSUMPTION RATE SECTION ===
     if limit > 0 && current_day > 0.0 {
         let rate_header = MenuItem::with_id(app, "rate_header", "📈 ACTIVITY", true, None::<&str>)
             .map_err(|e| e.to_string())?;
         menu.append(&rate_header).map_err(|e| e.to_string())?;
-        
-        let daily_rate_line = MenuItem::with_id(app, "daily_rate_line", 
-            format!("   ⚡ Usage: {:.0} req/day", daily_rate), true, None::<&str>)
-            .map_err(|e| e.to_string())?;
+
+        let daily_rate_line = MenuItem::with_id(
+            app,
+            "daily_rate_line",
+            format!("   ⚡ Usage: {:.0} req/day", daily_rate),
+            true,
+            None::<&str>,
+        )
+        .map_err(|e| e.to_string())?;
         menu.append(&daily_rate_line).map_err(|e| e.to_string())?;
-        
+
         if daily_budget > 0.0 {
-            let budget_line = MenuItem::with_id(app, "budget_line", 
-                format!("   🎯 Budget: {:.0} req/day", daily_budget), true, None::<&str>)
-                .map_err(|e| e.to_string())?;
+            let budget_line = MenuItem::with_id(
+                app,
+                "budget_line",
+                format!("   🎯 Budget: {:.0} req/day", daily_budget),
+                true,
+                None::<&str>,
+            )
+            .map_err(|e| e.to_string())?;
             menu.append(&budget_line).map_err(|e| e.to_string())?;
         }
 
-        let days_left_line = MenuItem::with_id(app, "days_left_line", 
-            format!("   🗓️ {days_remaining:.0} days remaining"), true, None::<&str>)
-            .map_err(|e| e.to_string())?;
+        let days_left_line = MenuItem::with_id(
+            app,
+            "days_left_line",
+            format!("   🗓️ {days_remaining:.0} days remaining"),
+            true,
+            None::<&str>,
+        )
+        .map_err(|e| e.to_string())?;
         menu.append(&days_left_line).map_err(|e| e.to_string())?;
-        
+
         menu.append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())?;
     }
 
     // === PREDICTION SECTION ===
     if let Some(prediction) = prediction {
-        let prediction_header = MenuItem::with_id(app, "prediction_header", "🔮 FORECAST", true, None::<&str>)
-            .map_err(|e| e.to_string())?;
+        let prediction_header =
+            MenuItem::with_id(app, "prediction_header", "🔮 FORECAST", true, None::<&str>)
+                .map_err(|e| e.to_string())?;
         menu.append(&prediction_header).map_err(|e| e.to_string())?;
-        
+
         let status_label = if prediction.predicted_monthly_requests > limit {
-            format!("   ⚠️ Exceed by {}", prediction.predicted_monthly_requests - limit)
+            format!(
+                "   ⚠️ Exceed by {}",
+                prediction.predicted_monthly_requests - limit
+            )
         } else {
-            format!("   ✅ Safe ({} left)", limit - prediction.predicted_monthly_requests)
+            format!(
+                "   ✅ Safe ({} left)",
+                limit - prediction.predicted_monthly_requests
+            )
         };
         let status_line = MenuItem::with_id(app, "status_line", status_label, true, None::<&str>)
             .map_err(|e| e.to_string())?;
@@ -390,26 +458,34 @@ fn build_tray_menu(
             "medium" => "🟡",
             _ => "🔴",
         };
-        let forecast_line = MenuItem::with_id(app, "forecast_line",
-            format!("   {confidence_icon} Expected: {} total", prediction.predicted_monthly_requests),
-            true, None::<&str>)
-            .map_err(|e| e.to_string())?;
+        let forecast_line = MenuItem::with_id(
+            app,
+            "forecast_line",
+            format!(
+                "   {confidence_icon} Expected: {} total",
+                prediction.predicted_monthly_requests
+            ),
+            true,
+            None::<&str>,
+        )
+        .map_err(|e| e.to_string())?;
         menu.append(&forecast_line).map_err(|e| e.to_string())?;
     } else {
-        let prediction_header = MenuItem::with_id(app, "prediction_header", "🔮 FORECAST", true, None::<&str>)
-            .map_err(|e| e.to_string())?;
+        let prediction_header =
+            MenuItem::with_id(app, "prediction_header", "🔮 FORECAST", true, None::<&str>)
+                .map_err(|e| e.to_string())?;
         menu.append(&prediction_header).map_err(|e| e.to_string())?;
         let no_data = MenuItem::with_id(app, "no_data", "   Insufficient data", true, None::<&str>)
             .map_err(|e| e.to_string())?;
         menu.append(&no_data).map_err(|e| e.to_string())?;
     }
-    
+
     menu.append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
 
     // === USAGE HISTORY SECTION ===
-    let history_submenu =
-        Submenu::with_id(app, "usage_history", "📜 Usage History ▶", true).map_err(|e| e.to_string())?;
+    let history_submenu = Submenu::with_id(app, "usage_history", "📜 Usage History ▶", true)
+        .map_err(|e| e.to_string())?;
     if !usage_history.is_empty() {
         for entry in usage_history.iter().take(7) {
             let date = chrono::DateTime::from_timestamp(entry.timestamp, 0)
@@ -426,8 +502,9 @@ fn build_tray_menu(
     }
     menu.append(&history_submenu).map_err(|e| e.to_string())?;
 
-    let prediction_period_submenu = Submenu::with_id(app, "prediction_period", "Prediction Period", true)
-        .map_err(|e| e.to_string())?;
+    let prediction_period_submenu =
+        Submenu::with_id(app, "prediction_period", "Prediction Period", true)
+            .map_err(|e| e.to_string())?;
     for (label, value) in [("7 days", 7_u32), ("14 days", 14_u32), ("21 days", 21_u32)] {
         let item = CheckMenuItem::with_id(
             app,
@@ -438,9 +515,12 @@ fn build_tray_menu(
             None::<&str>,
         )
         .map_err(|e| e.to_string())?;
-        prediction_period_submenu.append(&item).map_err(|e| e.to_string())?;
+        prediction_period_submenu
+            .append(&item)
+            .map_err(|e| e.to_string())?;
     }
-    menu.append(&prediction_period_submenu).map_err(|e| e.to_string())?;
+    menu.append(&prediction_period_submenu)
+        .map_err(|e| e.to_string())?;
 
     let refresh_submenu =
         Submenu::with_id(app, "auto_refresh", "Auto Refresh", true).map_err(|e| e.to_string())?;
@@ -473,15 +553,14 @@ fn build_tray_menu(
             .map_err(|e| e.to_string())?;
     menu.append(&open_dashboard).map_err(|e| e.to_string())?;
 
-    let open_billing =
-        MenuItem::with_id(app, "open_billing", "Open Billing", true, None::<&str>)
-            .map_err(|e| e.to_string())?;
+    let open_billing = MenuItem::with_id(app, "open_billing", "Open Billing", true, None::<&str>)
+        .map_err(|e| e.to_string())?;
     menu.append(&open_billing).map_err(|e| e.to_string())?;
 
     let refresh = MenuItem::with_id(app, "refresh", "Refresh", true, None::<&str>)
         .map_err(|e| e.to_string())?;
     menu.append(&refresh).map_err(|e| e.to_string())?;
-    
+
     // Show last refresh time below Refresh (from persisted store)
     let store = app.state::<StoreManager>();
     let last_fetch_timestamp = store.get_last_fetch_timestamp();
@@ -492,8 +571,9 @@ fn build_tray_menu(
         None
     };
     let last_refresh_label = format!("Last refresh: {}", format_timestamp(last_refresh_time));
-    let last_refresh_item = MenuItem::with_id(app, "last_refresh", last_refresh_label, false, None::<&str>)
-        .map_err(|e| e.to_string())?;
+    let last_refresh_item =
+        MenuItem::with_id(app, "last_refresh", last_refresh_label, false, None::<&str>)
+            .map_err(|e| e.to_string())?;
     menu.append(&last_refresh_item).map_err(|e| e.to_string())?;
 
     menu.append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
@@ -505,7 +585,11 @@ fn build_tray_menu(
     } else {
         false
     };
-    let widget_label = if widget_visible { "Hide Widget" } else { "Show Widget" };
+    let widget_label = if widget_visible {
+        "Hide Widget"
+    } else {
+        "Show Widget"
+    };
     let widget_item = MenuItem::with_id(app, "toggle_widget", widget_label, true, None::<&str>)
         .map_err(|e| e.to_string())?;
     menu.append(&widget_item).map_err(|e| e.to_string())?;
@@ -525,12 +609,11 @@ fn build_tray_menu(
     let update_item = MenuItem::with_id(app, "update_check", update_label, true, None::<&str>)
         .map_err(|e| e.to_string())?;
     menu.append(&update_item).map_err(|e| e.to_string())?;
-    
+
     // Show last check time below when no update is available (from persisted store)
     if update.is_none() {
         let store = app.state::<StoreManager>();
-        let last_check_time = store
-            .get_last_update_check_timestamp();
+        let last_check_time = store.get_last_update_check_timestamp();
         let last_check_dt = if last_check_time > 0 {
             chrono::DateTime::from_timestamp(last_check_time, 0)
                 .map(|dt| dt.with_timezone(&chrono::Local))
@@ -538,15 +621,20 @@ fn build_tray_menu(
             None
         };
         let last_check_label = format!("Last checked: {}", format_timestamp(last_check_dt));
-        let last_check_item = MenuItem::with_id(app, "last_check", last_check_label, false, None::<&str>)
-            .map_err(|e| e.to_string())?;
+        let last_check_item =
+            MenuItem::with_id(app, "last_check", last_check_label, false, None::<&str>)
+                .map_err(|e| e.to_string())?;
         menu.append(&last_check_item).map_err(|e| e.to_string())?;
     }
 
     menu.append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
 
-    let launch_label = if settings.launch_at_login { "☑️ Launch at Login" } else { "☐ Launch at Login" };
+    let launch_label = if settings.launch_at_login {
+        "☑️ Launch at Login"
+    } else {
+        "☐ Launch at Login"
+    };
     let launch_item = MenuItem::with_id(app, "launch_at_login", launch_label, true, None::<&str>)
         .map_err(|e| e.to_string())?;
     menu.append(&launch_item).map_err(|e| e.to_string())?;
@@ -555,24 +643,31 @@ fn build_tray_menu(
         .map_err(|e| e.to_string())?;
 
     // GitHub Links
-    let github_stars = MenuItem::with_id(app, "github_repo", "⭐ Star on GitHub", true, None::<&str>)
-        .map_err(|e| e.to_string())?;
+    let github_stars =
+        MenuItem::with_id(app, "github_repo", "⭐ Star on GitHub", true, None::<&str>)
+            .map_err(|e| e.to_string())?;
     menu.append(&github_stars).map_err(|e| e.to_string())?;
 
-    let github_issues = MenuItem::with_id(app, "github_issues", "🐛 Report Issue", true, None::<&str>)
-        .map_err(|e| e.to_string())?;
+    let github_issues =
+        MenuItem::with_id(app, "github_issues", "🐛 Report Issue", true, None::<&str>)
+            .map_err(|e| e.to_string())?;
     menu.append(&github_issues).map_err(|e| e.to_string())?;
 
     menu.append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
 
-    let version_item =
-        MenuItem::with_id(app, "version", format!("Version {}", version), false, None::<&str>)
-            .map_err(|e| e.to_string())?;
+    let version_item = MenuItem::with_id(
+        app,
+        "version",
+        format!("Version {}", version),
+        false,
+        None::<&str>,
+    )
+    .map_err(|e| e.to_string())?;
     menu.append(&version_item).map_err(|e| e.to_string())?;
 
-    let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)
-        .map_err(|e| e.to_string())?;
+    let quit_i =
+        MenuItem::with_id(app, "quit", "Quit", true, None::<&str>).map_err(|e| e.to_string())?;
     menu.append(&quit_i).map_err(|e| e.to_string())?;
 
     Ok(menu)
@@ -580,10 +675,13 @@ fn build_tray_menu(
 
 fn rebuild_tray_menu(app: &AppHandle, update: Option<&UpdateInfo>) -> Result<(), String> {
     let tray_state = app.state::<TrayState>();
-    
+
     // Debounce: Don't rebuild more than once per second
     {
-        let mut last_rebuild = tray_state.last_menu_rebuild.lock().map_err(|_| "lock poisoned")?;
+        let mut last_rebuild = tray_state
+            .last_menu_rebuild
+            .lock()
+            .map_err(|_| "lock poisoned")?;
         let now = std::time::Instant::now();
         if now.duration_since(*last_rebuild).as_millis() < 1000 {
             log::debug!("Skipping tray menu rebuild - too soon since last rebuild");
@@ -591,17 +689,22 @@ fn rebuild_tray_menu(app: &AppHandle, update: Option<&UpdateInfo>) -> Result<(),
         }
         *last_rebuild = now;
     }
-    
+
     let menu = build_tray_menu(app, update)?;
-    let tray_guard = tray_state.tray.lock().map_err(|_| "tray lock poisoned".to_string())?;
-    let tray = tray_guard.as_ref().ok_or("tray not initialized".to_string())?;
-    
+    let tray_guard = tray_state
+        .tray
+        .lock()
+        .map_err(|_| "tray lock poisoned".to_string())?;
+    let tray = tray_guard
+        .as_ref()
+        .ok_or("tray not initialized".to_string())?;
+
     // Set new menu (Tauri automatically cleans up old menu)
     tray.set_menu(Some(menu)).map_err(|e| e.to_string())?;
-    
+
     // Force cleanup of old menu references by dropping the guard early
     drop(tray_guard);
-    
+
     log::debug!("Tray menu rebuilt successfully");
     Ok(())
 }
@@ -647,14 +750,16 @@ async fn perform_auth_extraction(
 }
 
 #[tauri::command]
-async fn check_auth_status(
-    app: AppHandle,
-) -> Result<copilot_tracker::AuthState, String> {
+async fn check_auth_status(app: AppHandle) -> Result<copilot_tracker::AuthState, String> {
     let store = app.state::<StoreManager>();
     let customer_id = store.get_customer_id();
 
     let is_authenticated = customer_id.is_some();
-    let state_str = if is_authenticated { "authenticated" } else { "unauthenticated" };
+    let state_str = if is_authenticated {
+        "authenticated"
+    } else {
+        "unauthenticated"
+    };
     let _ = app.emit("auth:state-changed", state_str);
 
     Ok(copilot_tracker::AuthState {
@@ -699,45 +804,37 @@ async fn fetch_usage(
 }
 
 #[tauri::command]
-fn get_cached_usage(
-    app: AppHandle,
-) -> Result<copilot_tracker::UsageSummary, String> {
+fn get_cached_usage(app: AppHandle) -> Result<copilot_tracker::UsageSummary, String> {
     UsageManager::get_cached_usage(&app)
 }
 
 #[tauri::command]
-fn predict_eom_usage(
-    app: AppHandle,
-) -> Result<u32, String> {
+fn predict_eom_usage(app: AppHandle) -> Result<u32, String> {
     UsageManager::predict_eom_usage(&app)
 }
 
 #[tauri::command]
-fn days_until_limit(
-    app: AppHandle,
-) -> Result<Option<i64>, String> {
+fn days_until_limit(app: AppHandle) -> Result<Option<i64>, String> {
     UsageManager::days_until_limit(&app)
 }
 
 #[tauri::command]
-fn get_cached_usage_data(
-    app: AppHandle,
-) -> Result<Option<copilot_tracker::UsagePayload>, String> {
+fn get_cached_usage_data(app: AppHandle) -> Result<Option<copilot_tracker::UsagePayload>, String> {
     let store = app.state::<StoreManager>();
     let (used, limit) = store.get_usage();
     let is_authenticated = store.is_authenticated();
-    
+
     if !is_authenticated {
         return Ok(None);
     }
-    
+
     let remaining = limit.saturating_sub(used);
     let percentage = if limit > 0 {
         (used as f32 / limit as f32) * 100.0
     } else {
         0.0
     };
-    
+
     let summary = copilot_tracker::UsageSummary {
         used,
         limit,
@@ -745,11 +842,12 @@ fn get_cached_usage_data(
         percentage,
         timestamp: chrono::Utc::now().timestamp(),
     };
-    
+
     let history = UsageManager::get_cached_history(&app);
     let settings = store.get_settings();
-    let prediction = UsageManager::predict_usage_from_history(&history, used, limit, settings.prediction_period);
-    
+    let prediction =
+        UsageManager::predict_usage_from_history(&history, used, limit, settings.prediction_period);
+
     Ok(Some(copilot_tracker::UsagePayload {
         summary,
         history,
@@ -762,25 +860,18 @@ fn get_cached_usage_data(
 // ============================================================================
 
 #[tauri::command]
-fn get_settings(
-    app: AppHandle,
-) -> Result<copilot_tracker::AppSettings, String> {
+fn get_settings(app: AppHandle) -> Result<copilot_tracker::AppSettings, String> {
     let store = app.state::<StoreManager>();
     Ok(store.get_settings())
 }
 
 #[tauri::command]
-fn get_app_version(
-    app: AppHandle,
-) -> Result<String, String> {
+fn get_app_version(app: AppHandle) -> Result<String, String> {
     Ok(app.package_info().version.to_string())
 }
 
 #[tauri::command]
-fn update_settings(
-    app: AppHandle,
-    settings: copilot_tracker::AppSettings,
-) -> Result<(), String> {
+fn update_settings(app: AppHandle, settings: copilot_tracker::AppSettings) -> Result<(), String> {
     let store = app.state::<StoreManager>();
     let previous = store.get_settings();
     store.update_settings(|s| {
@@ -818,22 +909,25 @@ fn update_settings(
 #[tauri::command]
 fn reset_settings(app: AppHandle) -> Result<copilot_tracker::AppSettings, String> {
     log::info!("Resetting all settings and data...");
-    
+
     let store = app.state::<StoreManager>();
     let defaults = store.reset_settings()?;
-    
-    log::info!("Store reset complete, customer_id is now: {:?}", store.get_customer_id());
-    
+
+    log::info!(
+        "Store reset complete, customer_id is now: {:?}",
+        store.get_customer_id()
+    );
+
     // IMPORTANT: Emit auth state changed FIRST before settings changed
     // This ensures frontend clears auth state before any other events
     let _ = app.emit("auth:state-changed", "unauthenticated");
     log::info!("Emitted auth:state-changed = unauthenticated");
-    
+
     // Small delay to ensure auth event is processed before settings event.
     // Note: This is a synchronous command, so blocking sleep is acceptable here.
     // The Tauri runtime handles this in a thread pool.
     std::thread::sleep(std::time::Duration::from_millis(50));
-    
+
     // Then emit settings changed
     let _ = app.emit("settings:changed", defaults.clone());
     log::info!("Emitted settings:changed with defaults");
@@ -841,12 +935,16 @@ fn reset_settings(app: AppHandle) -> Result<copilot_tracker::AppSettings, String
     // CRITICAL: Emit usage:updated with empty data to reset tray icon
     let (used, limit) = store.get_usage();
     log::info!("Reset usage values: used={}, limit={}", used, limit);
-    
+
     let summary = copilot_tracker::UsageSummary {
         used,
         limit,
         remaining: limit.saturating_sub(used),
-        percentage: if limit > 0 { (used as f32 / limit as f32) * 100.0 } else { 0.0 },
+        percentage: if limit > 0 {
+            (used as f32 / limit as f32) * 100.0
+        } else {
+            0.0
+        },
         timestamp: chrono::Utc::now().timestamp(),
     };
     let _ = app.emit("usage:updated", &summary);
@@ -869,23 +967,20 @@ fn reset_settings(app: AppHandle) -> Result<copilot_tracker::AppSettings, String
 async fn logout(app: AppHandle) -> Result<(), String> {
     let store = app.state::<StoreManager>();
     store.clear_auth()?;
-    
+
     // Stop background polling when user logs out
     let polling_state = app.state::<PollingState>();
     polling_state.stop_polling();
     log::info!("[Logout] Background polling stopped");
-    
+
     // Emit event to frontend
     let _ = app.emit("auth:state-changed", "unauthenticated");
-    
+
     Ok(())
 }
 
 #[tauri::command]
-fn set_launch_at_login(
-    app: AppHandle,
-    enabled: bool,
-) -> Result<(), String> {
+fn set_launch_at_login(app: AppHandle, enabled: bool) -> Result<(), String> {
     let store = app.state::<StoreManager>();
     store.set_launch_at_login(enabled)?;
 
@@ -919,7 +1014,9 @@ fn hide_main_window(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 fn open_external_url(app: AppHandle, url: String) -> Result<(), String> {
-    app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|e| e.to_string())
 }
 
 // ============================================================================
@@ -941,12 +1038,10 @@ fn toggle_widget(app: AppHandle) -> Result<bool, String> {
         } else {
             // Restore position before showing
             let widget_position = store.get_widget_position();
-            let _ = widget.set_position(tauri::Position::Physical(
-                tauri::PhysicalPosition {
-                    x: widget_position.x,
-                    y: widget_position.y
-                }
-            ));
+            let _ = widget.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+                x: widget_position.x,
+                y: widget_position.y,
+            }));
             show_widget_without_focus(&widget)?;
             // Mark widget as enabled and visible so it restores on restart
             let _ = store.set_widget_enabled(true);
@@ -970,10 +1065,10 @@ fn hide_widget(app: AppHandle) -> Result<(), String> {
         // Fully disable widget when closing (must re-enable from settings)
         let _ = store.set_widget_enabled(false);
         let _ = store.set_widget_visible(false);
-        
+
         // Notify all windows of widget state change
         let _ = app.emit("widget:enabled-changed", false);
-        
+
         // Rebuild tray menu to update "Show Widget" label
         if let Ok(menu) = build_tray_menu(&app, None) {
             if let Some(tray_state) = app.try_state::<TrayState>() {
@@ -1002,7 +1097,7 @@ fn minimize_widget(app: AppHandle) -> Result<(), String> {
 fn show_widget_without_focus(widget: &tauri::WebviewWindow) -> Result<(), String> {
     // Show the widget
     widget.show().map_err(|e| e.to_string())?;
-    
+
     // Platform-specific focus prevention
     #[cfg(target_os = "macos")]
     {
@@ -1010,13 +1105,13 @@ fn show_widget_without_focus(widget: &tauri::WebviewWindow) -> Result<(), String
         // The window is configured with skip_taskbar and decorations=false
         // which helps, but we also minimize and restore to avoid focus steal
         // This is a workaround since we can't easily access NSWindow APIs without objc
-        
+
         // Small delay to let the show complete, then minimize and restore
         // This breaks the focus chain
         std::thread::sleep(std::time::Duration::from_millis(10));
         let _ = widget.set_always_on_top(true);
     }
-    
+
     #[cfg(target_os = "windows")]
     {
         // On Windows, the window configuration (skip_taskbar, decorations=false)
@@ -1024,14 +1119,14 @@ fn show_widget_without_focus(widget: &tauri::WebviewWindow) -> Result<(), String
         // We ensure always_on_top is set to keep it floating
         let _ = widget.set_always_on_top(true);
     }
-    
+
     #[cfg(target_os = "linux")]
     {
         // On Linux, most window managers respect the window type
         // The skip_taskbar and decorations settings help prevent focus stealing
         let _ = widget.set_always_on_top(true);
     }
-    
+
     Ok(())
 }
 
@@ -1047,7 +1142,8 @@ fn is_widget_visible(app: AppHandle) -> Result<bool, String> {
 #[tauri::command]
 async fn set_widget_position(app: AppHandle, x: i32, y: i32) -> Result<(), String> {
     if let Some(widget) = app.get_webview_window("widget") {
-        widget.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }))
+        widget
+            .set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }))
             .map_err(|e| e.to_string())?;
         // Save position to settings
         let store = app.state::<StoreManager>();
@@ -1059,7 +1155,7 @@ async fn set_widget_position(app: AppHandle, x: i32, y: i32) -> Result<(), Strin
 #[tauri::command]
 async fn get_widget_position(app: AppHandle) -> Result<WidgetPosition, String> {
     let store = app.state::<StoreManager>();
-    
+
     if let Some(widget) = app.get_webview_window("widget") {
         let pos = widget.outer_position().map_err(|e| e.to_string())?;
         Ok(WidgetPosition { x: pos.x, y: pos.y })
@@ -1072,7 +1168,9 @@ async fn get_widget_position(app: AppHandle) -> Result<WidgetPosition, String> {
 #[tauri::command]
 async fn set_widget_pinned(app: AppHandle, pinned: bool) -> Result<(), String> {
     if let Some(widget) = app.get_webview_window("widget") {
-        widget.set_always_on_top(pinned).map_err(|e| e.to_string())?;
+        widget
+            .set_always_on_top(pinned)
+            .map_err(|e| e.to_string())?;
         // Save pin state to settings
         let store = app.state::<StoreManager>();
         let _ = store.set_widget_pinned(pinned);
@@ -1097,10 +1195,12 @@ async fn is_widget_enabled(app: AppHandle) -> Result<bool, String> {
 #[tauri::command]
 async fn set_widget_enabled(app: AppHandle, enabled: bool) -> Result<(), String> {
     let store = app.state::<StoreManager>();
-    store.set_widget_enabled(enabled).map_err(|e| e.to_string())?;
-    
+    store
+        .set_widget_enabled(enabled)
+        .map_err(|e| e.to_string())?;
+
     log::info!("[Widget] set_widget_enabled called: enabled={}", enabled);
-    
+
     // Always set widget_visible state regardless of window availability
     // This ensures the state persists even if window is not ready yet
     if enabled {
@@ -1110,21 +1210,19 @@ async fn set_widget_enabled(app: AppHandle, enabled: bool) -> Result<(), String>
         let _ = store.set_widget_visible(false);
         log::info!("[Widget] Set widget_visible=false");
     }
-    
+
     // Emit event to notify all windows of widget state change
     let _ = app.emit("widget:enabled-changed", enabled);
-    
+
     // If enabling, also show the widget
     if enabled {
         if let Some(widget) = app.get_webview_window("widget") {
             // Restore position before showing
             let widget_position = store.get_widget_position();
-            let _ = widget.set_position(tauri::Position::Physical(
-                tauri::PhysicalPosition {
-                    x: widget_position.x,
-                    y: widget_position.y
-                }
-            ));
+            let _ = widget.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+                x: widget_position.x,
+                y: widget_position.y,
+            }));
             let _ = widget.show();
             log::info!("[Widget] Widget window shown");
         } else {
@@ -1137,10 +1235,10 @@ async fn set_widget_enabled(app: AppHandle, enabled: bool) -> Result<(), String>
             log::info!("[Widget] Widget window hidden");
         }
     }
-    
+
     // Rebuild tray menu to update the widget toggle label
     let _ = rebuild_tray_menu(&app, None);
-    
+
     Ok(())
 }
 
@@ -1154,13 +1252,11 @@ fn process_release_data(
     release: serde_json::Value,
     send_status: &dyn Fn(&str, Option<&str>),
 ) -> Result<(), String> {
-    let send_status = send_status;
-
     // Store the last check time at the start (regardless of outcome)
     let update_state = app.state::<UpdateState>();
     let now = chrono::Local::now();
     *update_state.last_check_time.lock().unwrap() = Some(now);
-    
+
     // Persist to store
     let store = app.state::<StoreManager>();
     let _ = store.set_last_update_check_timestamp(now.timestamp());
@@ -1173,7 +1269,7 @@ fn process_release_data(
     let latest_version = tag_name.trim_start_matches('v');
     let current_version = app.package_info().version.to_string();
 
-    let latest = match semver::Version::parse(&latest_version) {
+    let latest = match semver::Version::parse(latest_version) {
         Ok(version) => version,
         Err(_) => {
             send_status("error", Some("Invalid version format"));
@@ -1207,9 +1303,18 @@ fn process_release_data(
                 .unwrap_or("https://github.com/bizzkoot/copilot-tracker/releases")
                 .to_string(),
             download_url,
-            release_name: release.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()),
-            release_notes: release.get("body").and_then(|v| v.as_str()).map(|s| s.to_string()),
-            release_date: release.get("published_at").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            release_name: release
+                .get("name")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            release_notes: release
+                .get("body")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            release_date: release
+                .get("published_at")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
         };
 
         *update_state.latest.lock().unwrap() = Some(info.clone());
@@ -1227,11 +1332,11 @@ fn process_release_data(
                 .show();
         }
 
-        let _ = rebuild_tray_menu(&app, Some(&info));
+        let _ = rebuild_tray_menu(app, Some(&info));
     } else {
         *update_state.latest.lock().unwrap() = None;
         send_status("none", None);
-        
+
         // Show notification that app is up to date
         let store = app.state::<StoreManager>();
         if store.get_show_notifications() {
@@ -1239,11 +1344,14 @@ fn process_release_data(
                 .notification()
                 .builder()
                 .title("Copilot Tracker")
-                .body(format!("You're running the latest version ({}).", current_version))
+                .body(format!(
+                    "You're running the latest version ({}).",
+                    current_version
+                ))
                 .show();
         }
-        
-        let _ = rebuild_tray_menu(&app, None);
+
+        let _ = rebuild_tray_menu(app, None);
     }
 
     Ok(())
@@ -1283,7 +1391,10 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
                     let store = app.state::<StoreManager>();
                     let _ = store.set_last_update_check_timestamp(now.timestamp());
 
-                    send_status("error", Some(format!("GitHub API returned status: {}", resp.status()).as_str()));
+                    send_status(
+                        "error",
+                        Some(format!("GitHub API returned status: {}", resp.status()).as_str()),
+                    );
 
                     if store.get_show_notifications() {
                         let _ = app
@@ -1312,7 +1423,10 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
                         let store = app.state::<StoreManager>();
                         let _ = store.set_last_update_check_timestamp(now.timestamp());
 
-                        send_status("error", Some(format!("Failed to parse update response: {}", err).as_str()));
+                        send_status(
+                            "error",
+                            Some(format!("Failed to parse update response: {}", err).as_str()),
+                        );
 
                         if store.get_show_notifications() {
                             let _ = app
@@ -1330,94 +1444,30 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
                 process_release_data(&app, release, &send_status)?;
             }
             Err(reqwest_err) => {
-                log::warn!("[Update] Reqwest failed: {}, trying tauri-plugin-http", reqwest_err);
+                log::error!("[Update] Reqwest failed. Final error: {}", reqwest_err);
 
-                let request = fetch(GITHUB_API_URL, Default::default())
-                    .await;
+                let update_state = app.state::<UpdateState>();
+                let now = chrono::Local::now();
+                *update_state.last_check_time.lock().unwrap() = Some(now);
 
-                match request {
-                    Ok(resp) => {
-                        if !resp.status().is_success() {
-                            let update_state = app.state::<UpdateState>();
-                            let now = chrono::Local::now();
-                            *update_state.last_check_time.lock().unwrap() = Some(now);
+                let store = app.state::<StoreManager>();
+                let _ = store.set_last_update_check_timestamp(now.timestamp());
 
-                            let store = app.state::<StoreManager>();
-                            let _ = store.set_last_update_check_timestamp(now.timestamp());
+                send_status(
+                    "error",
+                    Some(format!("Update check failed (reqwest: {})", reqwest_err).as_str()),
+                );
 
-                            send_status("error", Some(format!("GitHub API returned status: {}", resp.status()).as_str()));
-
-                            if store.get_show_notifications() {
-                                let _ = app
-                                    .notification()
-                                    .builder()
-                                    .title("Copilot Tracker")
-                                    .body("Failed to check for updates. Please try again later.")
-                                    .show();
-                            }
-                            let _ = rebuild_tray_menu(&app, None);
-                            return Ok(());
-                        }
-
-                        let release = match resp.json::<serde_json::Value>().await {
-                            Ok(value) => {
-                                log::info!("[Update] tauri-plugin-http succeeded");
-                                value
-                            }
-                            Err(err) => {
-                                log::error!("[Update] Failed to parse response: {}", err);
-
-                                let update_state = app.state::<UpdateState>();
-                                let now = chrono::Local::now();
-                                *update_state.last_check_time.lock().unwrap() = Some(now);
-
-                                let store = app.state::<StoreManager>();
-                                let _ = store.set_last_update_check_timestamp(now.timestamp());
-
-                                send_status("error", Some(format!("Failed to parse update response: {}", err).as_str()));
-
-                                if store.get_show_notifications() {
-                                    let _ = app
-                                        .notification()
-                                        .builder()
-                                        .title("Copilot Tracker")
-                                        .body("Failed to check for updates. Please try again later.")
-                                        .show();
-                                }
-                                let _ = rebuild_tray_menu(&app, None);
-                                return Ok(());
-                            }
-                        };
-
-                        process_release_data(&app, release, &send_status)?;
-                    }
-                    Err(fetch_err) => {
-                        log::error!("[Update] All methods failed. Final error: {}", fetch_err);
-
-                        let update_state = app.state::<UpdateState>();
-                        let now = chrono::Local::now();
-                        *update_state.last_check_time.lock().unwrap() = Some(now);
-
-                        let store = app.state::<StoreManager>();
-                        let _ = store.set_last_update_check_timestamp(now.timestamp());
-
-                        send_status("error", Some(format!(
-                            "Update check failed (reqwest: {}, tauri-http: {})",
-                            reqwest_err, fetch_err
-                        ).as_str()));
-
-                        if store.get_show_notifications() {
-                            let _ = app
-                                .notification()
-                                .builder()
-                                .title("Copilot Tracker")
-                                .body("Failed to check for updates. Please check your connection.")
-                                .show();
-                        }
-                        let _ = rebuild_tray_menu(&app, None);
-                        return Ok(());
-                    }
+                if store.get_show_notifications() {
+                    let _ = app
+                        .notification()
+                        .builder()
+                        .title("Copilot Tracker")
+                        .body("Failed to check for updates. Please check your connection.")
+                        .show();
                 }
+                let _ = rebuild_tray_menu(&app, None);
+                return Ok(());
             }
         }
 
@@ -1431,98 +1481,84 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
 
         let mut auth_manager = AuthManager::new();
         match auth_manager.fetch_github_releases(&app).await {
-        Ok(release_json) => {
-            // Successfully fetched via webview
-            log::info!("[Update] Webview fetch succeeded");
-            let release = if release_json.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
-                release_json.get("data").cloned().unwrap_or(release_json)
-            } else {
-                // Store last check time even on error
-                let update_state = app.state::<UpdateState>();
-                let now = chrono::Local::now();
-                *update_state.last_check_time.lock().unwrap() = Some(now);
-                
-                // Persist to store
-                let store = app.state::<StoreManager>();
-                let _ = store.set_last_update_check_timestamp(now.timestamp());
-                
-                let error_msg = format!("Webview fetch failed: {}",
-                    release_json.get("error").and_then(|v| v.as_str()).unwrap_or("unknown error"));
-                send_status("error", Some(&error_msg));
-                
-                // Show error notification
-                if store.get_show_notifications() {
-                    let _ = app
-                        .notification()
-                        .builder()
-                        .title("Copilot Tracker")
-                        .body("Failed to check for updates. Please try again later.")
-                        .show();
-                }
-                let _ = rebuild_tray_menu(&app, None);
-                return Ok(());
-            };
-            process_release_data(&app, release, &send_status)?;
-        }
-        Err(webview_err) => {
-            log::warn!("[Update] Webview fetch failed: {}, trying reqwest fallback", webview_err);
-            
-            // Solution #2: Fallback to reqwest with rustls TLS
-            log::info!("[Update] Attempting update check via reqwest with rustls TLS...");
-            
-            let client = reqwest::Client::new();
-            let response = client
-                .get(GITHUB_API_URL)
-                .header("User-Agent", "Copilot-Tracker-App")
-                .send()
-                .await;
+            Ok(release_json) => {
+                // Successfully fetched via webview
+                log::info!("[Update] Webview fetch succeeded");
+                let release = if release_json
+                    .get("success")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
+                {
+                    release_json.get("data").cloned().unwrap_or(release_json)
+                } else {
+                    // Store last check time even on error
+                    let update_state = app.state::<UpdateState>();
+                    let now = chrono::Local::now();
+                    *update_state.last_check_time.lock().unwrap() = Some(now);
 
-            match response {
-                Ok(resp) => {
-                    if !resp.status().is_success() {
-                        // Store last check time even on error
-                        let update_state = app.state::<UpdateState>();
-                        let now = chrono::Local::now();
-                        *update_state.last_check_time.lock().unwrap() = Some(now);
-                        
-                        // Persist to store
-                        let store = app.state::<StoreManager>();
-                        let _ = store.set_last_update_check_timestamp(now.timestamp());
-                        
-                        send_status("error", Some(format!("GitHub API returned status: {}", resp.status()).as_str()));
-                        
-                        // Show error notification
-                        if store.get_show_notifications() {
-                            let _ = app
-                                .notification()
-                                .builder()
-                                .title("Copilot Tracker")
-                                .body("Failed to check for updates. Please try again later.")
-                                .show();
-                        }
-                        let _ = rebuild_tray_menu(&app, None);
-                        return Ok(());
+                    // Persist to store
+                    let store = app.state::<StoreManager>();
+                    let _ = store.set_last_update_check_timestamp(now.timestamp());
+
+                    let error_msg = format!(
+                        "Webview fetch failed: {}",
+                        release_json
+                            .get("error")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown error")
+                    );
+                    send_status("error", Some(&error_msg));
+
+                    // Show error notification
+                    if store.get_show_notifications() {
+                        let _ = app
+                            .notification()
+                            .builder()
+                            .title("Copilot Tracker")
+                            .body("Failed to check for updates. Please try again later.")
+                            .show();
                     }
-                    
-                    let release = match resp.json().await {
-                        Ok(value) => {
-                            log::info!("[Update] Reqwest fallback succeeded");
-                            value
-                        }
-                        Err(err) => {
-                            log::error!("[Update] Failed to parse response: {}", err);
-                            
+                    let _ = rebuild_tray_menu(&app, None);
+                    return Ok(());
+                };
+                process_release_data(&app, release, &send_status)?;
+            }
+            Err(webview_err) => {
+                log::warn!(
+                    "[Update] Webview fetch failed: {}, trying reqwest fallback",
+                    webview_err
+                );
+
+                // Solution #2: Fallback to reqwest with rustls TLS
+                log::info!("[Update] Attempting update check via reqwest with rustls TLS...");
+
+                let client = reqwest::Client::new();
+                let response = client
+                    .get(GITHUB_API_URL)
+                    .header("User-Agent", "Copilot-Tracker-App")
+                    .send()
+                    .await;
+
+                match response {
+                    Ok(resp) => {
+                        if !resp.status().is_success() {
                             // Store last check time even on error
                             let update_state = app.state::<UpdateState>();
                             let now = chrono::Local::now();
                             *update_state.last_check_time.lock().unwrap() = Some(now);
-                            
+
                             // Persist to store
                             let store = app.state::<StoreManager>();
                             let _ = store.set_last_update_check_timestamp(now.timestamp());
-                            
-                            send_status("error", Some(format!("Failed to parse update response: {}", err).as_str()));
-                            
+
+                            send_status(
+                                "error",
+                                Some(
+                                    format!("GitHub API returned status: {}", resp.status())
+                                        .as_str(),
+                                ),
+                            );
+
                             // Show error notification
                             if store.get_show_notifications() {
                                 let _ = app
@@ -1535,104 +1571,87 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
                             let _ = rebuild_tray_menu(&app, None);
                             return Ok(());
                         }
-                    };
-                    
-                    process_release_data(&app, release, &send_status)?;
-                }
-                Err(reqwest_err) => {
-                    log::warn!("[Update] Reqwest fallback failed: {}, trying tauri-plugin-http", reqwest_err);
-                    
-                    // Solution #3: Fallback to tauri-plugin-http (has proper permissions)
-                    log::info!("[Update] Attempting update check via tauri-plugin-http...");
-                    
-                    let request = fetch(GITHUB_API_URL, Default::default())
-                        .await;
-                    
-                    match request {
-                        Ok(resp) => {
-                            if !resp.status().is_success() {
+
+                        let release = match resp.json().await {
+                            Ok(value) => {
+                                log::info!("[Update] Reqwest fallback succeeded");
+                                value
+                            }
+                            Err(err) => {
+                                log::error!("[Update] Failed to parse response: {}", err);
+
+                                // Store last check time even on error
                                 let update_state = app.state::<UpdateState>();
                                 let now = chrono::Local::now();
                                 *update_state.last_check_time.lock().unwrap() = Some(now);
-                                
+
+                                // Persist to store
                                 let store = app.state::<StoreManager>();
                                 let _ = store.set_last_update_check_timestamp(now.timestamp());
-                                
-                                send_status("error", Some(format!("GitHub API returned status: {}", resp.status()).as_str()));
-                                
+
+                                send_status(
+                                    "error",
+                                    Some(
+                                        format!("Failed to parse update response: {}", err)
+                                            .as_str(),
+                                    ),
+                                );
+
+                                // Show error notification
                                 if store.get_show_notifications() {
                                     let _ = app
                                         .notification()
                                         .builder()
                                         .title("Copilot Tracker")
-                                        .body("Failed to check for updates. Please try again later.")
+                                        .body(
+                                            "Failed to check for updates. Please try again later.",
+                                        )
                                         .show();
                                 }
                                 let _ = rebuild_tray_menu(&app, None);
                                 return Ok(());
                             }
-                            
-                            let release = match resp.json::<serde_json::Value>().await {
-                                Ok(value) => {
-                                    log::info!("[Update] tauri-plugin-http fallback succeeded");
-                                    value
-                                }
-                                Err(err) => {
-                                    log::error!("[Update] Failed to parse tauri-plugin-http response: {}", err);
-                                    
-                                    let update_state = app.state::<UpdateState>();
-                                    let now = chrono::Local::now();
-                                    *update_state.last_check_time.lock().unwrap() = Some(now);
-                                    
-                                    let store = app.state::<StoreManager>();
-                                    let _ = store.set_last_update_check_timestamp(now.timestamp());
-                                    
-                                    send_status("error", Some(format!("Failed to parse update response: {}", err).as_str()));
-                                    
-                                    if store.get_show_notifications() {
-                                        let _ = app
-                                            .notification()
-                                            .builder()
-                                            .title("Copilot Tracker")
-                                            .body("Failed to check for updates. Please try again later.")
-                                            .show();
-                                    }
-                                    let _ = rebuild_tray_menu(&app, None);
-                                    return Ok(());
-                                }
-                            };
-                            
-                            process_release_data(&app, release, &send_status)?;
+                        };
+
+                        process_release_data(&app, release, &send_status)?;
+                    }
+                    Err(reqwest_err) => {
+                        log::error!(
+                            "[Update] Both methods failed (webview + reqwest). Final error: {}",
+                            reqwest_err
+                        );
+
+                        // Store last check time even on error
+                        let update_state = app.state::<UpdateState>();
+                        let now = chrono::Local::now();
+                        *update_state.last_check_time.lock().unwrap() = Some(now);
+
+                        // Persist to store
+                        let store = app.state::<StoreManager>();
+                        let _ = store.set_last_update_check_timestamp(now.timestamp());
+
+                        send_status(
+                            "error",
+                            Some(
+                                format!(
+                                    "Update check failed (webview: {}, reqwest: {})",
+                                    webview_err, reqwest_err
+                                )
+                                .as_str(),
+                            ),
+                        );
+
+                        // Show error notification
+                        if store.get_show_notifications() {
+                            let _ = app
+                                .notification()
+                                .builder()
+                                .title("Copilot Tracker")
+                                .body("Failed to check for updates. Please check your connection.")
+                                .show();
                         }
-                        Err(fetch_err) => {
-                            log::error!("[Update] All three methods failed. Final error: {}", fetch_err);
-                            
-                            // Store last check time even on error
-                            let update_state = app.state::<UpdateState>();
-                            let now = chrono::Local::now();
-                            *update_state.last_check_time.lock().unwrap() = Some(now);
-                            
-                            // Persist to store
-                            let store = app.state::<StoreManager>();
-                            let _ = store.set_last_update_check_timestamp(now.timestamp());
-                            
-                            send_status("error", Some(format!(
-                                "Update check failed (webview: {}, reqwest: {}, tauri-http: {})",
-                                webview_err, reqwest_err, fetch_err
-                            ).as_str()));
-                            
-                            // Show error notification
-                            if store.get_show_notifications() {
-                                let _ = app
-                                    .notification()
-                                    .builder()
-                                    .title("Copilot Tracker")
-                                    .body("Failed to check for updates. Please check your connection.")
-                                    .show();
-                            }
-                            let _ = rebuild_tray_menu(&app, None);
-                            return Ok(());
-                        }
+                        let _ = rebuild_tray_menu(&app, None);
+                        return Ok(());
                     }
                 }
             }
@@ -1712,7 +1731,7 @@ fn main() {
     // We generate the context here to access config/identifier, then pass it to the runner
     let context = tauri::generate_context!();
     let identifier = context.config().identifier.clone();
-    
+
     // Resolve app directory manually using helper (Standard paths for Win/Mac/Linux)
     let app_dir = resolve_app_dir(&identifier);
     log::info!("Resolved app data directory: {:?}", app_dir);
@@ -1793,7 +1812,7 @@ fn main() {
 
             // NOTE: StoreManager is already initialized and managed in Builder::default() above.
             // init_store_manager(app.handle())?; <--- REMOVED (Caused the race condition on Windows)
-            
+
             log::info!("StoreManager initialized and managed successfully (in main)");
 
             // Now safe to build tray menu (it accesses StoreManager)
@@ -1861,14 +1880,14 @@ fn main() {
                             let mut usage_manager = UsageManager::new();
                             match usage_manager.fetch_usage(&app_handle).await {
                                 Ok(summary) => {
-                                    log::info!("Refresh successful: {}/{} ({}%)", 
+                                    log::info!("Refresh successful: {}/{} ({}%)",
                                         summary.used, summary.limit, summary.percentage);
-                                    
+
                                     // Rebuild tray menu to show updated timestamp
                                     let update_state = app_handle.state::<UpdateState>();
                                     let latest = update_state.latest.lock().unwrap();
                                     let _ = rebuild_tray_menu(&app_handle, latest.as_ref());
-                                    
+
                                     // Show notification on success (if enabled)
                                     if let Some(store) = app_handle.try_state::<StoreManager>() {
                                         if store.get_show_notifications() {
@@ -1945,7 +1964,7 @@ fn main() {
                             let old_interval = settings.refresh_interval;
                             settings.refresh_interval = value;
                             let _ = update_settings(app.clone(), settings);
-                            
+
                             // Restart background polling with new interval
                             if old_interval != value {
                                 let polling_state = app.state::<PollingState>();
@@ -2002,7 +2021,7 @@ fn main() {
             app_handle.listen("usage:updated", move |event| {
                 let payload = event.payload();
                 log::info!("[TrayListener] Received usage:updated event, payload: {}", payload);
-                
+
                 // usage:updated emits UsageSummary, not UsagePayload
                 let parsed: copilot_tracker::UsageSummary = match serde_json::from_str(payload) {
                     Ok(parsed) => parsed,
@@ -2032,7 +2051,7 @@ fn main() {
                     let app_handle = app_handle_close.clone();
                     if let Some(window) = app_handle.get_webview_window("main") {
                         let _ = window.hide();
-                        
+
                         // Hide app from dock/taskbar when window closes (cross-platform)
                         // macOS: Set activation policy to accessory to remove dock icon
                         #[cfg(target_os = "macos")]
@@ -2044,13 +2063,13 @@ fn main() {
                             // commands/close handlers.
                             let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
                         }
-                        
+
                         // Windows: Hide from taskbar using skipTaskbar
                         #[cfg(target_os = "windows")]
                         {
                             let _ = window.set_skip_taskbar(true);
                         }
-                        
+
                         // Linux: Window manager handles taskbar visibility automatically
                     }
                 }
@@ -2060,26 +2079,26 @@ fn main() {
             let store = app.state::<StoreManager>();
             let (used, limit) = store.get_usage();
             let is_authenticated = store.is_authenticated();
-            
+
             log::info!("Startup: used={}, limit={}, authenticated={}", used, limit, is_authenticated);
-            
+
             // Always emit if authenticated, even if used=0 (might have zero usage but still have history)
             if is_authenticated {
                 if used > 0 {
                     let _ = update_tray_icon_from_store(app.handle());
                 }
-                
+
                 // Emit initial usage data to frontend (delayed to allow frontend listeners to attach)
                 let app_handle_for_emit = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     // Wait for frontend to initialize listeners
                     tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-                    
+
                     let store = app_handle_for_emit.state::<StoreManager>();
                     let (used, limit) = store.get_usage();
-                    
+
                     log::info!("About to emit startup data: used={}, limit={}", used, limit);
-                    
+
                     let remaining = limit.saturating_sub(used);
                     let percentage = if limit > 0 {
                         (used as f32 / limit as f32) * 100.0
@@ -2093,7 +2112,7 @@ fn main() {
                         percentage,
                         timestamp: chrono::Utc::now().timestamp(),
                     };
-                    
+
                     let history = UsageManager::get_cached_history(&app_handle_for_emit);
                     let store = app_handle_for_emit.state::<StoreManager>();
                     let settings = store.get_settings();
@@ -2103,15 +2122,15 @@ fn main() {
                         limit,
                         settings.prediction_period,
                     );
-                    
+
                     log::info!("History entries: {}", history.len());
-                    
+
                     let payload = copilot_tracker::UsagePayload {
                         summary,
                         history,
                         prediction,
                     };
-                    
+
                     log::info!("Emitting initial usage:data on startup");
                     match app_handle_for_emit.emit("usage:data", payload) {
                         Ok(_) => log::info!("Successfully emitted startup usage:data"),
@@ -2153,7 +2172,7 @@ fn main() {
             tauri::async_runtime::spawn(async move {
                 // Small delay to ensure setup() completes and all state is managed
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                
+
                 let polling_state = app_for_polling.state::<PollingState>();
                 polling_state.restart_polling(app_for_polling.clone(), polling_interval);
                 log::info!("[Startup] Started background polling with interval: {}s", polling_interval);

@@ -1,5 +1,5 @@
-use crate::store::StoreManager;
 use crate::auth::UsageHistoryRow;
+use crate::store::StoreManager;
 use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
@@ -56,8 +56,7 @@ pub struct UsagePrediction {
     pub days_used_for_prediction: u32,
 }
 
-pub struct UsageManager {
-}
+pub struct UsageManager {}
 
 impl Default for UsageManager {
     fn default() -> Self {
@@ -71,15 +70,12 @@ impl UsageManager {
     }
 
     /// Fetch and update usage data using hidden webview extraction
-    pub async fn fetch_usage(
-        &mut self,
-        app: &AppHandle,
-    ) -> Result<UsageSummary, String> {
+    pub async fn fetch_usage(&mut self, app: &AppHandle) -> Result<UsageSummary, String> {
         log::info!("Starting usage fetch with hidden webview extraction...");
 
         // Create auth manager for extraction
         let mut auth_manager = crate::auth::AuthManager::new();
-        
+
         // Perform hidden extraction
         match auth_manager.perform_extraction(app).await {
             Ok(result) => {
@@ -87,7 +83,11 @@ impl UsageManager {
                     log::warn!("Hidden extraction completed with error: {}", error);
                     // Fall back to cached data on error
                     let summary = Self::get_cached_usage(app)?;
-                    log::info!("Fallback: Emitting usage:updated with cached data: used={}, limit={}", summary.used, summary.limit);
+                    log::info!(
+                        "Fallback: Emitting usage:updated with cached data: used={}, limit={}",
+                        summary.used,
+                        summary.limit
+                    );
                     let _ = app.emit("usage:updated", &summary);
                     return Ok(summary);
                 }
@@ -100,10 +100,18 @@ impl UsageManager {
                     if let Some(usage) = result.usage_data {
                         let used = usage.discount_quantity as u32;
                         let limit = usage.user_premium_request_entitlement as u32;
-                        
-                        log::info!("Extracted usage: {}/{} ({}%)", used, limit, 
-                            if limit > 0 { (used as f32 / limit as f32) * 100.0 } else { 0.0 });
-                        
+
+                        log::info!(
+                            "Extracted usage: {}/{} ({}%)",
+                            used,
+                            limit,
+                            if limit > 0 {
+                                (used as f32 / limit as f32) * 100.0
+                            } else {
+                                0.0
+                            }
+                        );
+
                         let _ = store.set_usage(used, limit);
 
                         // Update cache
@@ -111,8 +119,10 @@ impl UsageManager {
                             customer_id,
                             net_quantity: usage.net_quantity,
                             discount_quantity: usage.discount_quantity,
-                            user_premium_request_entitlement: usage.user_premium_request_entitlement,
-                            filtered_user_premium_request_entitlement: usage.filtered_user_premium_request_entitlement,
+                            user_premium_request_entitlement: usage
+                                .user_premium_request_entitlement,
+                            filtered_user_premium_request_entitlement: usage
+                                .filtered_user_premium_request_entitlement,
                             net_billed_amount: usage.net_billed_amount,
                             timestamp: chrono::Utc::now().timestamp(),
                         };
@@ -128,7 +138,11 @@ impl UsageManager {
                             used,
                             limit,
                             remaining: limit.saturating_sub(used),
-                            percentage: if limit > 0 { (used as f32 / limit as f32) * 100.0 } else { 0.0 },
+                            percentage: if limit > 0 {
+                                (used as f32 / limit as f32) * 100.0
+                            } else {
+                                0.0
+                            },
                             timestamp: chrono::Utc::now().timestamp(),
                         };
 
@@ -136,26 +150,39 @@ impl UsageManager {
                         let history = Self::get_cached_history(app);
                         let store = app.state::<crate::store::StoreManager>();
                         let settings = store.get_settings();
-                        let prediction = Self::predict_usage_from_history(&history, used, limit, settings.prediction_period);
-                        
+                        let prediction = Self::predict_usage_from_history(
+                            &history,
+                            used,
+                            limit,
+                            settings.prediction_period,
+                        );
+
                         let payload = UsagePayload {
                             summary: summary.clone(),
                             history,
                             prediction,
                         };
-                        
-                        log::info!("Emitting usage:data event with used={}, limit={}", used, limit);
+
+                        log::info!(
+                            "Emitting usage:data event with used={}, limit={}",
+                            used,
+                            limit
+                        );
                         let _ = app.emit("usage:data", payload);
                         log::info!("Emitting usage:updated event with used={}, limit={} (tray should update)", used, limit);
                         let _ = app.emit("usage:updated", &summary);
-                        
+
                         return Ok(summary);
                     }
                 }
 
                 // No data extracted, use cache
                 let summary = Self::get_cached_usage(app)?;
-                log::info!("No data extracted: Emitting usage:updated with cached data: used={}, limit={}", summary.used, summary.limit);
+                log::info!(
+                    "No data extracted: Emitting usage:updated with cached data: used={}, limit={}",
+                    summary.used,
+                    summary.limit
+                );
                 let _ = app.emit("usage:updated", &summary);
                 Ok(summary)
             }
@@ -163,7 +190,11 @@ impl UsageManager {
                 log::error!("Hidden extraction failed: {}", e);
                 // Fall back to cached data
                 let summary = Self::get_cached_usage(app)?;
-                log::info!("Extraction failed: Emitting usage:updated with cached data: used={}, limit={}", summary.used, summary.limit);
+                log::info!(
+                    "Extraction failed: Emitting usage:updated with cached data: used={}, limit={}",
+                    summary.used,
+                    summary.limit
+                );
                 let _ = app.emit("usage:updated", &summary);
                 Ok(summary)
             }
@@ -203,7 +234,8 @@ impl UsageManager {
                     used: cache.discount_quantity as u32,
                     limit: cache.user_premium_request_entitlement as u32,
                     included_requests: cache.discount_quantity as u32,
-                    billed_requests: cache.net_quantity.saturating_sub(cache.discount_quantity) as u32,
+                    billed_requests: cache.net_quantity.saturating_sub(cache.discount_quantity)
+                        as u32,
                     gross_amount: cache.net_billed_amount,
                     billed_amount: cache.net_billed_amount,
                     models: vec![],
@@ -228,21 +260,30 @@ impl UsageManager {
                     // Try parsing the format from GitHub: "2026-02-01 00:00:00 +0000 UTC"
                     // We can just grab the first part "2026-02-01" since the time is usually 00:00:00
                     let date_part = row.date.split(' ').next().unwrap_or("");
-                    if let Ok(naive_date) = chrono::NaiveDate::parse_from_str(date_part, "%Y-%m-%d") {
-                        naive_date.and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp()
+                    if let Ok(naive_date) = chrono::NaiveDate::parse_from_str(date_part, "%Y-%m-%d")
+                    {
+                        naive_date
+                            .and_hms_opt(0, 0, 0)
+                            .unwrap()
+                            .and_utc()
+                            .timestamp()
                     } else {
                         log::warn!("Failed to parse date: '{}', using current time", row.date);
                         chrono::Utc::now().timestamp()
                     }
                 };
-                
-                let models = row.models.iter().map(|m| UsageModel {
-                    name: m.name.clone(),
-                    included_requests: m.included_requests,
-                    billed_requests: m.billed_requests,
-                    gross_amount: m.gross_amount,
-                    billed_amount: m.billed_amount,
-                }).collect();
+
+                let models = row
+                    .models
+                    .iter()
+                    .map(|m| UsageModel {
+                        name: m.name.clone(),
+                        included_requests: m.included_requests,
+                        billed_requests: m.billed_requests,
+                        gross_amount: m.gross_amount,
+                        billed_amount: m.billed_amount,
+                    })
+                    .collect();
 
                 UsageEntry {
                     timestamp,
@@ -264,10 +305,10 @@ impl UsageManager {
     /// Returns a channel sender that can be used to cancel the polling task
     pub fn start_polling(app: AppHandle, interval_seconds: u64) -> tokio::sync::mpsc::Sender<()> {
         let (cancel_tx, mut cancel_rx) = tokio::sync::mpsc::channel::<()>(1);
-        
+
         tauri::async_runtime::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(interval_seconds));
-            
+
             // Skip the first tick (immediate fire)
             interval.tick().await;
 
@@ -309,7 +350,7 @@ impl UsageManager {
                 }
             }
         });
-        
+
         cancel_tx
     }
 
@@ -370,8 +411,11 @@ impl UsageManager {
         };
 
         // Take only the number of days specified by prediction_period
-        let daily_data = history.iter().take(prediction_period as usize).collect::<Vec<_>>();
-        
+        let daily_data = history
+            .iter()
+            .take(prediction_period as usize)
+            .collect::<Vec<_>>();
+
         if daily_data.is_empty() {
             return None;
         }
@@ -402,9 +446,9 @@ impl UsageManager {
             let dt = chrono::DateTime::from_timestamp(entry.timestamp, 0)
                 .map(|dt| dt.date_naive())
                 .unwrap_or_else(|| chrono::Utc::now().date_naive());
-            
+
             let is_weekend = matches!(dt.weekday(), chrono::Weekday::Sat | chrono::Weekday::Sun);
-            
+
             if is_weekend {
                 weekend_sum += entry.used as f64;
                 weekend_count += 1;
@@ -414,17 +458,29 @@ impl UsageManager {
             }
         }
 
-        let avg_weekend = if weekend_count > 0 { weekend_sum / weekend_count as f64 } else { 0.0 };
-        let avg_weekday = if weekday_count > 0 { weekday_sum / weekday_count as f64 } else { 0.0 };
-        
+        let avg_weekend = if weekend_count > 0 {
+            weekend_sum / weekend_count as f64
+        } else {
+            0.0
+        };
+        let avg_weekday = if weekday_count > 0 {
+            weekday_sum / weekday_count as f64
+        } else {
+            0.0
+        };
+
         // If no weekday data, ratio is 1.0
-        let weekend_ratio = if avg_weekday > 0.0 { avg_weekend / avg_weekday } else { 1.0 };
+        let weekend_ratio = if avg_weekday > 0.0 {
+            avg_weekend / avg_weekday
+        } else {
+            1.0
+        };
 
         // 3. Calculate remaining days
         let now = chrono::Utc::now();
         let today = now.date_naive();
         let current_day = now.day();
-        
+
         let days_in_month = if now.month() == 12 {
             31
         } else {
@@ -436,18 +492,18 @@ impl UsageManager {
         };
 
         let remaining_days = days_in_month.saturating_sub(current_day);
-        
+
         // Count remaining weekdays and weekends
         let mut remaining_weekdays = 0;
         let mut remaining_weekends = 0;
-        
+
         for i in 1..=remaining_days {
-            // Need to handle month overflow if we just add days? 
-            // Actually simpler: iterate and check. 
+            // Need to handle month overflow if we just add days?
+            // Actually simpler: iterate and check.
             // Note: `today` is current day. We want remaining days effectively from tomorrow?
             // predictor.ts: date.setDate(today.getDate() + i)
             // So yes, starting from tomorrow.
-            
+
             if let Some(date) = today.checked_add_days(chrono::Days::new(i as u64)) {
                 if matches!(date.weekday(), chrono::Weekday::Sat | chrono::Weekday::Sun) {
                     remaining_weekends += 1;
@@ -459,9 +515,9 @@ impl UsageManager {
 
         // 4. Predict total monthly usage
         // usage = current + (avg * weekdays) + (avg * ratio * weekends)
-        let predicted_remaining = (weighted_avg_daily * remaining_weekdays as f64) + 
-                                  (weighted_avg_daily * weekend_ratio * remaining_weekends as f64);
-        
+        let predicted_remaining = (weighted_avg_daily * remaining_weekdays as f64)
+            + (weighted_avg_daily * weekend_ratio * remaining_weekends as f64);
+
         let predicted_monthly_requests = (used as f64 + predicted_remaining).round() as u32;
         let excess_requests = predicted_monthly_requests.saturating_sub(limit);
         let predicted_billed_amount = (excess_requests as f64) * 0.04;

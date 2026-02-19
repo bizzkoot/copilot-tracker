@@ -33,8 +33,8 @@ pub fn detect_system_text_color() -> RgbColor {
     // Fallback: query NSApp.effectiveAppearance or NSAppearance.currentDrawingAppearance
     use cocoa::appkit::NSApp;
     use cocoa::base::nil;
-    use objc::{msg_send, sel, sel_impl};
     use objc::runtime::{Class, Object};
+    use objc::{msg_send, sel, sel_impl};
 
     unsafe {
         let ns_app = NSApp();
@@ -167,7 +167,11 @@ pub fn detect_system_text_color() -> RgbColor {
     }
 
     if let Ok(colorfgbg) = std::env::var("COLORFGBG") {
-        if let Some(bg) = colorfgbg.split(';').next_back().and_then(|v| v.parse::<u8>().ok()) {
+        if let Some(bg) = colorfgbg
+            .split(';')
+            .next_back()
+            .and_then(|v| v.parse::<u8>().ok())
+        {
             if bg <= 6 {
                 return (255, 255, 255);
             }
