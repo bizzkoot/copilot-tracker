@@ -714,6 +714,17 @@ export async function initTauriAdapter() {
         };
       },
       getVersion: () => invoke("get_app_version"),
+      getUpdateInfo: async () => {
+        try {
+          const info = await invoke<any>("get_update_info");
+          return info ?? null;
+        } catch (err) {
+          if (import.meta.env.DEV) {
+            console.error("getUpdateInfo failed:", err);
+          }
+          return null;
+        }
+      },
 
       // Widget
       isWidgetEnabled: async () => {
@@ -809,6 +820,7 @@ function setupMockAdapter() {
     onUpdateAvailable: () => () => {},
     onUpdateChecked: () => () => {},
     getVersion: async () => "1.0.0-mock",
+    getUpdateInfo: async () => null,
     isWidgetEnabled: async () => false,
     setWidgetEnabled: async () => {},
     onWidgetEnabledChanged: () => () => {},

@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Listener, Manager};
-use tauri_plugin_http::reqwest;
+use tauri_plugin_http::{reqwest, fetch};
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
 
@@ -1259,12 +1259,178 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
         let _ = app.emit("update:checked", payload);
     };
 
-    // Solution #3: Try using webview fetch (browser's network stack)
-    // This avoids Windows SChannel issues with unsigned builds
-    log::info!("[Update] Attempting update check via webview fetch...");
+    // Windows-specific update check: Skip webview and use reqwest directly
+    // The webview approach has reliability issues on Windows due to WebView2
+    // runtime behavior with off-screen positioned windows.
+    #[cfg(target_os = "windows")]
+    {
+        log::info!("[Update] Windows detected: Using reqwest as primary method (webview skipped)");
 
-    let mut auth_manager = AuthManager::new();
-    match auth_manager.fetch_github_releases(&app).await {
+        let client = reqwest::Client::new();
+        let response = client
+            .get(GITHUB_API_URL)
+            .header("User-Agent", "Copilot-Tracker-App")
+            .send()
+            .await;
+
+        match response {
+            Ok(resp) => {
+                if !resp.status().is_success() {
+                    let update_state = app.state::<UpdateState>();
+                    let now = chrono::Local::now();
+                    *update_state.last_check_time.lock().unwrap() = Some(now);
+
+                    let store = app.state::<StoreManager>();
+                    let _ = store.set_last_update_check_timestamp(now.timestamp());
+
+                    send_status("error", Some(format!("GitHub API returned status: {}", resp.status()).as_str()));
+
+                    if store.get_show_notifications() {
+                        let _ = app
+                            .notification()
+                            .builder()
+                            .title("Copilot Tracker")
+                            .body("Failed to check for updates. Please try again later.")
+                            .show();
+                    }
+                    let _ = rebuild_tray_menu(&app, None);
+                    return Ok(());
+                }
+
+                let release = match resp.json().await {
+                    Ok(value) => {
+                        log::info!("[Update] Reqwest fetch succeeded");
+                        value
+                    }
+                    Err(err) => {
+                        log::error!("[Update] Failed to parse response: {}", err);
+
+                        let update_state = app.state::<UpdateState>();
+                        let now = chrono::Local::now();
+                        *update_state.last_check_time.lock().unwrap() = Some(now);
+
+                        let store = app.state::<StoreManager>();
+                        let _ = store.set_last_update_check_timestamp(now.timestamp());
+
+                        send_status("error", Some(format!("Failed to parse update response: {}", err).as_str()));
+
+                        if store.get_show_notifications() {
+                            let _ = app
+                                .notification()
+                                .builder()
+                                .title("Copilot Tracker")
+                                .body("Failed to check for updates. Please try again later.")
+                                .show();
+                        }
+                        let _ = rebuild_tray_menu(&app, None);
+                        return Ok(());
+                    }
+                };
+
+                process_release_data(&app, release, &send_status)?;
+            }
+            Err(reqwest_err) => {
+                log::warn!("[Update] Reqwest failed: {}, trying tauri-plugin-http", reqwest_err);
+
+                let request = fetch(GITHUB_API_URL, Default::default())
+                    .await;
+
+                match request {
+                    Ok(resp) => {
+                        if !resp.status().is_success() {
+                            let update_state = app.state::<UpdateState>();
+                            let now = chrono::Local::now();
+                            *update_state.last_check_time.lock().unwrap() = Some(now);
+
+                            let store = app.state::<StoreManager>();
+                            let _ = store.set_last_update_check_timestamp(now.timestamp());
+
+                            send_status("error", Some(format!("GitHub API returned status: {}", resp.status()).as_str()));
+
+                            if store.get_show_notifications() {
+                                let _ = app
+                                    .notification()
+                                    .builder()
+                                    .title("Copilot Tracker")
+                                    .body("Failed to check for updates. Please try again later.")
+                                    .show();
+                            }
+                            let _ = rebuild_tray_menu(&app, None);
+                            return Ok(());
+                        }
+
+                        let release = match resp.json::<serde_json::Value>().await {
+                            Ok(value) => {
+                                log::info!("[Update] tauri-plugin-http succeeded");
+                                value
+                            }
+                            Err(err) => {
+                                log::error!("[Update] Failed to parse response: {}", err);
+
+                                let update_state = app.state::<UpdateState>();
+                                let now = chrono::Local::now();
+                                *update_state.last_check_time.lock().unwrap() = Some(now);
+
+                                let store = app.state::<StoreManager>();
+                                let _ = store.set_last_update_check_timestamp(now.timestamp());
+
+                                send_status("error", Some(format!("Failed to parse update response: {}", err).as_str()));
+
+                                if store.get_show_notifications() {
+                                    let _ = app
+                                        .notification()
+                                        .builder()
+                                        .title("Copilot Tracker")
+                                        .body("Failed to check for updates. Please try again later.")
+                                        .show();
+                                }
+                                let _ = rebuild_tray_menu(&app, None);
+                                return Ok(());
+                            }
+                        };
+
+                        process_release_data(&app, release, &send_status)?;
+                    }
+                    Err(fetch_err) => {
+                        log::error!("[Update] All methods failed. Final error: {}", fetch_err);
+
+                        let update_state = app.state::<UpdateState>();
+                        let now = chrono::Local::now();
+                        *update_state.last_check_time.lock().unwrap() = Some(now);
+
+                        let store = app.state::<StoreManager>();
+                        let _ = store.set_last_update_check_timestamp(now.timestamp());
+
+                        send_status("error", Some(format!(
+                            "Update check failed (reqwest: {}, tauri-http: {})",
+                            reqwest_err, fetch_err
+                        ).as_str()));
+
+                        if store.get_show_notifications() {
+                            let _ = app
+                                .notification()
+                                .builder()
+                                .title("Copilot Tracker")
+                                .body("Failed to check for updates. Please check your connection.")
+                                .show();
+                        }
+                        let _ = rebuild_tray_menu(&app, None);
+                        return Ok(());
+                    }
+                }
+            }
+        }
+
+        return Ok(());
+    }
+
+    // Non-Windows platforms (macOS, Linux): Use webview fetch as primary method
+    #[cfg(not(target_os = "windows"))]
+    {
+        log::info!("[Update] Attempting update check via webview fetch...");
+
+        let mut auth_manager = AuthManager::new();
+        match auth_manager.fetch_github_releases(&app).await {
         Ok(release_json) => {
             // Successfully fetched via webview
             log::info!("[Update] Webview fetch succeeded");
@@ -1373,40 +1539,117 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
                     
                     process_release_data(&app, release, &send_status)?;
                 }
-                Err(err) => {
-                    log::error!("[Update] Both webview and reqwest failed. Reqwest error: {}", err);
+                Err(reqwest_err) => {
+                    log::warn!("[Update] Reqwest fallback failed: {}, trying tauri-plugin-http", reqwest_err);
                     
-                    // Store last check time even on error
-                    let update_state = app.state::<UpdateState>();
-                    let now = chrono::Local::now();
-                    *update_state.last_check_time.lock().unwrap() = Some(now);
+                    // Solution #3: Fallback to tauri-plugin-http (has proper permissions)
+                    log::info!("[Update] Attempting update check via tauri-plugin-http...");
                     
-                    // Persist to store
-                    let store = app.state::<StoreManager>();
-                    let _ = store.set_last_update_check_timestamp(now.timestamp());
+                    let request = fetch(GITHUB_API_URL, Default::default())
+                        .await;
                     
-                    send_status("error", Some(format!(
-                        "Update check failed (webview: {}, reqwest: {})", 
-                        webview_err, err
-                    ).as_str()));
-                    
-                    // Show error notification
-                    if store.get_show_notifications() {
-                        let _ = app
-                            .notification()
-                            .builder()
-                            .title("Copilot Tracker")
-                            .body("Failed to check for updates. Please check your connection.")
-                            .show();
+                    match request {
+                        Ok(resp) => {
+                            if !resp.status().is_success() {
+                                let update_state = app.state::<UpdateState>();
+                                let now = chrono::Local::now();
+                                *update_state.last_check_time.lock().unwrap() = Some(now);
+                                
+                                let store = app.state::<StoreManager>();
+                                let _ = store.set_last_update_check_timestamp(now.timestamp());
+                                
+                                send_status("error", Some(format!("GitHub API returned status: {}", resp.status()).as_str()));
+                                
+                                if store.get_show_notifications() {
+                                    let _ = app
+                                        .notification()
+                                        .builder()
+                                        .title("Copilot Tracker")
+                                        .body("Failed to check for updates. Please try again later.")
+                                        .show();
+                                }
+                                let _ = rebuild_tray_menu(&app, None);
+                                return Ok(());
+                            }
+                            
+                            let release = match resp.json::<serde_json::Value>().await {
+                                Ok(value) => {
+                                    log::info!("[Update] tauri-plugin-http fallback succeeded");
+                                    value
+                                }
+                                Err(err) => {
+                                    log::error!("[Update] Failed to parse tauri-plugin-http response: {}", err);
+                                    
+                                    let update_state = app.state::<UpdateState>();
+                                    let now = chrono::Local::now();
+                                    *update_state.last_check_time.lock().unwrap() = Some(now);
+                                    
+                                    let store = app.state::<StoreManager>();
+                                    let _ = store.set_last_update_check_timestamp(now.timestamp());
+                                    
+                                    send_status("error", Some(format!("Failed to parse update response: {}", err).as_str()));
+                                    
+                                    if store.get_show_notifications() {
+                                        let _ = app
+                                            .notification()
+                                            .builder()
+                                            .title("Copilot Tracker")
+                                            .body("Failed to check for updates. Please try again later.")
+                                            .show();
+                                    }
+                                    let _ = rebuild_tray_menu(&app, None);
+                                    return Ok(());
+                                }
+                            };
+                            
+                            process_release_data(&app, release, &send_status)?;
+                        }
+                        Err(fetch_err) => {
+                            log::error!("[Update] All three methods failed. Final error: {}", fetch_err);
+                            
+                            // Store last check time even on error
+                            let update_state = app.state::<UpdateState>();
+                            let now = chrono::Local::now();
+                            *update_state.last_check_time.lock().unwrap() = Some(now);
+                            
+                            // Persist to store
+                            let store = app.state::<StoreManager>();
+                            let _ = store.set_last_update_check_timestamp(now.timestamp());
+                            
+                            send_status("error", Some(format!(
+                                "Update check failed (webview: {}, reqwest: {}, tauri-http: {})",
+                                webview_err, reqwest_err, fetch_err
+                            ).as_str()));
+                            
+                            // Show error notification
+                            if store.get_show_notifications() {
+                                let _ = app
+                                    .notification()
+                                    .builder()
+                                    .title("Copilot Tracker")
+                                    .body("Failed to check for updates. Please check your connection.")
+                                    .show();
+                            }
+                            let _ = rebuild_tray_menu(&app, None);
+                            return Ok(());
+                        }
                     }
-                    let _ = rebuild_tray_menu(&app, None);
-                    return Ok(());
                 }
             }
         }
     }
 
     Ok(())
+}
+
+#[tauri::command]
+fn get_update_info(app: AppHandle) -> Result<Option<UpdateInfo>, String> {
+    // Return the in-memory latest update info (if any).
+    // This prevents missed "update:available" events by allowing the renderer
+    // to pull current state on startup.
+    let update_state = app.state::<UpdateState>();
+    let latest = update_state.latest.lock().unwrap().clone();
+    Ok(latest)
 }
 
 // ============================================================================
@@ -1532,6 +1775,7 @@ fn main() {
             hide_main_window,
             open_external_url,
             check_for_updates,
+            get_update_info,
         ])
         // Setup application
         .setup(move |app| {

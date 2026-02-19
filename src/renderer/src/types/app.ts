@@ -120,6 +120,7 @@ export interface AppAPI {
   // Platform info
   platform: NodeJS.Platform;
   getVersion: () => Promise<string>;
+  getUpdateInfo: () => Promise<UpdateInfo | null>;
 
   // Widget
   isWidgetEnabled: () => Promise<boolean>;

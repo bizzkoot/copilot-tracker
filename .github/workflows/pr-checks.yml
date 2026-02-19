@@ -95,6 +95,36 @@ jobs:
         env:
           TAURI_BUNDLE_SKIP_SIGNING: "true"
 
+      - name: Upload build artifacts (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: copilot-tracker-windows-x64
+          path: |
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+          retention-days: 7
+
+      - name: Upload build artifacts (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: copilot-tracker-macos-universal
+          path: |
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz
+          retention-days: 7
+
+      - name: Upload build artifacts (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: copilot-tracker-linux-x64
+          path: |
+            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb
+            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
+          retention-days: 7
+
       - name: Report validation status
         if: always()
         shell: bash
@@ -122,7 +152,7 @@ jobs:
         run: |
           if [ "${{ needs.validate-pr.result }}" == "success" ]; then
             echo "summary=✅ **All validation checks passed!**" >> $GITHUB_OUTPUT
-            echo "details=<br><br>### Validation Results<br>✅ TypeScript type checking (all platforms)<br>✅ ESLint (all platforms)<br>✅ Full Tauri build (Windows, macOS, Linux)" >> $GITHUB_OUTPUT
+            echo "details=<br><br>### Validation Results<br>✅ TypeScript type checking (all platforms)<br>✅ ESLint (all platforms)<br>✅ Full Tauri build (Windows, macOS, Linux)<br><br>### 📦 Download Test Artifacts<br>Build artifacts are available for testing! Download them from the workflow run page:<br>- [Windows Installer (.msi/.exe)](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})<br>- [macOS DMG / App Bundle](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})<br>- [Linux deb / AppImage](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})<br><br>Artifacts are retained for 7 days." >> $GITHUB_OUTPUT
             echo "status=success" >> $GITHUB_OUTPUT
           else
             echo "summary=❌ **Validation checks failed**" >> $GITHUB_OUTPUT

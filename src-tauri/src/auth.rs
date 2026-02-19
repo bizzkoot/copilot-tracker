@@ -1016,10 +1016,13 @@ impl AuthManager {
                 }}
 
                 try {{
+                    // Do NOT set a manual User-Agent header in the injected JS — browsers forbid it.
+                    // Let the WebView provide a normal User-Agent and request the GitHub API.
                     const response = await fetch('{}', {{
                         headers: {{
-                            'User-Agent': 'Copilot-Tracker-App'
-                        }}
+                            'Accept': 'application/vnd.github.v3+json'
+                        }},
+                        cache: 'no-store'
                     }});
 
                     if (!response.ok) {{
@@ -1034,14 +1037,15 @@ impl AuthManager {
                     // Send result back via Tauri event
                     await sendResult('update_check:complete', {{ success: true, data: data }});
                 }} catch (error) {{
+                    // Include stack where available to aid Windows debugging
                     console.error('Update check error:', error);
-                    await sendResult('update_check:error', {{ success: false, error: error.message || error.toString() }});
+                    await sendResult('update_check:error', {{ success: false, error: error.message || error.toString(), stack: error.stack || null }});
                 }}
             }})()
         "#, GITHUB_API_URL);
 
         // Create minimal hidden webview
-        let window = WebviewWindowBuilder::new(
+        let builder = WebviewWindowBuilder::new(
             app,
             "update-check-temp",
             WebviewUrl::External(url),
@@ -1049,17 +1053,32 @@ impl AuthManager {
         .title("Update Check Temp")
         .skip_taskbar(true)
         .inner_size(1.0, 1.0)
-        .position(-100.0, -100.0)
-        .visible(false)
-        .initialization_script(js_code)
-        .build()
-        .map_err(|e| format!("Failed to create update check webview: {}", e))?;
+        .initialization_script(js_code);
+
+        // On Windows make the tiny webview visible (1x1 transparent off-screen) so JS will run reliably.
+        #[cfg(target_os = "windows")]
+        let window = builder
+            .position(-32000.0, -32000.0)
+            .transparent(true)
+            .decorations(false)
+            .visible(true)
+            .build()
+            .map_err(|e| format!("Failed to create update check webview: {}", e))?;
+
+        // Non-Windows platforms can use a non-visible off-screen webview
+        #[cfg(not(target_os = "windows"))]
+        let window = builder
+            .position(-100.0, -100.0)
+            .visible(false)
+            .build()
+            .map_err(|e| format!("Failed to create update check webview: {}", e))?;
 
         // Wait for update_check:complete event with timeout
-        let timeout_duration = Duration::from_secs(10);
+        let timeout_duration = Duration::from_secs(15);
         let result = tokio::time::timeout(timeout_duration, async {
             while let Some(event) = rx.recv().await {
                 log::info!("Received update check event: {}", event.event);
+                log::info!("Received update check event payload: {}", event.payload);
 
                 if event.event == "update_check:complete" {
                     // Clean up global channel

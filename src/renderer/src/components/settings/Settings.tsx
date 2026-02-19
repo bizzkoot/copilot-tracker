@@ -77,6 +77,24 @@ export function Settings({ onClose }: SettingsProps) {
     window.electron.getVersion().then(setAppVersion);
   }, []);
 
+  // Reflect any previously-detected update (in case update event was missed)
+  useEffect(() => {
+    let mounted = true;
+    window.electron
+      .getUpdateInfo()
+      .then((info) => {
+        if (!mounted) return;
+        if (info) {
+          setUpdateStatus("available");
+          setUpdateStatusMessage("Update available");
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   // Fetch initial widget state
   useEffect(() => {
     const fetchWidgetState = async () => {

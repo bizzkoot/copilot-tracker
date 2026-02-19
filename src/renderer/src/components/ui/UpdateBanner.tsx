@@ -14,6 +14,19 @@ export function UpdateBanner() {
       setUpdateInfo(info);
       setIsVisible(true);
     });
+
+    // Also pull current update info on mount in case the event was emitted
+    // before the renderer attached its listener (prevents missed notifications).
+    window.electron
+      .getUpdateInfo()
+      .then((info) => {
+        if (info) {
+          setUpdateInfo(info);
+          setIsVisible(true);
+        }
+      })
+      .catch(() => {});
+
     return cleanup;
   }, []);
 
