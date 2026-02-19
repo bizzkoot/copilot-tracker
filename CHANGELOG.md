@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.4.2](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.1...v2.4.2) (2026-02-19)
+
+
+### Bug Fixes
+
+* **ci:** restore universal builds and add manual upload workflow ([2f92c52](https://github.com/bizzkoot/copilot-tracker/commit/2f92c524a38e00a67d9483ce355fe3c2352a5b7f))
+* **release:** remove scheduled trigger for release workflow and clarify conditions for execution ([1fb1646](https://github.com/bizzkoot/copilot-tracker/commit/1fb1646aa0a35e645a477b90bddc85dbf48e8288))
+* **settings:** resolve Windows settings file sync error by using a single file handle ([0531f29](https://github.com/bizzkoot/copilot-tracker/commit/0531f2997013f33988a6fc8d4b64e51afb0591b9))
+
 ## [2.4.1](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.0...v2.4.1) (2026-02-18)
 
 
