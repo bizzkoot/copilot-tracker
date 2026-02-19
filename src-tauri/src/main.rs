@@ -284,10 +284,7 @@ fn update_tray_icon(
             .map_err(|err| err.to_string())?;
     }
 
-    #[cfg(not(target_os = "windows"))]
-    {
-        Ok(())
-    }
+    Ok(())
 }
 
 /// Helper to update tray icon using current settings from store
@@ -1378,7 +1375,7 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
     {
         log::info!("[Update] Windows detected: trying webview fetch first");
 
-        let mut webview_error: Option<String> = None;
+        let webview_error: String;
         let mut auth_manager = AuthManager::new();
         match auth_manager.fetch_github_releases(&app).await {
             Ok(release_json) => {
@@ -1392,25 +1389,22 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
                     return Ok(());
                 }
 
-                webview_error = Some(
-                    release_json
-                        .get("error")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("unknown webview error")
-                        .to_string(),
-                );
+                webview_error = release_json
+                    .get("error")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown webview error")
+                    .to_string();
             }
             Err(err) => {
-                webview_error = Some(err);
+                webview_error = err;
             }
         }
 
         log::warn!(
             "[Update] Windows webview fetch failed: {}. Trying reqwest...",
-            webview_error.as_deref().unwrap_or("unknown webview error")
+            webview_error
         );
 
-        let mut reqwest_error: Option<String> = None;
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
             .build()
@@ -1422,13 +1416,14 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
             .send()
             .await;
 
-        match response {
+        let reqwest_error = match response {
             Ok(resp) => {
                 if resp.status().is_success() {
+                    let mut parse_error: Option<String> = None;
                     let release = match resp.json().await {
                         Ok(value) => value,
                         Err(err) => {
-                            reqwest_error = Some(format!("failed to parse response: {}", err));
+                            parse_error = Some(format!("failed to parse response: {}", err));
                             serde_json::Value::Null
                         }
                     };
@@ -1438,21 +1433,20 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
                         process_release_data(&app, release, &send_status)?;
                         return Ok(());
                     }
+
+                    parse_error.unwrap_or_else(|| "failed to parse response".to_string())
                 } else {
-                    reqwest_error = Some(format!("HTTP {}", resp.status()));
+                    format!("HTTP {}", resp.status())
                 }
             }
-            Err(err) => {
-                reqwest_error = Some(err.to_string());
-            }
-        }
+            Err(err) => err.to_string(),
+        };
 
         log::warn!(
             "[Update] Windows reqwest failed: {}. Trying relaxed TLS fallback...",
-            reqwest_error.as_deref().unwrap_or("unknown reqwest error")
+            reqwest_error
         );
 
-        let mut relaxed_error: Option<String> = None;
         let relaxed_client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
             .danger_accept_invalid_certs(true)
@@ -1466,13 +1460,14 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
             .send()
             .await;
 
-        match relaxed_response {
+        let relaxed_error = match relaxed_response {
             Ok(resp) => {
                 if resp.status().is_success() {
+                    let mut parse_error: Option<String> = None;
                     let release = match resp.json().await {
                         Ok(value) => value,
                         Err(err) => {
-                            relaxed_error = Some(format!("failed to parse response: {}", err));
+                            parse_error = Some(format!("failed to parse response: {}", err));
                             serde_json::Value::Null
                         }
                     };
@@ -1482,14 +1477,14 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
                         process_release_data(&app, release, &send_status)?;
                         return Ok(());
                     }
+
+                    parse_error.unwrap_or_else(|| "failed to parse response".to_string())
                 } else {
-                    relaxed_error = Some(format!("HTTP {}", resp.status()));
+                    format!("HTTP {}", resp.status())
                 }
             }
-            Err(err) => {
-                relaxed_error = Some(err.to_string());
-            }
-        }
+            Err(err) => err.to_string(),
+        };
 
         let update_state = app.state::<UpdateState>();
         let now = chrono::Local::now();
@@ -1500,9 +1495,7 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
 
         let final_error = format!(
             "Update check failed (webview: {}, reqwest: {}, reqwest_relaxed: {})",
-            webview_error.as_deref().unwrap_or("unknown"),
-            reqwest_error.as_deref().unwrap_or("unknown"),
-            relaxed_error.as_deref().unwrap_or("unknown")
+            webview_error, reqwest_error, relaxed_error
         );
         send_status("error", Some(final_error.as_str()));
 
@@ -1708,7 +1701,10 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
         }
     }
 
-    Ok(())
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(())
+    }
 }
 
 #[tauri::command]
