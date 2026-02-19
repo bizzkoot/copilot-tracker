@@ -27,15 +27,15 @@ jobs:
           - os: macos-latest
             target: universal-apple-darwin
             rust_target: aarch64-apple-darwin,x86_64-apple-darwin
-            build_cmd: npm run build:web && npx tauri build
+            build_cmd: npm run build:web && npx tauri build --target universal-apple-darwin
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             rust_target: x86_64-unknown-linux-gnu
-            build_cmd: npm run build:web && npx tauri build
+            build_cmd: npm run build:web && npx tauri build --target x86_64-unknown-linux-gnu
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             rust_target: x86_64-pc-windows-msvc
-            build_cmd: npm run build:web && npx tauri build
+            build_cmd: npm run build:web && npx tauri build --target x86_64-pc-windows-msvc
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v4
@@ -103,6 +103,7 @@ jobs:
           path: |
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+          if-no-files-found: error
           retention-days: 7
 
       - name: Upload build artifacts (macOS)
@@ -113,6 +114,7 @@ jobs:
           path: |
             src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
             src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz
+          if-no-files-found: error
           retention-days: 7
 
       - name: Upload build artifacts (Linux)
@@ -123,6 +125,7 @@ jobs:
           path: |
             src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb
             src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
           retention-days: 7
 
       - name: Report validation status

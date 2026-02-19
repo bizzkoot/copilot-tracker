@@ -112,8 +112,13 @@ jobs:
           TAURI_BUNDLE_SKIP_SIGNING: "true"
 
       - name: Upload Tauri Release Assets
-        if: inputs.platforms == 'all' || contains(inputs.platforms, runner.os)
+        if: |
+          inputs.platforms == 'all' ||
+          (runner.os == 'macOS' && inputs.platforms == 'macos-only') ||
+          (runner.os == 'Linux' && inputs.platforms == 'linux-only') ||
+          (runner.os == 'Windows' && inputs.platforms == 'windows-only')
         uses: softprops/action-gh-release@v1
         with:
           files: ${{ matrix.artifacts }}
           tag_name: ${{ inputs.tag }}
+          fail_on_unmatched_files: true
