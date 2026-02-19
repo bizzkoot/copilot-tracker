@@ -284,7 +284,10 @@ fn update_tray_icon(
             .map_err(|err| err.to_string())?;
     }
 
-    Ok(())
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(())
+    }
 }
 
 /// Helper to update tray icon using current settings from store
@@ -1367,14 +1370,52 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
         let _ = app.emit("update:checked", payload);
     };
 
-    // Windows-specific update check: Skip webview and use reqwest directly
-    // The webview approach has reliability issues on Windows due to WebView2
-    // runtime behavior with off-screen positioned windows.
+    // Windows-specific update check: prefer WebView-based fetch first, then
+    // fall back to reqwest (standard, then relaxed TLS as last resort).
+    // Unsigned Windows binaries are more likely to hit network middleware or
+    // certificate-path issues, so we keep multiple transport strategies.
     #[cfg(target_os = "windows")]
     {
-        log::info!("[Update] Windows detected: Using reqwest as primary method (webview skipped)");
+        log::info!("[Update] Windows detected: trying webview fetch first");
 
-        let client = reqwest::Client::new();
+        let mut webview_error: Option<String> = None;
+        let mut auth_manager = AuthManager::new();
+        match auth_manager.fetch_github_releases(&app).await {
+            Ok(release_json) => {
+                if release_json
+                    .get("success")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
+                {
+                    let release = release_json.get("data").cloned().unwrap_or(release_json);
+                    process_release_data(&app, release, &send_status)?;
+                    return Ok(());
+                }
+
+                webview_error = Some(
+                    release_json
+                        .get("error")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown webview error")
+                        .to_string(),
+                );
+            }
+            Err(err) => {
+                webview_error = Some(err);
+            }
+        }
+
+        log::warn!(
+            "[Update] Windows webview fetch failed: {}. Trying reqwest...",
+            webview_error.as_deref().unwrap_or("unknown webview error")
+        );
+
+        let mut reqwest_error: Option<String> = None;
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .map_err(|e| format!("Failed to build reqwest client: {}", e))?;
+
         let response = client
             .get(GITHUB_API_URL)
             .header("User-Agent", "Copilot-Tracker-App")
@@ -1383,94 +1424,103 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
 
         match response {
             Ok(resp) => {
-                if !resp.status().is_success() {
-                    let update_state = app.state::<UpdateState>();
-                    let now = chrono::Local::now();
-                    *update_state.last_check_time.lock().unwrap() = Some(now);
-
-                    let store = app.state::<StoreManager>();
-                    let _ = store.set_last_update_check_timestamp(now.timestamp());
-
-                    send_status(
-                        "error",
-                        Some(format!("GitHub API returned status: {}", resp.status()).as_str()),
-                    );
-
-                    if store.get_show_notifications() {
-                        let _ = app
-                            .notification()
-                            .builder()
-                            .title("Copilot Tracker")
-                            .body("Failed to check for updates. Please try again later.")
-                            .show();
-                    }
-                    let _ = rebuild_tray_menu(&app, None);
-                    return Ok(());
-                }
-
-                let release = match resp.json().await {
-                    Ok(value) => {
-                        log::info!("[Update] Reqwest fetch succeeded");
-                        value
-                    }
-                    Err(err) => {
-                        log::error!("[Update] Failed to parse response: {}", err);
-
-                        let update_state = app.state::<UpdateState>();
-                        let now = chrono::Local::now();
-                        *update_state.last_check_time.lock().unwrap() = Some(now);
-
-                        let store = app.state::<StoreManager>();
-                        let _ = store.set_last_update_check_timestamp(now.timestamp());
-
-                        send_status(
-                            "error",
-                            Some(format!("Failed to parse update response: {}", err).as_str()),
-                        );
-
-                        if store.get_show_notifications() {
-                            let _ = app
-                                .notification()
-                                .builder()
-                                .title("Copilot Tracker")
-                                .body("Failed to check for updates. Please try again later.")
-                                .show();
+                if resp.status().is_success() {
+                    let release = match resp.json().await {
+                        Ok(value) => value,
+                        Err(err) => {
+                            reqwest_error = Some(format!("failed to parse response: {}", err));
+                            serde_json::Value::Null
                         }
-                        let _ = rebuild_tray_menu(&app, None);
+                    };
+
+                    if !release.is_null() {
+                        log::info!("[Update] Reqwest fallback succeeded");
+                        process_release_data(&app, release, &send_status)?;
                         return Ok(());
                     }
-                };
-
-                process_release_data(&app, release, &send_status)?;
-            }
-            Err(reqwest_err) => {
-                log::error!("[Update] Reqwest failed. Final error: {}", reqwest_err);
-
-                let update_state = app.state::<UpdateState>();
-                let now = chrono::Local::now();
-                *update_state.last_check_time.lock().unwrap() = Some(now);
-
-                let store = app.state::<StoreManager>();
-                let _ = store.set_last_update_check_timestamp(now.timestamp());
-
-                send_status(
-                    "error",
-                    Some(format!("Update check failed (reqwest: {})", reqwest_err).as_str()),
-                );
-
-                if store.get_show_notifications() {
-                    let _ = app
-                        .notification()
-                        .builder()
-                        .title("Copilot Tracker")
-                        .body("Failed to check for updates. Please check your connection.")
-                        .show();
+                } else {
+                    reqwest_error = Some(format!("HTTP {}", resp.status()));
                 }
-                let _ = rebuild_tray_menu(&app, None);
-                return Ok(());
+            }
+            Err(err) => {
+                reqwest_error = Some(err.to_string());
             }
         }
 
+        log::warn!(
+            "[Update] Windows reqwest failed: {}. Trying relaxed TLS fallback...",
+            reqwest_error.as_deref().unwrap_or("unknown reqwest error")
+        );
+
+        let mut relaxed_error: Option<String> = None;
+        let relaxed_client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .danger_accept_invalid_certs(true)
+            .danger_accept_invalid_hostnames(true)
+            .build()
+            .map_err(|e| format!("Failed to build relaxed reqwest client: {}", e))?;
+
+        let relaxed_response = relaxed_client
+            .get(GITHUB_API_URL)
+            .header("User-Agent", "Copilot-Tracker-App")
+            .send()
+            .await;
+
+        match relaxed_response {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    let release = match resp.json().await {
+                        Ok(value) => value,
+                        Err(err) => {
+                            relaxed_error = Some(format!("failed to parse response: {}", err));
+                            serde_json::Value::Null
+                        }
+                    };
+
+                    if !release.is_null() {
+                        log::info!("[Update] Relaxed reqwest fallback succeeded");
+                        process_release_data(&app, release, &send_status)?;
+                        return Ok(());
+                    }
+                } else {
+                    relaxed_error = Some(format!("HTTP {}", resp.status()));
+                }
+            }
+            Err(err) => {
+                relaxed_error = Some(err.to_string());
+            }
+        }
+
+        let update_state = app.state::<UpdateState>();
+        let now = chrono::Local::now();
+        *update_state.last_check_time.lock().unwrap() = Some(now);
+
+        let store = app.state::<StoreManager>();
+        let _ = store.set_last_update_check_timestamp(now.timestamp());
+
+        let final_error = format!(
+            "Update check failed (webview: {}, reqwest: {}, reqwest_relaxed: {})",
+            webview_error.as_deref().unwrap_or("unknown"),
+            reqwest_error.as_deref().unwrap_or("unknown"),
+            relaxed_error.as_deref().unwrap_or("unknown")
+        );
+        send_status("error", Some(final_error.as_str()));
+
+        if store.get_show_notifications() {
+            let _ = app
+                .notification()
+                .builder()
+                .title("Copilot Tracker")
+                .body("Update check failed. Opening releases in your browser.")
+                .show();
+        }
+
+        let _ = app.opener().open_url(
+            "https://github.com/bizzkoot/copilot-tracker/releases/latest",
+            None::<&str>,
+        );
+
+        let _ = rebuild_tray_menu(&app, None);
         return Ok(());
     }
 

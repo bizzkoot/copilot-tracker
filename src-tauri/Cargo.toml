@@ -74,6 +74,9 @@ opt-level = "s"    # Prioritizes small binary size
 panic = "abort"    # Higher performance by disabling panic handlers
 strip = true       # Ensures debug symbols are removed
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-clippy"))'] }
+
 # Windows-only dependency for theme detection (must be at end of file)
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
