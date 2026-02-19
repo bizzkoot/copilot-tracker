@@ -8,18 +8,13 @@ on:
   push:
     branches:
       - main
-  schedule:
-    # Run every hour to check for release PRs
-    - cron: "0 * * * *"
   workflow_dispatch:
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
-    # Only run on schedule or manual dispatch (for PR creation)
-    # OR if 'release' is in the commit message (for publishing releases)
+    # Only run on manual dispatch OR if 'release' is in the commit message
     if: |
-      github.event_name == 'schedule' ||
       github.event_name == 'workflow_dispatch' ||
       contains(github.event.head_commit.message, 'release')
     outputs:
