@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.4.3](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.2...v2.4.3) (2026-02-19)
+
+
+### Bug Fixes
+
+* **ci:** align tauri build targets with artifact uploads ([ac30140](https://github.com/bizzkoot/copilot-tracker/commit/ac3014032579b4ef093c3da8db3b15a6122353b9))
+* **ci:** resolve windows clippy regressions in update-check flow ([d8bf4c8](https://github.com/bizzkoot/copilot-tracker/commit/d8bf4c8d3a2bbd39d93a2989f6ba8227d320d4b7))
+* resolve clippy warnings needless_return and needless_late_init ([3a8ab18](https://github.com/bizzkoot/copilot-tracker/commit/3a8ab18452956ca399527ab26a2d00dfa04ca0fb))
+* stabilize update-check flow and clean build diagnostics ([8432176](https://github.com/bizzkoot/copilot-tracker/commit/8432176889f770a851bbb4672562928508eefdd1))
+* **update-check:** harden Windows checks and stabilize CI lint ([59d702c](https://github.com/bizzkoot/copilot-tracker/commit/59d702c723e943d170ad6d316664206abad0f48a))
+* **windows:** resolve persistent update check failure on Windows builds ([324198f](https://github.com/bizzkoot/copilot-tracker/commit/324198f5b9c3cef5dde06317a716a671ea8c7207)), closes [#31](https://github.com/bizzkoot/copilot-tracker/issues/31)
+
 ## [2.4.2](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.1...v2.4.2) (2026-02-19)
 
 
