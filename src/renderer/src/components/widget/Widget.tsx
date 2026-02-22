@@ -18,8 +18,7 @@ import {
   TRAY_FORMAT_REMAINING_COMBINED,
 } from "@renderer/types/settings";
 import { WidgetHeader } from "./WidgetHeader";
-import { listen, emit } from "@renderer/types/tauri";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from "@renderer/types/tauri";
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 
 // Helper to determine if we should show remaining values
@@ -128,14 +127,11 @@ export function Widget() {
   // Toggle pin mode
   const togglePin = async () => {
     const newPinned = !isPinned;
-    setIsPinned(newPinned);
 
     try {
-      const currentWindow = getCurrentWindow();
-      await currentWindow.setAlwaysOnTop(newPinned);
-
-      // Emit event to update settings
-      await emit("widget:pin-changed", { pinned: newPinned });
+      // Persist pin state through backend (applies always-on-top + store update)
+      await tauriInvoke("set_widget_pinned", { pinned: newPinned });
+      setIsPinned(newPinned);
     } catch (error) {
       console.error("Failed to toggle pin mode:", error);
     }
@@ -172,15 +168,12 @@ export function Widget() {
     };
   }, []);
 
-  // Set initial pin state (position is already restored by backend on startup)
+  // Set initial pin state from persisted backend value
   useEffect(() => {
     const initWidgetState = async () => {
       try {
-        const currentWindow = getCurrentWindow();
-
-        // Position is already restored by the backend before the widget is shown
-        // We only need to set the initial pin state here
-        await currentWindow.setAlwaysOnTop(true);
+        const pinned = await tauriInvoke<boolean>("is_widget_pinned");
+        setIsPinned(pinned);
       } catch (error) {
         console.error("Failed to initialize widget state:", error);
       }

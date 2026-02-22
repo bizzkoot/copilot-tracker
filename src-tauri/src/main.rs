@@ -1141,14 +1141,27 @@ fn is_widget_visible(app: AppHandle) -> Result<bool, String> {
 
 #[tauri::command]
 async fn set_widget_position(app: AppHandle, x: i32, y: i32) -> Result<(), String> {
+    let store = app.state::<StoreManager>();
+
     if let Some(widget) = app.get_webview_window("widget") {
         widget
             .set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }))
             .map_err(|e| e.to_string())?;
-        // Save position to settings
-        let store = app.state::<StoreManager>();
-        let _ = store.set_widget_position(WidgetPosition { x, y });
     }
+
+    // Save position to settings even if the widget window is not currently available
+    store
+        .set_widget_position(WidgetPosition { x, y })
+        .map_err(|e| {
+            log::error!(
+                "[Widget] Failed to persist widget position ({}, {}): {}",
+                x,
+                y,
+                e
+            );
+            e
+        })?;
+
     Ok(())
 }
 
@@ -1171,12 +1184,22 @@ async fn set_widget_pinned(app: AppHandle, pinned: bool) -> Result<(), String> {
         widget
             .set_always_on_top(pinned)
             .map_err(|e| e.to_string())?;
-        // Save pin state to settings
-        let store = app.state::<StoreManager>();
-        let _ = store.set_widget_pinned(pinned);
-        // Emit event to notify widget window
-        let _ = app.emit("widget:set-pin", pinned);
     }
+
+    // Save pin state to settings even if the widget window is not currently available
+    let store = app.state::<StoreManager>();
+    store.set_widget_pinned(pinned).map_err(|e| {
+        log::error!(
+            "[Widget] Failed to persist widget pin state ({}): {}",
+            pinned,
+            e
+        );
+        e
+    })?;
+
+    // Emit event to notify widget window
+    let _ = app.emit("widget:set-pin", pinned);
+
     Ok(())
 }
 
