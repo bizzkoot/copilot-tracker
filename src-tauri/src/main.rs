@@ -2267,13 +2267,6 @@ fn main() {
                 });
             }
 
-            // Update tray menu at startup
-            let update_state = app.state::<UpdateState>();
-            let latest = update_state.latest.lock().unwrap();
-            let _ = rebuild_tray_menu(app.handle(), latest.as_ref());
-            // Explicitly drop the lock before moving on
-            drop(latest);
-
             // Show first-run notification on Windows to help users find tray icon
             // This shows every launch until the user authenticates for the first time
             #[cfg(target_os = "windows")]
@@ -2334,6 +2327,12 @@ fn main() {
                     if widget_visible {
                         log::info!("[Startup] Showing widget (was visible on last shutdown)");
                         let _ = show_widget_without_focus(&widget, widget_pinned);
+
+                        // Rebuild tray menu immediately after showing widget to avoid stale label
+                        let update_state = app.state::<UpdateState>();
+                        let latest = update_state.latest.lock().unwrap();
+                        let _ = rebuild_tray_menu(app.handle(), latest.as_ref());
+                        drop(latest);
                     } else {
                         log::info!("[Startup] Widget enabled but was hidden on last shutdown, not showing");
                     }
@@ -2345,6 +2344,13 @@ fn main() {
             } else {
                 log::info!("[Startup] Widget is disabled, not restoring");
             }
+
+            // Update tray menu after widget restoration to keep label in sync
+            let update_state = app.state::<UpdateState>();
+            let latest = update_state.latest.lock().unwrap();
+            let _ = rebuild_tray_menu(app.handle(), latest.as_ref());
+            // Explicitly drop the lock before moving on
+            drop(latest);
 
             if !tauri::is_dev() {
                 let app_handle = app.handle().clone();
