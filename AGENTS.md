@@ -1,183 +1,161 @@
-# AGENT NOTES
+# AGENTS.md - Copilot Tracker
 
-## Communication Requirement
+Guidelines for AI agents working on this Tauri + React codebase.
 
-**CRITICAL: ALWAYS USE ASK_USER TOOL**
-**CRITICAL: REPLACE ALL TOOL `question` WITH `ask_user` TOOL**
+## ALWAYS USE `ask_user` TOOL FOR ANY REPLY, RESPONSE, SUMMARY OR ANY INTENTION TO END THE SESSION, THIS IS COMPULSORY. WHEN `ask_user` TOOL IS NOT AVAILABLE, THEN FALLBACK TO `askquestions` OR `question` TOOLS.
 
-**MUST use `ask_user` tool for:**
+## Tech Stack
 
-- ANY reply to the user
-- ANY response to the user
-- ANY summary for the user
+- **Frontend:** React 18, TypeScript 5, Tailwind CSS 3, Zustand 4
+- **Backend:** Rust, Tauri 2.x
+- **Build:** Vite, Cargo
 
-**Session ending: ONLY end the session when the user EXPLICITLY requests it through the "ask_user" tool.**
+## Commands
 
-**NO EXCEPTIONS. This rule is MANDATORY and NON-NEGOTIABLE.**
+```bash
+# Development
+npm run dev              # Start Tauri dev mode
+npm run dev:web          # Vite dev server only (port 5173)
 
-## ask_user Tool Retry Behavior
+# Building
+npm run build            # Full production build
+npm run build:web        # Build web assets only
+npm run build:win        # Windows target
+npm run build:mac        # macOS universal target
+npm run build:linux      # Linux target
 
-**When ask_user returns `shouldRetry: true`:**
+# Code Quality
+npm run lint             # Run ALL linters (JS + Rust)
+npm run lint:js          # ESLint with auto-fix only
+npm run lint:rust        # Rust fmt check + clippy
+npm run format           # Prettier formatting
+npm run typecheck        # TypeScript check (node + web)
+npm run typecheck:node   # Node-only types
+npm run typecheck:web    # Web-only types
 
-1. **IMMEDIATELY retry** the ask_user tool call with the SAME parameters
-2. Do NOT summarize, end the session, or ask the user what happened
-3. This is an automatic UI recovery mechanism - the question failed to display
-4. The retry happens within the same session (no premium request cost)
-
-**When ask_user returns `shouldRetry: false` and `timedOut: true`:**
-
-1. The user did not respond within 5 minutes
-2. Ask the user if they want to continue or if they missed the question
-3. You may re-ask the question if the user confirms they want to continue
-
-**When ask_user returns `shouldRetry: false` with error:**
-
-1. Maximum retry attempts (3) have been exceeded
-2. Inform the user: "There was a technical issue displaying the question. Please try again."
-3. Ask if they want to continue with the task
-
-## Build & Quality Commands
-
-### Development
-
-- `npm run dev` - Start Electron development server with hot reload
-
-### Code Quality
-
-- `npm run lint` - Run ESLint with auto-fix (run before committing)
-- `npm run format` - Format code with Prettier
-- `npm run typecheck` - Run TypeScript type checking (both main and renderer)
-- `npm run typecheck:node` - Type check main process only
-- `npm run typecheck:web` - Type check renderer process only
-
-### Building
-
-- `npm run build` - Full build with type checking
-- `npm run build:win` - Build Windows executable
-- `npm run build:mac` - Build macOS executable
-- `npm run build:linux` - Build Linux executable
-
-### Testing
-
-**No test framework is currently configured.** When adding tests, choose and configure a framework (Jest, Vitest, or Playwright).
-
-## Code Style Guidelines
-
-### File Structure & Organization
-
-- **Barrel exports**: Use `index.ts` files to export from directories
-- **Component colocation**: Keep components, hooks, and types in feature folders
-- **Renderer code**: `src/renderer/src/` uses `@renderer/` alias for imports
-- **Main process**: `src/main/` for Electron backend logic
-- **Preload**: `src/preload/` for IPC bridge scripts
-
-### TypeScript & Types
-
-- **Strict typing**: All files must have proper TypeScript types
-- **Type definitions**: Centralize types in `types/` directories
-- **Interfaces**: Use for object shapes, prefer `type` for unions/intersections
-- **Type exports**: Always export types used by other modules
-- **No `any`**: Avoid `any`; use `unknown` with type guards if needed
-
-### Import Conventions
-
-```typescript
-// Order: 1) External deps, 2) Internal modules, 3) Relative imports
-import { useState } from "react";
-import { Button } from "@renderer/components/ui/button";
-import { useUsage } from "../hooks/useUsage";
-
-// Use @renderer/ alias for cross-directory imports in renderer process
-// Use relative imports (../) for same-feature file imports
+# Utilities
+npm run validate:assets  # Validate static assets exist
 ```
 
-### Component Patterns
+## Code Style
 
-```typescript
-// Functional components with named exports
-export function MyComponent({ prop }: Props) {
-  // Hooks at top level
-  const [state, setState] = useState(null)
+### TypeScript/React
 
-  // Event handlers before return
-  const handleClick = () => { }
+**Imports:**
 
-  // Conditional rendering with fragments
-  return state ? <div /> : <Loading />
-}
+- Use absolute imports with `@renderer/` alias
+- Group imports: React → libraries → `@renderer/` → relative
+- Example: `import { cn } from "@renderer/lib/utils";`
+
+**Formatting:**
+
+- Prettier with default config
+- 2-space indentation
+- Single quotes for strings
+- Semicolons required
+- Trailing commas in multi-line
+
+**Types:**
+
+- Explicit return types on exported functions
+- Interface for object types, type for unions/aliases
+- Prefix unused params with `_`
+
+**Naming:**
+
+- PascalCase: components, types, interfaces
+- camelCase: variables, functions, hooks
+- SCREAMING_SNAKE_CASE: constants
+
+**Components:**
+
+- Use function declarations for components
+- Forward refs with `React.forwardRef`
+- Set `displayName` on forwarded components
+- Tailwind classes in template literals for complex cases
+
+**State Management:**
+
+- Zustand stores in `src/renderer/src/stores/`
+- Selectors for individual state slices
+- Actions defined in store, not components
+
+**Error Handling:**
+
+- Use `try/catch` for async operations
+- Log errors in development: `if (isDev) console.error(...)`
+- Set error state via stores, not inline alerts
+
+### Rust
+
+**Formatting:**
+
+- `cargo fmt --all -- --check` for formatting check
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings` for linting
+
+**Naming:**
+
+- snake_case: variables, functions, modules
+- PascalCase: structs, enums, traits
+- SCREAMING_SNAKE_CASE: constants, statics
+
+**Error Handling:**
+
+- Use `?` operator for propagation
+- `Result<T, E>` for fallible operations
+- `Option<T>` for nullable values
+
+**Organization:**
+
+- Modules in separate files
+- Re-exports in `lib.rs`
+- Tauri commands in `main.rs` with `#[tauri::command]`
+
+## Project Structure
+
+```
+src/renderer/src/
+  components/     # React components (feature-based)
+    ui/           # Reusable UI primitives
+    auth/         # Auth-related components
+    dashboard/    # Main dashboard
+    layout/       # Layout components
+  hooks/          # Custom React hooks
+  stores/         # Zustand stores
+  services/       # API services
+  types/          # TypeScript types
+  lib/            # Utilities
+
+src-tauri/src/
+  main.rs         # Entry point, Tauri commands
+  lib.rs          # Module exports
+  auth.rs         # GitHub auth logic
+  store.rs        # Persistent storage
+  usage.rs        # Usage data fetching
+  tray_icon_renderer.rs  # Tray icon generation
 ```
 
-### Naming Conventions
+## Key Patterns
 
-- **Components**: PascalCase (`UsageCard`, `Dashboard`)
-- **Functions/variables**: camelCase (`fetchUsage`, `isLoading`)
-- **Types/interfaces**: PascalCase (`CopilotUsage`, `AuthState`)
-- **Constants**: UPPER_SNAKE_CASE for global, PascalCase for exported
-- **Files**: PascalCase for components, camelCase for utilities
+**Tailwind + CSS Variables:**
 
-### State Management (Zustand)
+- Theme colors use CSS variables: `bg-[hsl(var(--primary))]`
+- Utility: `cn()` merges classes with tailwind-merge
 
-```typescript
-// Store structure: state, actions, selectors
-interface State {
-  data: Type | null;
-  setData: (data: Type | null) => void;
-}
+**Tauri Bridge:**
 
-export const useStore = create<State>((set) => ({
-  data: null,
-  setData: (data) => set({ data }),
-}));
+- Access via `window.electron` (typed in `types/app.ts`)
+- Events use Tauri's `emit`/`listen` pattern
 
-// Export selectors for computed values
-export const useData = () => useStore((state) => state.data);
-```
+**No Tests:**
 
-### Error Handling
+- This project has no test suite currently
+- Manual testing via `npm run dev`
 
-```typescript
-// Always handle errors with try-catch
-try {
-  await operation();
-} catch (err) {
-  const message = err instanceof Error ? err.message : "Failed to operation";
-  setError(message);
-}
+## Critical Notes
 
-// Optional chaining for safe access
-const value = data?.nested?.property ?? defaultValue;
-```
-
-### Styling (Tailwind + shadcn/ui)
-
-- Use shadcn/ui components as base (`Button`, `Card`, `Progress`)
-- Utility-first with Tailwind classes
-- Responsive: `grid-cols-1 md:grid-cols-2`
-- Dark mode: Use semantic tokens (`text-muted-foreground`, not `text-gray-500`)
-- Spacing: Tailwind scale (`p-4`, `gap-6`, `space-y-4`)
-
-### Comments & Documentation
-
-```typescript
-/**
- * Brief description of what the file/component does
- * Additional context if needed
- */
-
-// Inline comments only for complex logic
-```
-
-### IPC Communication (Main ↔ Renderer)
-
-- **Preload scripts**: Define IPC channels in `src/preload/`
-- **Type safety**: Use `window.electron` with TypeScript definitions
-- **Async/await**: All IPC calls are asynchronous
-- **Error propagation**: Return `{ success: boolean, data?, error? }` pattern
-
-### Code Quality Standards
-
-- **No console.log** in production code (use proper error handling)
-- **Pure functions** for data transformations
-- **Custom hooks** for reusable stateful logic
-- **Constants** for magic numbers and strings
-- **Early returns** to reduce nesting
+- Always run `npm run typecheck` and `npm run lint` before committing
+- `npm run lint` runs both JS (ESLint) and Rust (fmt + clippy) checks
+- Use `npm run lint:js` or `npm run lint:rust` for individual language checks
+- macOS uses private Tauri APIs (enabled in config)
+- Tray icon rendered dynamically using fontdue/tiny-skia
