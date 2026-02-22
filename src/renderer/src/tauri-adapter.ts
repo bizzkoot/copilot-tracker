@@ -40,6 +40,13 @@ interface RustAppSettings {
   showNotifications: boolean;
   notificationThresholds: number[];
   trayIconFormat: string;
+  widgetEnabled: boolean;
+  widgetPosition: {
+    x: number;
+    y: number;
+  };
+  widgetPinned: boolean;
+  widgetVisible: boolean;
 }
 
 // Rust AuthState result
@@ -549,6 +556,10 @@ export async function initTauriAdapter() {
             notificationThresholds,
             trayIconFormat:
               newSettings.trayIconFormat ?? current.trayIconFormat,
+            widgetEnabled: current.widgetEnabled,
+            widgetPosition: current.widgetPosition,
+            widgetPinned: current.widgetPinned,
+            widgetVisible: current.widgetVisible,
             // Backend-managed fields (always include from current)
             customerId: current.customerId,
             usageLimit: current.usageLimit,

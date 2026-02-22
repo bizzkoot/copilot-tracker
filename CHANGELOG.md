@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.4.4](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.3...v2.4.4) (2026-02-22)
+
+
+### Bug Fixes
+
+* **widget:** harden pin and position persistence ([deaaf71](https://github.com/bizzkoot/copilot-tracker/commit/deaaf71614624373dea41b37b842e8d541ae216d))
+* **widget:** harden state persistence paths ([4053925](https://github.com/bizzkoot/copilot-tracker/commit/405392523a9a883906da28ed203378538fcea2c3))
+* **widget:** sync startup tray label with restored visibility ([c8e23c3](https://github.com/bizzkoot/copilot-tracker/commit/c8e23c3b488b87977aa0542c31fb5423d36bb35d))
+
+
+### Documentation
+
+* update AGENTS.md to enhance guidelines and structure for AI agents ([fa17320](https://github.com/bizzkoot/copilot-tracker/commit/fa17320ec5a7493181518583b19ef76683408d4a))
+
 ## [2.4.3](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.2...v2.4.3) (2026-02-19)
 
 

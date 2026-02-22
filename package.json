@@ -1,11 +1,12 @@
 {
   "name": "copilot-tracker",
-  "version": "2.4.3",
+  "version": "2.4.4",
   "description": "Copilot Usage Tracker - Tauri App",
   "main": "./out/main/index.js",
   "author": "",
   "homepage": "",
   "scripts": {
+    "test": "node --test tests/regression/*.test.mjs",
     "validate:assets": "ts-node scripts/validate-assets.ts",
     "format": "prettier --write .",
     "lint:js": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",

@@ -33,6 +33,44 @@ export function WidgetHeader({
   const isDraggingRef = useRef(false);
 
   useEffect(() => {
+    const currentWindow = getCurrentWindow();
+    let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+    let unlisten: (() => void) | null = null;
+
+    const persistPosition = async (x: number, y: number) => {
+      try {
+        await tauriInvoke("set_widget_position", { x, y });
+      } catch (error) {
+        console.error("Failed to save widget position from move event:", error);
+      }
+    };
+
+    currentWindow
+      .onMoved(({ payload: position }) => {
+        if (saveTimeout) {
+          clearTimeout(saveTimeout);
+        }
+
+        saveTimeout = setTimeout(() => {
+          void persistPosition(position.x, position.y);
+        }, 250);
+      })
+      .then((stop) => {
+        unlisten = stop;
+      })
+      .catch((error) => {
+        console.error("Failed to listen for widget move events:", error);
+      });
+
+    return () => {
+      if (saveTimeout) {
+        clearTimeout(saveTimeout);
+      }
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
     const header = headerRef.current;
     if (!header) return;
 
