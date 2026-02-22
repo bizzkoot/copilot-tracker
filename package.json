@@ -6,6 +6,7 @@
   "author": "",
   "homepage": "",
   "scripts": {
+    "test": "node --test tests/regression/*.test.mjs",
     "validate:assets": "ts-node scripts/validate-assets.ts",
     "format": "prettier --write .",
     "lint:js": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",
