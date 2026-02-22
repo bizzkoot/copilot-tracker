@@ -1030,22 +1030,33 @@ fn toggle_widget(app: AppHandle) -> Result<bool, String> {
         if widget.is_visible().map_err(|e| e.to_string())? {
             widget.hide().map_err(|e| e.to_string())?;
             // Fully disable widget on hide (must re-enable from settings)
-            let _ = store.set_widget_enabled(false);
-            let _ = store.set_widget_visible(false);
+            store
+                .set_widget_enabled(false)
+                .map_err(|e| format!("Failed to persist widget_enabled=false: {}", e))?;
+            store
+                .set_widget_visible(false)
+                .map_err(|e| format!("Failed to persist widget_visible=false: {}", e))?;
             // Notify all windows of widget state change
             let _ = app.emit("widget:enabled-changed", false);
             Ok(false)
         } else {
             // Restore position before showing
             let widget_position = store.get_widget_position();
-            let _ = widget.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
-                x: widget_position.x,
-                y: widget_position.y,
-            }));
-            show_widget_without_focus(&widget)?;
+            widget
+                .set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+                    x: widget_position.x,
+                    y: widget_position.y,
+                }))
+                .map_err(|e| e.to_string())?;
+            let widget_pinned = store.get_widget_pinned();
+            show_widget_without_focus(&widget, widget_pinned)?;
             // Mark widget as enabled and visible so it restores on restart
-            let _ = store.set_widget_enabled(true);
-            let _ = store.set_widget_visible(true);
+            store
+                .set_widget_enabled(true)
+                .map_err(|e| format!("Failed to persist widget_enabled=true: {}", e))?;
+            store
+                .set_widget_visible(true)
+                .map_err(|e| format!("Failed to persist widget_visible=true: {}", e))?;
             // Notify all windows of widget state change
             let _ = app.emit("widget:enabled-changed", true);
             Ok(true)
@@ -1063,8 +1074,12 @@ fn hide_widget(app: AppHandle) -> Result<(), String> {
         let store = app.state::<StoreManager>();
         widget.hide().map_err(|e| e.to_string())?;
         // Fully disable widget when closing (must re-enable from settings)
-        let _ = store.set_widget_enabled(false);
-        let _ = store.set_widget_visible(false);
+        store
+            .set_widget_enabled(false)
+            .map_err(|e| format!("Failed to persist widget_enabled=false: {}", e))?;
+        store
+            .set_widget_visible(false)
+            .map_err(|e| format!("Failed to persist widget_visible=false: {}", e))?;
 
         // Notify all windows of widget state change
         let _ = app.emit("widget:enabled-changed", false);
@@ -1094,7 +1109,10 @@ fn minimize_widget(app: AppHandle) -> Result<(), String> {
 
 /// Show widget without stealing focus from current application
 /// Uses platform-specific APIs to prevent focus stealing
-fn show_widget_without_focus(widget: &tauri::WebviewWindow) -> Result<(), String> {
+fn show_widget_without_focus(
+    widget: &tauri::WebviewWindow,
+    always_on_top: bool,
+) -> Result<(), String> {
     // Show the widget
     widget.show().map_err(|e| e.to_string())?;
 
@@ -1109,7 +1127,9 @@ fn show_widget_without_focus(widget: &tauri::WebviewWindow) -> Result<(), String
         // Small delay to let the show complete, then minimize and restore
         // This breaks the focus chain
         std::thread::sleep(std::time::Duration::from_millis(10));
-        let _ = widget.set_always_on_top(true);
+        widget
+            .set_always_on_top(always_on_top)
+            .map_err(|e| e.to_string())?;
     }
 
     #[cfg(target_os = "windows")]
@@ -1117,14 +1137,18 @@ fn show_widget_without_focus(widget: &tauri::WebviewWindow) -> Result<(), String
         // On Windows, the window configuration (skip_taskbar, decorations=false)
         // already helps prevent focus stealing
         // We ensure always_on_top is set to keep it floating
-        let _ = widget.set_always_on_top(true);
+        widget
+            .set_always_on_top(always_on_top)
+            .map_err(|e| e.to_string())?;
     }
 
     #[cfg(target_os = "linux")]
     {
         // On Linux, most window managers respect the window type
         // The skip_taskbar and decorations settings help prevent focus stealing
-        let _ = widget.set_always_on_top(true);
+        widget
+            .set_always_on_top(always_on_top)
+            .map_err(|e| e.to_string())?;
     }
 
     Ok(())
@@ -1144,9 +1168,16 @@ async fn set_widget_position(app: AppHandle, x: i32, y: i32) -> Result<(), Strin
     let store = app.state::<StoreManager>();
 
     if let Some(widget) = app.get_webview_window("widget") {
-        widget
-            .set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }))
-            .map_err(|e| e.to_string())?;
+        let should_set_position = match widget.outer_position() {
+            Ok(current) => current.x != x || current.y != y,
+            Err(_) => true,
+        };
+
+        if should_set_position {
+            widget
+                .set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }))
+                .map_err(|e| e.to_string())?;
+        }
     }
 
     // Save position to settings even if the widget window is not currently available
@@ -1227,10 +1258,14 @@ async fn set_widget_enabled(app: AppHandle, enabled: bool) -> Result<(), String>
     // Always set widget_visible state regardless of window availability
     // This ensures the state persists even if window is not ready yet
     if enabled {
-        let _ = store.set_widget_visible(true);
+        store
+            .set_widget_visible(true)
+            .map_err(|e| format!("Failed to persist widget_visible=true: {}", e))?;
         log::info!("[Widget] Set widget_visible=true");
     } else {
-        let _ = store.set_widget_visible(false);
+        store
+            .set_widget_visible(false)
+            .map_err(|e| format!("Failed to persist widget_visible=false: {}", e))?;
         log::info!("[Widget] Set widget_visible=false");
     }
 
@@ -1242,11 +1277,14 @@ async fn set_widget_enabled(app: AppHandle, enabled: bool) -> Result<(), String>
         if let Some(widget) = app.get_webview_window("widget") {
             // Restore position before showing
             let widget_position = store.get_widget_position();
-            let _ = widget.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
-                x: widget_position.x,
-                y: widget_position.y,
-            }));
-            let _ = widget.show();
+            widget
+                .set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+                    x: widget_position.x,
+                    y: widget_position.y,
+                }))
+                .map_err(|e| e.to_string())?;
+            let widget_pinned = store.get_widget_pinned();
+            show_widget_without_focus(&widget, widget_pinned)?;
             log::info!("[Widget] Widget window shown");
         } else {
             log::warn!("[Widget] Widget window not found when enabling");
@@ -1254,7 +1292,7 @@ async fn set_widget_enabled(app: AppHandle, enabled: bool) -> Result<(), String>
     } else {
         // If disabling, hide the widget
         if let Some(widget) = app.get_webview_window("widget") {
-            let _ = widget.hide();
+            widget.hide().map_err(|e| e.to_string())?;
             log::info!("[Widget] Widget window hidden");
         }
     }
@@ -1901,8 +1939,32 @@ fn main() {
 
                         if let Some(widget) = app.get_webview_window("widget") {
                             let is_visible = widget.is_visible().unwrap_or(false);
-                            let _ = store.set_widget_visible(is_visible);
-                            log::info!("[Shutdown] Widget enabled={}, saving visibility: {}", widget_enabled, is_visible);
+                            let position = widget
+                                .outer_position()
+                                .map(|pos| WidgetPosition { x: pos.x, y: pos.y })
+                                .unwrap_or_else(|_| store.get_widget_position());
+
+                            if let Err(err) = store.set_widget_visible(is_visible) {
+                                log::error!(
+                                    "[Shutdown] Failed to persist widget visibility: {}",
+                                    err
+                                );
+                            }
+
+                            if let Err(err) = store.set_widget_position(position.clone()) {
+                                log::error!(
+                                    "[Shutdown] Failed to persist widget position: {}",
+                                    err
+                                );
+                            }
+
+                            log::info!(
+                                "[Shutdown] Widget enabled={}, saving visibility={}, position=({}, {})",
+                                widget_enabled,
+                                is_visible,
+                                position.x,
+                                position.y
+                            );
                         } else {
                             log::info!("[Shutdown] Widget window not found, widget_enabled={}", widget_enabled);
                         }
@@ -2271,7 +2333,7 @@ fn main() {
                     // Show widget if it was visible (without stealing focus)
                     if widget_visible {
                         log::info!("[Startup] Showing widget (was visible on last shutdown)");
-                        let _ = show_widget_without_focus(&widget);
+                        let _ = show_widget_without_focus(&widget, widget_pinned);
                     } else {
                         log::info!("[Startup] Widget enabled but was hidden on last shutdown, not showing");
                     }
