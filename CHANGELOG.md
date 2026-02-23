@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.4.5](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.4...v2.4.5) (2026-02-23)
+
+
+### Bug Fixes
+
+* **ci:** improve contributor auto-detection in release workflow ([9615f3f](https://github.com/bizzkoot/copilot-tracker/commit/9615f3f35ba95439d3c80d0d2bb61b6e32a0c1c0))
+* **ci:** repair all-contributors config and non-interactive add ([d44704b](https://github.com/bizzkoot/copilot-tracker/commit/d44704b588dc10a57ca3b7f998502052ce14df8b))
+* **release:** Update contributor retrieval to use previous release tag ([4e0d207](https://github.com/bizzkoot/copilot-tracker/commit/4e0d2075940bed1270639dca4fe128d2f9b317e4))
+* **tray-menu:** Compress tray menu by moving quota/activity/forecast into submenu ([f092c21](https://github.com/bizzkoot/copilot-tracker/commit/f092c21934b1ae19d9c7c0d1b931e55b30b3a06f)), closes [#42](https://github.com/bizzkoot/copilot-tracker/issues/42)
+
+
+### Documentation
+
+* add CONTRIBUTING.md, All Contributors config, and auto-contributor workflow ([1787ee5](https://github.com/bizzkoot/copilot-tracker/commit/1787ee53916d0c46fa8ca942351755916c3d15db))
+
 ## [2.4.4](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.3...v2.4.4) (2026-02-22)
 
 
