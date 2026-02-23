@@ -1028,11 +1028,21 @@ impl AuthManager {
                             // the authoritative source for used + limit on enterprise plans.
                             if let Some(ent) = result.get("entitlement") {
                                 log::info!("Entitlement payload received: {:?}", ent);
-                                if ent.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
-                                    let limit = ent.get("limit").and_then(|v| v.as_u64()).unwrap_or(0);
-                                    let used = ent.get("used").and_then(|v| v.as_u64()).unwrap_or(0);
+                                if ent
+                                    .get("success")
+                                    .and_then(|v| v.as_bool())
+                                    .unwrap_or(false)
+                                {
+                                    let limit =
+                                        ent.get("limit").and_then(|v| v.as_u64()).unwrap_or(0);
+                                    let used =
+                                        ent.get("used").and_then(|v| v.as_u64()).unwrap_or(0);
                                     if limit > 0 {
-                                        log::info!("Using enterprise entitlement data: used={}, limit={}", used, limit);
+                                        log::info!(
+                                            "Using enterprise entitlement data: used={}, limit={}",
+                                            used,
+                                            limit
+                                        );
                                         usage_data = Some(UsageData {
                                             net_billed_amount: 0.0,
                                             net_quantity: 0,
@@ -1044,7 +1054,10 @@ impl AuthManager {
                                         log::warn!("Entitlement data has limit=0, not using");
                                     }
                                 } else {
-                                    let err = ent.get("error").and_then(|v| v.as_str()).unwrap_or("unknown");
+                                    let err = ent
+                                        .get("error")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("unknown");
                                     log::warn!("Entitlement fetch failed: {}", err);
                                     // Keep usageCard data as fallback for personal plan users
                                 }
