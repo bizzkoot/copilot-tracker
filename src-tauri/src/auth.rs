@@ -235,6 +235,26 @@ impl AuthManager {
                                         });
                                     }
 
+                                    // Always prefer entitlement data when available and successful.
+                                    // The usageCard API may return a non-zero limit but zero used
+                                    // for enterprise (Copilot Business) users.
+                                    if let Some(ent) = json.get("entitlement") {
+                                        if ent.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
+                                            let limit = ent.get("limit").and_then(|v| v.as_u64()).unwrap_or(0);
+                                            let used = ent.get("used").and_then(|v| v.as_u64()).unwrap_or(0);
+                                            if limit > 0 {
+                                                log::info!("Using enterprise entitlement data: used={}, limit={}", used, limit);
+                                                extracted_usage_data = Some(UsageData {
+                                                    net_billed_amount: 0.0,
+                                                    net_quantity: 0,
+                                                    discount_quantity: used,
+                                                    user_premium_request_entitlement: limit,
+                                                    filtered_user_premium_request_entitlement: limit,
+                                                });
+                                            }
+                                        }
+                                    }
+
                                     // Extract Usage History
                                     if let Some(rows) = json.get("usageTable")
                                         .and_then(|v| v.get("data"))
@@ -573,6 +593,30 @@ impl AuthManager {
                 }
               }
 
+              async function fetchEntitlement() {
+                try {
+                  console.log('[AuthInjector] Fetching copilot entitlement...');
+                  const res = await fetch('/github-copilot/chat/entitlement', {
+                    headers: { 'Accept': 'application/json' }
+                  });
+                  console.log('[AuthInjector] Entitlement response status:', res.status);
+                  if (!res.ok) {
+                    console.error('[AuthInjector] Entitlement request failed:', res.status);
+                    return { success: false, error: 'Entitlement request failed: ' + res.status };
+                  }
+                  const data = await res.json();
+                  const limit = data?.quotas?.limits?.premiumInteractions ?? 0;
+                  const remaining = data?.quotas?.remaining?.premiumInteractions ?? 0;
+                  const used = limit - remaining;
+                  const resetDate = data?.quotas?.resetDate ?? null;
+                  console.log('[AuthInjector] Entitlement: used=' + used + ', limit=' + limit + ', resetDate=' + resetDate);
+                  return { success: true, used, limit, resetDate };
+                } catch (error) {
+                  console.error('[AuthInjector] Entitlement fetch error:', error);
+                  return { success: false, error: error.message };
+                }
+              }
+
               async function extractAndSend() {
                 console.log('[AuthInjector] Running extractAndSend...');
                 const result = await extractCustomerId();
@@ -581,12 +625,14 @@ impl AuthManager {
 
                   const usageCard = await fetchUsageCard(result.id);
                   const usageTable = await fetchUsageTable(result.id);
+                  const entitlement = await fetchEntitlement();
 
                   console.log('[AuthInjector] Creating payload...');
                   const payload = {
                       id: result.id,
                       usageCard: usageCard,
-                      usageTable: usageTable
+                      usageTable: usageTable,
+                      entitlement: entitlement
                   };
 
                   console.log('[AuthInjector] Redirecting with payload...');
@@ -811,13 +857,59 @@ impl AuthManager {
                 }
               }
 
+              async function fetchEntitlement() {
+                try {
+                  const res = await fetch('/github-copilot/chat/entitlement', {
+                    headers: { 'Accept': 'application/json' }
+                  });
+                  if (!res.ok) {
+                    const body = await res.text().catch(() => '');
+                    console.error('[HiddenAuth] Entitlement request failed:', res.status, body);
+                    return { success: false, error: 'Entitlement request failed: ' + res.status + ' ' + body };
+                  }
+                  const data = await res.json();
+                  console.log('[HiddenAuth] Entitlement raw response:', JSON.stringify(data));
+                  const limit = data?.quotas?.limits?.premiumInteractions ?? 0;
+                  const remaining = data?.quotas?.remaining?.premiumInteractions ?? 0;
+                  const used = limit - remaining;
+                  const resetDate = data?.quotas?.resetDate ?? null;
+                  console.log('[HiddenAuth] Entitlement: used=' + used + ', limit=' + limit);
+                  return { success: true, used, limit, resetDate };
+                } catch (error) {
+                  console.error('[HiddenAuth] Entitlement fetch error:', error);
+                  return { success: false, error: error.message };
+                }
+              }
+
               async function runExtraction() {
                 console.log('[HiddenAuth] Starting extraction...');
+
+                // Always fetch entitlement first - works for all plan types
+                // including enterprise where billing page yields no data
+                const entitlement = await fetchEntitlement();
+                console.log('[HiddenAuth] Entitlement result:', JSON.stringify(entitlement));
+
                 const customerResult = await extractCustomerId();
                 console.log('[HiddenAuth] Customer result:', customerResult);
                 await sendResult('auth:extraction:customer', customerResult);
 
                 if (!customerResult.success) {
+                  // For enterprise users: customer ID may not be on billing page,
+                  // but we can still report entitlement data using the GitHub user ID as a fallback key
+                  console.log('[HiddenAuth] Customer ID extraction failed, attempting user ID fallback...');
+                  const userResult = await getUserId();
+                  if (userResult.success && entitlement.success && entitlement.limit > 0) {
+                    console.log('[HiddenAuth] Using user ID as fallback with entitlement data');
+                    await sendResult('auth:extraction:customer', { success: true, id: userResult.id });
+                    await sendResult('auth:extraction:usage', {
+                      customerId: userResult.id,
+                      usageCard: { success: false, error: 'No billing page data' },
+                      usageTable: { success: false, error: 'No billing page data' },
+                      entitlement
+                    });
+                    await sendResult('auth:extraction:complete', { success: true });
+                    return;
+                  }
                   await sendResult('auth:extraction:complete', { success: false });
                   return;
                 }
@@ -829,7 +921,8 @@ impl AuthManager {
                 await sendResult('auth:extraction:usage', {
                   customerId: customerResult.id,
                   usageCard,
-                  usageTable
+                  usageTable,
+                  entitlement
                 });
 
                 await sendResult('auth:extraction:complete', { success: true });
@@ -926,6 +1019,37 @@ impl AuthManager {
                                         .and_then(|v| v.as_u64())
                                         .unwrap_or(0),
                                 });
+                            }
+
+                            // Always prefer entitlement data when available and successful.
+                            // The usageCard API may return a non-zero limit but zero used count
+                            // for enterprise users (Copilot Business), making a 0/0 guard
+                            // insufficient. The /github-copilot/chat/entitlement endpoint is
+                            // the authoritative source for used + limit on enterprise plans.
+                            if let Some(ent) = result.get("entitlement") {
+                                log::info!("Entitlement payload received: {:?}", ent);
+                                if ent.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
+                                    let limit = ent.get("limit").and_then(|v| v.as_u64()).unwrap_or(0);
+                                    let used = ent.get("used").and_then(|v| v.as_u64()).unwrap_or(0);
+                                    if limit > 0 {
+                                        log::info!("Using enterprise entitlement data: used={}, limit={}", used, limit);
+                                        usage_data = Some(UsageData {
+                                            net_billed_amount: 0.0,
+                                            net_quantity: 0,
+                                            discount_quantity: used,
+                                            user_premium_request_entitlement: limit,
+                                            filtered_user_premium_request_entitlement: limit,
+                                        });
+                                    } else {
+                                        log::warn!("Entitlement data has limit=0, not using");
+                                    }
+                                } else {
+                                    let err = ent.get("error").and_then(|v| v.as_str()).unwrap_or("unknown");
+                                    log::warn!("Entitlement fetch failed: {}", err);
+                                    // Keep usageCard data as fallback for personal plan users
+                                }
+                            } else {
+                                log::warn!("No entitlement field in extraction payload");
                             }
 
                             // Parse usage table
