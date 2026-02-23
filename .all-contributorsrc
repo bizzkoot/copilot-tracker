@@ -2,11 +2,23 @@
   "projectName": "copilot-tracker",
   "projectOwner": "bizzkoot",
   "repoType": "github",
-  "repoHost": "github.com",
-  "files": ["README.md"],
+  "repoHost": "https://github.com",
+  "files": [
+    "README.md"
+  ],
   "imageSize": 100,
   "commit": true,
   "commitConvention": "gitmoji",
-  "contributors": [],
+  "contributors": [
+    {
+      "login": "bsauvajon",
+      "name": "brice",
+      "avatar_url": "https://avatars.githubusercontent.com/u/16101305?v=4",
+      "profile": "http://www.atih.sante.fr/",
+      "contributions": [
+        "code"
+      ]
+    }
+  ],
   "contributorsPerLine": 7
 }
