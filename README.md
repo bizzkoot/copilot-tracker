@@ -7,6 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-blue.svg)](https://github.com/bizzkoot/copilot-tracker)
 [![GitHub Downloads](https://img.shields.io/github/downloads/bizzkoot/copilot-tracker/total?label=downloads)](https://github.com/bizzkoot/copilot-tracker/releases)
+[![All Contributors](https://img.shields.io/badge/all_contributors-0-orange.svg?style=flat-square)](#contributors)
 
 </div>
 
@@ -53,6 +54,7 @@ The floating widget provides persistent visibility of your Copilot usage on **al
 </p>
 
 **Widget Features:**
+
 - **Draggable**: Click and drag the header to position anywhere on your screen
 - **Pin Mode**: Toggle between always-on-top (pinned) or desktop-only (unpinned) mode
 - **Real-time Updates**: Shows current usage, percentage, and prediction data
@@ -61,6 +63,7 @@ The floating widget provides persistent visibility of your Copilot usage on **al
 - **Cross-Platform**: Works on macOS, Windows, and Linux
 
 **How to Use:**
+
 1. **Show/Hide**: Right-click tray icon → "Show Widget" / "Hide Widget", or double-click the tray icon
 2. **Drag**: Click and hold the widget header to move it anywhere
 3. **Pin Toggle**: Click the pin icon (📌) to switch between floating and desktop-only modes
@@ -68,6 +71,7 @@ The floating widget provides persistent visibility of your Copilot usage on **al
 5. **Close**: Click the close button (×) to completely hide the widget
 
 **Pin Modes:**
+
 - **Pinned (📌)**: Widget floats above all windows - constant visibility while working
 - **Unpinned (📍)**: Widget stays on desktop only - less intrusive, visible when viewing desktop
 
@@ -437,6 +441,24 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
   - `Previously known as copilot-usage-monitor`
 - UI components from [shadcn/ui](https://ui.shadcn.com/)
 - Built with [Tauri](https://tauri.app/)
+
+## Contributors
+
+<!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
+
+[![All Contributors](https://img.shields.io/badge/all_contributors-0-orange.svg?style=flat-square)](#contributors)
+
+<!-- ALL-CONTRIBUTORS-BADGE:END -->
+
+<!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
+<!-- prettier-ignore-start -->
+<!-- markdownlint-disable -->
+<!-- markdownlint-restore -->
+<!-- prettier-ignore-end -->
+
+<!-- ALL-CONTRIBUTORS-LIST:END -->
+
+Thanks to all contributors! 🎉
 
 ## Support
 

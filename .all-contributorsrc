@@ -1,0 +1,12 @@
+{
+  "projectName": "copilot-tracker",
+  "projectOwner": "bizzkoot",
+  "repoType": "github",
+  "repoHost": "github.com",
+  "files": ["README.md"],
+  "imageSize": 100,
+  "commit": true,
+  "commitConvention": "gitmoji",
+  "contributors": [],
+  "contributorsPerLine": 7
+}

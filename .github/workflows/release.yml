@@ -455,3 +455,100 @@ jobs:
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
           tag_name: ${{ needs.release-please.outputs.tag_name }}
+
+  # ============================================================================
+  # Auto-add contributors (non-bizzkoot, non-bot) to All Contributors
+  # ============================================================================
+  update-contributors:
+    runs-on: ubuntu-latest
+    # Run only on release PR merge (when commit message contains 'release')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'release')
+    permissions:
+      contents: write
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get last all-contributors commit
+        id: last-commit
+        run: |
+          # Find the last commit that modified .all-contributorsrc
+          LAST_CONTRIBUTOR_COMMIT=$(git log --format=%H --reverse -- .all-contributorsrc | tail -1)
+          if [ -z "$LAST_CONTRIBUTOR_COMMIT" ]; then
+            # If no commits found, use first commit
+            LAST_CONTRIBUTOR_COMMIT=$(git rev-list --max-parents=0 HEAD)
+          fi
+          echo "Last contributor update: $LAST_CONTRIBUTOR_COMMIT"
+          echo "commit=$LAST_CONTRIBUTOR_COMMIT" >> $GITHUB_OUTPUT
+
+      - name: Get unique contributors since last update
+        id: contributors
+        run: |
+          # Exclude bizzkoot and github-actions[bot]
+          EXCLUDE_AUTHOR="bizzkoot"
+          EXCLUDE_EMAIL="github-actions[bot]@users.noreply.github.com"
+
+          # Get unique authors from commits since last update
+          CONTRIBUTORS=$(git log ${{ steps.last-commit.outputs.commit }}..HEAD --format='%an|%ae' | sort -u | grep -v "$EXCLUDE_AUTHOR" | grep -v "$EXCLUDE_EMAIL" || true)
+
+          if [ -z "$CONTRIBUTORS" ]; then
+            echo "No new contributors found"
+            echo "new_contributors=" >> $GITHUB_OUTPUT
+          else
+            echo "Found new contributors:"
+            echo "$CONTRIBUTORS"
+            
+            # Convert to JSON array for GitHub output
+            JSON_ARRAY=$(echo "$CONTRIBUTORS" | jq -R . | jq -s .)
+            echo "new_contributors=$JSON_ARRAY" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install Node.js
+        if: steps.contributors.outputs.new_contributors != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install all-contributors CLI
+        if: steps.contributors.outputs.new_contributors != ''
+        run: npm install -g all-contributors-cli
+
+      - name: Add new contributors
+        if: steps.contributors.outputs.new_contributors != ''
+        run: |
+          # Parse each contributor and add them
+          for contributor in $(echo '${{ steps.contributors.outputs.new_contributors }}' | jq -r '.[]'); do
+            USERNAME=$(echo "$contributor" | cut -d'|' -f1)
+            EMAIL=$(echo "$contributor" | cut -d'|' -f2)
+            
+            # Try to get GitHub username from email
+            GH_USERNAME=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/search/users?q=$EMAIL+in:email" | \
+              jq -r '.items[0].login // empty')
+            
+            if [ -n "$GH_USERNAME" ]; then
+              echo "Adding contributor: $GH_USERNAME"
+              all-contributors add "$GH_USERNAME" code
+            else
+              echo "Could not find GitHub username for $USERNAME ($EMAIL), skipping"
+            fi
+          done
+
+      - name: Commit and push changes
+        if: steps.contributors.outputs.new_contributors != ''
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          # Check if there are changes to commit
+          if git diff --quiet .all-contributorsrc; then
+            echo "No contributor changes to commit"
+          else
+            git add .all-contributorsrc
+            git commit -m "docs: update all-contributors"
+            git push
+            echo "Contributors updated!"
+          fi
