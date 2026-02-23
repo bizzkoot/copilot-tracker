@@ -472,27 +472,27 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get last all-contributors commit
-        id: last-commit
+      - name: Get previous release tag
+        id: last-tag
         run: |
-          # Find the last commit that modified .all-contributorsrc
-          LAST_CONTRIBUTOR_COMMIT=$(git log --format=%H --reverse -- .all-contributorsrc | tail -1)
-          if [ -z "$LAST_CONTRIBUTOR_COMMIT" ]; then
-            # If no commits found, use first commit
-            LAST_CONTRIBUTOR_COMMIT=$(git rev-list --max-parents=0 HEAD)
+          # Get all tags, sort by date, get the one before latest
+          PREV_TAG=$(git tag --sort=-creatordate | tail -n +2 | head -1)
+          if [ -z "$PREV_TAG" ]; then
+            # Fallback: use first commit if no tags
+            PREV_TAG=$(git rev-list --max-parents=0 HEAD)
           fi
-          echo "Last contributor update: $LAST_CONTRIBUTOR_COMMIT"
-          echo "commit=$LAST_CONTRIBUTOR_COMMIT" >> $GITHUB_OUTPUT
+          echo "Previous release tag: $PREV_TAG"
+          echo "tag=$PREV_TAG" >> $GITHUB_OUTPUT
 
-      - name: Get unique contributors since last update
+      - name: Get contributors since last release
         id: contributors
         run: |
-          # Exclude bizzkoot and github-actions[bot]
+          # Get unique authors since previous release tag
           EXCLUDE_AUTHOR="bizzkoot"
           EXCLUDE_EMAIL="github-actions[bot]@users.noreply.github.com"
 
-          # Get unique authors from commits since last update
-          CONTRIBUTORS=$(git log ${{ steps.last-commit.outputs.commit }}..HEAD --format='%an|%ae' | sort -u | grep -v "$EXCLUDE_AUTHOR" | grep -v "$EXCLUDE_EMAIL" || true)
+          # Get commits since previous tag to current HEAD
+          CONTRIBUTORS=$(git log ${{ steps.last-tag.outputs.tag }}..HEAD --format='%an|%ae' | sort -u | grep -v "$EXCLUDE_AUTHOR" | grep -v "$EXCLUDE_EMAIL" || true)
 
           if [ -z "$CONTRIBUTORS" ]; then
             echo "No new contributors found"
@@ -501,7 +501,7 @@ jobs:
             echo "Found new contributors:"
             echo "$CONTRIBUTORS"
             
-            # Convert to JSON array for GitHub output
+            # Convert to JSON array
             JSON_ARRAY=$(echo "$CONTRIBUTORS" | jq -R . | jq -s .)
             echo "new_contributors=$JSON_ARRAY" >> $GITHUB_OUTPUT
           fi
