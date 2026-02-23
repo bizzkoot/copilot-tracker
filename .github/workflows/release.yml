@@ -160,6 +160,15 @@ jobs:
               all-contributors add "$GH_USERNAME" code --yes
               ADDED_USERNAMES="$ADDED_USERNAMES $GH_USERNAME"
             done <<< "$CONTRIBUTORS"
+
+            # Normalize contributor profile links to GitHub profiles
+            if [ -f ".all-contributorsrc" ]; then
+              TMP_CONFIG=$(mktemp)
+              jq '.contributors |= map(if (.login // "") != "" then .profile = ("https://github.com/" + .login) else . end)' \
+                .all-contributorsrc > "$TMP_CONFIG"
+              mv "$TMP_CONFIG" .all-contributorsrc
+              all-contributors generate --yes
+            fi
           fi
 
       - name: Commit all changes (build + format + contributors)
