@@ -347,8 +347,11 @@ fn build_tray_menu(
 
     let menu = Menu::new(app).map_err(|e| e.to_string())?;
 
-    // === USAGE OVERVIEW SECTION ===
-    // === USAGE OVERVIEW SECTION ===
+    // === QUOTA SUBMENU (combines QUOTA STATUS + ACTIVITY + FORECAST) ===
+    let quota_submenu =
+        Submenu::with_id(app, "quota", "📊 Quota ▶", true).map_err(|e| e.to_string())?;
+
+    // QUOTA STATUS header
     let overview_header = MenuItem::with_id(
         app,
         "overview_header",
@@ -357,7 +360,9 @@ fn build_tray_menu(
         None::<&str>,
     )
     .map_err(|e| e.to_string())?;
-    menu.append(&overview_header).map_err(|e| e.to_string())?;
+    quota_submenu
+        .append(&overview_header)
+        .map_err(|e| e.to_string())?;
 
     if limit > 0 {
         let quota_line = MenuItem::with_id(
@@ -368,7 +373,9 @@ fn build_tray_menu(
             None::<&str>,
         )
         .map_err(|e| e.to_string())?;
-        menu.append(&quota_line).map_err(|e| e.to_string())?;
+        quota_submenu
+            .append(&quota_line)
+            .map_err(|e| e.to_string())?;
 
         let remaining_line = MenuItem::with_id(
             app,
@@ -378,22 +385,29 @@ fn build_tray_menu(
             None::<&str>,
         )
         .map_err(|e| e.to_string())?;
-        menu.append(&remaining_line).map_err(|e| e.to_string())?;
+        quota_submenu
+            .append(&remaining_line)
+            .map_err(|e| e.to_string())?;
     } else {
         let loading_line =
             MenuItem::with_id(app, "loading_line", "▶ Loading data...", true, None::<&str>)
                 .map_err(|e| e.to_string())?;
-        menu.append(&loading_line).map_err(|e| e.to_string())?;
+        quota_submenu
+            .append(&loading_line)
+            .map_err(|e| e.to_string())?;
     }
 
-    menu.append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
+    quota_submenu
+        .append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
 
-    // === CONSUMPTION RATE SECTION ===
+    // ACTIVITY section
     if limit > 0 && current_day > 0.0 {
         let rate_header = MenuItem::with_id(app, "rate_header", "📈 ACTIVITY", true, None::<&str>)
             .map_err(|e| e.to_string())?;
-        menu.append(&rate_header).map_err(|e| e.to_string())?;
+        quota_submenu
+            .append(&rate_header)
+            .map_err(|e| e.to_string())?;
 
         let daily_rate_line = MenuItem::with_id(
             app,
@@ -403,7 +417,9 @@ fn build_tray_menu(
             None::<&str>,
         )
         .map_err(|e| e.to_string())?;
-        menu.append(&daily_rate_line).map_err(|e| e.to_string())?;
+        quota_submenu
+            .append(&daily_rate_line)
+            .map_err(|e| e.to_string())?;
 
         if daily_budget > 0.0 {
             let budget_line = MenuItem::with_id(
@@ -414,29 +430,36 @@ fn build_tray_menu(
                 None::<&str>,
             )
             .map_err(|e| e.to_string())?;
-            menu.append(&budget_line).map_err(|e| e.to_string())?;
+            quota_submenu
+                .append(&budget_line)
+                .map_err(|e| e.to_string())?;
         }
 
         let days_left_line = MenuItem::with_id(
             app,
             "days_left_line",
-            format!("   🗓️ {days_remaining:.0} days remaining"),
+            format!("   🗓️ {:.0} days remaining", days_remaining),
             true,
             None::<&str>,
         )
         .map_err(|e| e.to_string())?;
-        menu.append(&days_left_line).map_err(|e| e.to_string())?;
+        quota_submenu
+            .append(&days_left_line)
+            .map_err(|e| e.to_string())?;
 
-        menu.append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
+        quota_submenu
+            .append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())?;
     }
 
-    // === PREDICTION SECTION ===
+    // FORECAST section
     if let Some(prediction) = prediction {
         let prediction_header =
             MenuItem::with_id(app, "prediction_header", "🔮 FORECAST", true, None::<&str>)
                 .map_err(|e| e.to_string())?;
-        menu.append(&prediction_header).map_err(|e| e.to_string())?;
+        quota_submenu
+            .append(&prediction_header)
+            .map_err(|e| e.to_string())?;
 
         let status_label = if prediction.predicted_monthly_requests > limit {
             format!(
@@ -451,7 +474,9 @@ fn build_tray_menu(
         };
         let status_line = MenuItem::with_id(app, "status_line", status_label, true, None::<&str>)
             .map_err(|e| e.to_string())?;
-        menu.append(&status_line).map_err(|e| e.to_string())?;
+        quota_submenu
+            .append(&status_line)
+            .map_err(|e| e.to_string())?;
 
         let confidence_icon = match prediction.confidence_level.as_str() {
             "high" => "🟢",
@@ -469,19 +494,22 @@ fn build_tray_menu(
             None::<&str>,
         )
         .map_err(|e| e.to_string())?;
-        menu.append(&forecast_line).map_err(|e| e.to_string())?;
+        quota_submenu
+            .append(&forecast_line)
+            .map_err(|e| e.to_string())?;
     } else {
         let prediction_header =
             MenuItem::with_id(app, "prediction_header", "🔮 FORECAST", true, None::<&str>)
                 .map_err(|e| e.to_string())?;
-        menu.append(&prediction_header).map_err(|e| e.to_string())?;
+        quota_submenu
+            .append(&prediction_header)
+            .map_err(|e| e.to_string())?;
         let no_data = MenuItem::with_id(app, "no_data", "   Insufficient data", true, None::<&str>)
             .map_err(|e| e.to_string())?;
-        menu.append(&no_data).map_err(|e| e.to_string())?;
+        quota_submenu.append(&no_data).map_err(|e| e.to_string())?;
     }
 
-    menu.append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())?;
+    menu.append(&quota_submenu).map_err(|e| e.to_string())?;
 
     // === USAGE HISTORY SECTION ===
     let history_submenu = Submenu::with_id(app, "usage_history", "📜 Usage History ▶", true)
@@ -557,11 +585,7 @@ fn build_tray_menu(
         .map_err(|e| e.to_string())?;
     menu.append(&open_billing).map_err(|e| e.to_string())?;
 
-    let refresh = MenuItem::with_id(app, "refresh", "Refresh", true, None::<&str>)
-        .map_err(|e| e.to_string())?;
-    menu.append(&refresh).map_err(|e| e.to_string())?;
-
-    // Show last refresh time below Refresh (from persisted store)
+    // Refresh with last refresh time on the same row
     let store = app.state::<StoreManager>();
     let last_fetch_timestamp = store.get_last_fetch_timestamp();
     let last_refresh_time = if last_fetch_timestamp > 0 {
@@ -570,11 +594,10 @@ fn build_tray_menu(
     } else {
         None
     };
-    let last_refresh_label = format!("Last refresh: {}", format_timestamp(last_refresh_time));
-    let last_refresh_item =
-        MenuItem::with_id(app, "last_refresh", last_refresh_label, false, None::<&str>)
-            .map_err(|e| e.to_string())?;
-    menu.append(&last_refresh_item).map_err(|e| e.to_string())?;
+    let last_refresh_label = format!("Refresh (Last: {})", format_timestamp(last_refresh_time));
+    let refresh = MenuItem::with_id(app, "refresh", last_refresh_label, true, None::<&str>)
+        .map_err(|e| e.to_string())?;
+    menu.append(&refresh).map_err(|e| e.to_string())?;
 
     menu.append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
@@ -642,16 +665,23 @@ fn build_tray_menu(
     menu.append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
 
-    // GitHub Links
+    // GitHub Links submenu
+    let github_submenu =
+        Submenu::with_id(app, "github", "⭐ GitHub ▶", true).map_err(|e| e.to_string())?;
     let github_stars =
         MenuItem::with_id(app, "github_repo", "⭐ Star on GitHub", true, None::<&str>)
             .map_err(|e| e.to_string())?;
-    menu.append(&github_stars).map_err(|e| e.to_string())?;
+    github_submenu
+        .append(&github_stars)
+        .map_err(|e| e.to_string())?;
 
     let github_issues =
         MenuItem::with_id(app, "github_issues", "🐛 Report Issue", true, None::<&str>)
             .map_err(|e| e.to_string())?;
-    menu.append(&github_issues).map_err(|e| e.to_string())?;
+    github_submenu
+        .append(&github_issues)
+        .map_err(|e| e.to_string())?;
+    menu.append(&github_submenu).map_err(|e| e.to_string())?;
 
     menu.append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
