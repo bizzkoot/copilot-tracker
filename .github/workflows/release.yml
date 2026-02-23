@@ -157,7 +157,7 @@ jobs:
               fi
 
               echo "Adding contributor: $GH_USERNAME"
-              all-contributors add "$GH_USERNAME" code
+              all-contributors add "$GH_USERNAME" code --yes
               ADDED_USERNAMES="$ADDED_USERNAMES $GH_USERNAME"
             done <<< "$CONTRIBUTORS"
           fi
