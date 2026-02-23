@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.4.5](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.4...v2.4.5) (2026-02-23)
+
+
+### Bug Fixes
+
+* **tray-menu:** Compress tray menu by moving quota/activity/forecast into submenu ([f092c21](https://github.com/bizzkoot/copilot-tracker/commit/f092c21934b1ae19d9c7c0d1b931e55b30b3a06f)), closes [#42](https://github.com/bizzkoot/copilot-tracker/issues/42)
+
+
+### Documentation
+
+* add CONTRIBUTING.md, All Contributors config, and auto-contributor workflow ([1787ee5](https://github.com/bizzkoot/copilot-tracker/commit/1787ee53916d0c46fa8ca942351755916c3d15db))
+
 ## [2.4.4](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.3...v2.4.4) (2026-02-22)
 
 
