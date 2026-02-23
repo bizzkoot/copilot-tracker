@@ -75,12 +75,59 @@ jobs:
       - name: Run formatting (after build)
         run: npm run format
 
-      - name: Commit all changes (build + format)
+      - name: Update contributors
+        id: contributors
+        run: |
+          # Get current tag (the one we're releasing FROM - previous release)
+          CURRENT_TAG=$(git describe --tags --abbrev=0)
+
+          if [ -z "$CURRENT_TAG" ]; then
+            echo "No previous tag found, skipping contributor update"
+            echo "has_contributors=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Previous release tag: $CURRENT_TAG"
+
+          # Get unique contributors since current tag, excluding bizzkoot and bot
+          CONTRIBUTORS=$(git log ${CURRENT_TAG}..HEAD --format='%an|%ae' | sort -u | grep -v "bizzkoot" | grep -v "github-actions\[bot\]" || true)
+
+          if [ -z "$CONTRIBUTORS" ]; then
+            echo "No new contributors found"
+            echo "has_contributors=false" >> $GITHUB_OUTPUT
+          else
+            echo "Found new contributors:"
+            echo "$CONTRIBUTORS"
+            echo "has_contributors=true" >> $GITHUB_OUTPUT
+            
+            # Install all-contributors CLI
+            npm install -g all-contributors-cli
+            
+            # Process each contributor
+            for line in $CONTRIBUTORS; do
+              USERNAME=$(echo "$line" | cut -d'|' -f1)
+              EMAIL=$(echo "$line" | cut -d'|' -f2)
+              
+              # Try to get GitHub username from email via GitHub API
+              GH_USERNAME=$(curl -s -H "Authorization: token ${{ secrets.RELEASE_PLEASE_TOKEN }}" \
+                "https://api.github.com/search/users?q=$EMAIL+in:email" | \
+                jq -r '.items[0].login // empty')
+              
+              if [ -n "$GH_USERNAME" ]; then
+                echo "Adding contributor: $GH_USERNAME"
+                all-contributors add "$GH_USERNAME" code
+              else
+                echo "Could not find GitHub username for $USERNAME ($EMAIL), skipping"
+              fi
+            done
+          fi
+
+      - name: Commit all changes (build + format + contributors)
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add -A
-          git diff --staged --quiet || git commit -m "style: apply formatting after version update and build"
+          git diff --staged --quiet || git commit -m "style: apply formatting and update contributors"
           git push
 
   # ============================================================================
@@ -455,100 +502,3 @@ jobs:
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
           tag_name: ${{ needs.release-please.outputs.tag_name }}
-
-  # ============================================================================
-  # Auto-add contributors (non-bizzkoot, non-bot) to All Contributors
-  # ============================================================================
-  update-contributors:
-    runs-on: ubuntu-latest
-    # Run only on release PR merge (when commit message contains 'release')
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'release')
-    permissions:
-      contents: write
-    steps:
-      - name: Check out Git repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Get previous release tag
-        id: last-tag
-        run: |
-          # Get all tags, sort by date, get the one before latest
-          PREV_TAG=$(git tag --sort=-creatordate | tail -n +2 | head -1)
-          if [ -z "$PREV_TAG" ]; then
-            # Fallback: use first commit if no tags
-            PREV_TAG=$(git rev-list --max-parents=0 HEAD)
-          fi
-          echo "Previous release tag: $PREV_TAG"
-          echo "tag=$PREV_TAG" >> $GITHUB_OUTPUT
-
-      - name: Get contributors since last release
-        id: contributors
-        run: |
-          # Get unique authors since previous release tag
-          EXCLUDE_AUTHOR="bizzkoot"
-          EXCLUDE_EMAIL="github-actions[bot]@users.noreply.github.com"
-
-          # Get commits since previous tag to current HEAD
-          CONTRIBUTORS=$(git log ${{ steps.last-tag.outputs.tag }}..HEAD --format='%an|%ae' | sort -u | grep -v "$EXCLUDE_AUTHOR" | grep -v "$EXCLUDE_EMAIL" || true)
-
-          if [ -z "$CONTRIBUTORS" ]; then
-            echo "No new contributors found"
-            echo "new_contributors=" >> $GITHUB_OUTPUT
-          else
-            echo "Found new contributors:"
-            echo "$CONTRIBUTORS"
-            
-            # Convert to JSON array
-            JSON_ARRAY=$(echo "$CONTRIBUTORS" | jq -R . | jq -s .)
-            echo "new_contributors=$JSON_ARRAY" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Install Node.js
-        if: steps.contributors.outputs.new_contributors != ''
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install all-contributors CLI
-        if: steps.contributors.outputs.new_contributors != ''
-        run: npm install -g all-contributors-cli
-
-      - name: Add new contributors
-        if: steps.contributors.outputs.new_contributors != ''
-        run: |
-          # Parse each contributor and add them
-          for contributor in $(echo '${{ steps.contributors.outputs.new_contributors }}' | jq -r '.[]'); do
-            USERNAME=$(echo "$contributor" | cut -d'|' -f1)
-            EMAIL=$(echo "$contributor" | cut -d'|' -f2)
-            
-            # Try to get GitHub username from email
-            GH_USERNAME=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              "https://api.github.com/search/users?q=$EMAIL+in:email" | \
-              jq -r '.items[0].login // empty')
-            
-            if [ -n "$GH_USERNAME" ]; then
-              echo "Adding contributor: $GH_USERNAME"
-              all-contributors add "$GH_USERNAME" code
-            else
-              echo "Could not find GitHub username for $USERNAME ($EMAIL), skipping"
-            fi
-          done
-
-      - name: Commit and push changes
-        if: steps.contributors.outputs.new_contributors != ''
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-
-          # Check if there are changes to commit
-          if git diff --quiet .all-contributorsrc; then
-            echo "No contributor changes to commit"
-          else
-            git add .all-contributorsrc
-            git commit -m "docs: update all-contributors"
-            git push
-            echo "Contributors updated!"
-          fi
