@@ -80,9 +80,24 @@ For detailed standards, see [AGENTS.md](AGENTS.md).
 
 Your PR must pass all checks:
 
+- PR title follows Conventional Commits (example: `fix(auth): handle enterprise entitlement`)
 - TypeScript type checking
 - ESLint (JavaScript/Rust linting)
 - Full Tauri build (Windows, macOS, Linux)
+
+### Release Notes Compatibility
+
+This repository uses release-please to generate changelogs from conventional commit metadata.
+
+- Use a Conventional Commit PR title (recommended format: `type(scope): summary`)
+- Prefer **Squash and merge** so the PR title is preserved as the release commit message
+- If title is non-conventional (for example, `Merge pull request #123`), it may be skipped from generated release notes
+
+Examples:
+
+- `fix(usage): use entitlement endpoint for Copilot Business`
+- `feat(widget): add compact usage summary`
+- `docs(contributing): clarify release workflow`
 
 ## Types of Contributions
 
