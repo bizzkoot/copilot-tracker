@@ -7,7 +7,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-blue.svg)](https://github.com/bizzkoot/copilot-tracker)
 [![GitHub Downloads](https://img.shields.io/github/downloads/bizzkoot/copilot-tracker/total?label=downloads)](https://github.com/bizzkoot/copilot-tracker/releases)
-[![All Contributors](https://img.shields.io/badge/all_contributors-0-orange.svg?style=flat-square)](#contributors)
 
 </div>
 
@@ -42,7 +41,7 @@ Cross-platform desktop application built with **Tauri**, React, and TypeScript t
 ### System Tray
 
 <p align="center">
-  <img src="assets/Taskbar_Tauri3.gif" alt="System Tray Integration" width="500"/>
+  <img src="assets/Taskbar_Tauri4.gif" alt="System Tray Integration" width="500"/>
 </p>
 
 ### Floating Widget
