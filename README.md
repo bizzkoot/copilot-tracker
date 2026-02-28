@@ -6,7 +6,11 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-blue.svg)](https://github.com/bizzkoot/copilot-tracker)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/bizzkoot/copilot-tracker)](https://github.com/bizzkoot/copilot-tracker/releases/latest)
 [![GitHub Downloads](https://img.shields.io/github/downloads/bizzkoot/copilot-tracker/total?label=downloads)](https://github.com/bizzkoot/copilot-tracker/releases)
+[![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri-24C8D8.svg?logo=tauri)](https://tauri.app/)
+[![Built with React](https://img.shields.io/badge/built%20with-React-61DAFB.svg?logo=react)](https://reactjs.org/)
+[![GitHub stars](https://img.shields.io/github/stars/bizzkoot/copilot-tracker.svg?style=social)](https://github.com/bizzkoot/copilot-tracker/stargazers)
 
 </div>
 
@@ -16,7 +20,7 @@ Cross-platform desktop application built with **Tauri**, React, and TypeScript t
 
 - 🖥️ **Cross-Platform**: Works on macOS, Windows, and Linux
 - 📊 **Usage Tracking**: Real-time monitoring of Copilot premium requests with gauge visualization
-- 📈 **Trend Visualization**: Interactive usage history with Weighted Trend Line (EMA) for better analysis
+- 📈 **Trend Visualization**: Interactive usage history with 7-Day Simple Moving Average (SMA) and dynamic Daily Budget overlay to perfectly pace your monthly quota
 - 🔮 **Smart Predictions**: Calculated end-of-month forecast using weighted averages based on recent usage behavior
 - 🌓 **Dark/Light Theme**: Automatic theme detection with manual override
 - 🔔 **Smart Notifications**: Configurable alerts when approaching limits
@@ -35,13 +39,13 @@ Cross-platform desktop application built with **Tauri**, React, and TypeScript t
 ### Dashboard
 
 <p align="center">
-  <img src="assets/Dashboard_Tauri3.gif" alt="Copilot Tracker Dashboard" width="700"/>
+  <img src="assets/Dashboard_Tauri4.gif" alt="Copilot Tracker Dashboard" width="700"/>
 </p>
 
 ### System Tray
 
 <p align="center">
-  <img src="assets/Taskbar_Tauri4.gif" alt="System Tray Integration" width="500"/>
+  <img src="assets/Taskbar_Tauri5.gif" alt="System Tray Integration" width="500"/>
 </p>
 
 ### Floating Widget

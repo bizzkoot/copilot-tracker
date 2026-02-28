@@ -195,7 +195,7 @@ export function Dashboard() {
       </div>
 
       {/* Usage Trend Chart */}
-      <UsageChart history={history} isLoading={isLoading} />
+      <UsageChart history={history} usage={usage} isLoading={isLoading} />
 
       {/* History Table */}
       <HistoryTable history={history} isLoading={isLoading && !history} />
