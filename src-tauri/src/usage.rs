@@ -7,9 +7,9 @@ use tokio::time::Duration;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageSummary {
-    pub used: u32,
+    pub used: f64,
     pub limit: u32,
-    pub remaining: u32,
+    pub remaining: f64,
     pub percentage: f32,
     pub timestamp: i64,
 }
@@ -22,10 +22,10 @@ pub struct UsageHistory {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageEntry {
     pub timestamp: i64,
-    pub used: u32,
+    pub used: f64,
     pub limit: u32,
-    pub included_requests: u32,
-    pub billed_requests: u32,
+    pub included_requests: f64,
+    pub billed_requests: f64,
     pub gross_amount: f64,
     pub billed_amount: f64,
     #[serde(default)]
@@ -35,8 +35,8 @@ pub struct UsageEntry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageModel {
     pub name: String,
-    pub included_requests: u32,
-    pub billed_requests: u32,
+    pub included_requests: f64,
+    pub billed_requests: f64,
     pub gross_amount: f64,
     pub billed_amount: f64,
 }
@@ -50,10 +50,14 @@ pub struct UsagePayload {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsagePrediction {
-    pub predicted_monthly_requests: u32,
+    pub predicted_monthly_requests: f64,
     pub predicted_billed_amount: f64,
     pub confidence_level: String,
     pub days_used_for_prediction: u32,
+}
+
+fn round_request_count(value: f64) -> f64 {
+    (value * 10.0).round() / 10.0
 }
 
 pub struct UsageManager {}
@@ -98,8 +102,8 @@ impl UsageManager {
                     let _ = store.set_customer_id(customer_id);
 
                     if let Some(usage) = result.usage_data {
-                        let used = usage.discount_quantity as u32;
-                        let limit = usage.user_premium_request_entitlement as u32;
+                        let used = round_request_count(usage.discount_quantity);
+                        let limit = usage.user_premium_request_entitlement;
 
                         log::info!(
                             "Extracted usage: {}/{} ({}%)",
@@ -130,16 +134,17 @@ impl UsageManager {
 
                         // Save history if available
                         if let Some(rows) = result.usage_history {
-                            let entries = Self::map_history_rows(&rows);
+                            let mut entries = Self::map_history_rows(&rows);
+                            Self::reconcile_history_with_usage_total(&mut entries, used, limit);
                             store.set_usage_history(entries);
                         }
 
                         let summary = UsageSummary {
                             used,
                             limit,
-                            remaining: limit.saturating_sub(used),
+                            remaining: (limit as f64 - used).max(0.0),
                             percentage: if limit > 0 {
-                                (used as f32 / limit as f32) * 100.0
+                                (used / limit as f64 * 100.0) as f32
                             } else {
                                 0.0
                             },
@@ -206,9 +211,9 @@ impl UsageManager {
         let store = app.state::<StoreManager>();
         let (used, limit) = store.get_usage();
 
-        let remaining = limit.saturating_sub(used);
+        let remaining = (limit as f64 - used).max(0.0);
         let percentage = if limit > 0 {
-            (used as f32 / limit as f32) * 100.0
+            (used / limit as f64 * 100.0) as f32
         } else {
             0.0
         };
@@ -231,11 +236,10 @@ impl UsageManager {
             if let Some(cache) = store.get_usage_cache() {
                 return vec![UsageEntry {
                     timestamp: cache.timestamp,
-                    used: cache.discount_quantity as u32,
-                    limit: cache.user_premium_request_entitlement as u32,
-                    included_requests: cache.discount_quantity as u32,
-                    billed_requests: cache.net_quantity.saturating_sub(cache.discount_quantity)
-                        as u32,
+                    used: round_request_count(cache.discount_quantity),
+                    limit: cache.user_premium_request_entitlement,
+                    included_requests: cache.discount_quantity,
+                    billed_requests: (cache.net_quantity - cache.discount_quantity).max(0.0),
                     gross_amount: cache.net_billed_amount,
                     billed_amount: cache.net_billed_amount,
                     models: vec![],
@@ -287,7 +291,7 @@ impl UsageManager {
 
                 UsageEntry {
                     timestamp,
-                    used: row.included_requests + row.billed_requests,
+                    used: round_request_count(row.included_requests + row.billed_requests),
                     limit: 0,
                     included_requests: row.included_requests,
                     billed_requests: row.billed_requests,
@@ -299,6 +303,70 @@ impl UsageManager {
             .collect();
         entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
         entries
+    }
+
+    /// If current usage total is newer than billing history rows, inject the missing delta.
+    pub fn reconcile_history_with_usage_total(
+        entries: &mut Vec<UsageEntry>,
+        used: f64,
+        limit: u32,
+    ) {
+        let now = chrono::Utc::now();
+        let current_year = now.year();
+        let current_month = now.month();
+
+        let month_total: f64 = entries
+            .iter()
+            .filter_map(|entry| {
+                chrono::DateTime::from_timestamp(entry.timestamp, 0).and_then(|dt| {
+                    if dt.year() == current_year && dt.month() == current_month {
+                        Some(entry.included_requests + entry.billed_requests)
+                    } else {
+                        None
+                    }
+                })
+            })
+            .sum();
+
+        if used <= month_total {
+            return;
+        }
+
+        // Ignore tiny differences from mixed integer/decimal sources.
+        if used - month_total < 0.5 {
+            return;
+        }
+
+        let delta = round_request_count(used - month_total);
+        let today_timestamp = now
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc()
+            .timestamp();
+
+        if let Some(today_entry) = entries
+            .iter_mut()
+            .find(|entry| entry.timestamp == today_timestamp)
+        {
+            today_entry.included_requests += delta;
+            today_entry.used =
+                round_request_count(today_entry.included_requests + today_entry.billed_requests);
+            today_entry.limit = limit;
+        } else {
+            entries.push(UsageEntry {
+                timestamp: today_timestamp,
+                used: round_request_count(delta),
+                limit,
+                included_requests: delta,
+                billed_requests: 0.0,
+                gross_amount: 0.0,
+                billed_amount: 0.0,
+                models: vec![],
+            });
+        }
+
+        entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
     }
 
     /// Start background usage polling with cancellation support
@@ -377,7 +445,7 @@ impl UsageManager {
         };
 
         if current_day == 0.0 {
-            return Ok(used);
+            return Ok(used.round() as u32);
         }
 
         let daily_average = used as f32 / current_day;
@@ -389,7 +457,7 @@ impl UsageManager {
 
     pub fn predict_usage_from_history(
         history: &[UsageEntry],
-        used: u32,
+        used: f64,
         limit: u32,
         prediction_period: u32,
     ) -> Option<UsagePrediction> {
@@ -426,7 +494,7 @@ impl UsageManager {
 
         for (i, entry) in daily_data.iter().enumerate() {
             let weight = if i < weights.len() { weights[i] } else { 1.0 };
-            weighted_sum += (entry.used as f64) * weight;
+            weighted_sum += entry.used * weight;
             total_weight += weight;
         }
 
@@ -450,10 +518,10 @@ impl UsageManager {
             let is_weekend = matches!(dt.weekday(), chrono::Weekday::Sat | chrono::Weekday::Sun);
 
             if is_weekend {
-                weekend_sum += entry.used as f64;
+                weekend_sum += entry.used;
                 weekend_count += 1;
             } else {
-                weekday_sum += entry.used as f64;
+                weekday_sum += entry.used;
                 weekday_count += 1;
             }
         }
@@ -518,9 +586,9 @@ impl UsageManager {
         let predicted_remaining = (weighted_avg_daily * remaining_weekdays as f64)
             + (weighted_avg_daily * weekend_ratio * remaining_weekends as f64);
 
-        let predicted_monthly_requests = (used as f64 + predicted_remaining).round() as u32;
-        let excess_requests = predicted_monthly_requests.saturating_sub(limit);
-        let predicted_billed_amount = (excess_requests as f64) * 0.04;
+        let predicted_monthly_requests = round_request_count(used + predicted_remaining);
+        let excess_requests = (predicted_monthly_requests - limit as f64).max(0.0);
+        let predicted_billed_amount = excess_requests * 0.04;
 
         let confidence_level = if daily_data.len() < 3 {
             "low"
@@ -543,11 +611,11 @@ impl UsageManager {
         let store = app.state::<StoreManager>();
         let (used, limit) = store.get_usage();
 
-        if used >= limit {
+        if used >= limit as f64 {
             return Ok(Some(0)); // Already at or over limit
         }
 
-        let remaining = (limit - used) as f32;
+        let remaining = (limit as f64 - used) as f32;
 
         // Calculate daily average
         let now = chrono::Utc::now();

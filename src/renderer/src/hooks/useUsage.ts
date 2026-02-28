@@ -47,6 +47,13 @@ export function useUsage() {
     }
   }, []);
 
+  // Force refresh - clears cache and fetches fresh data
+  const forceRefresh = useCallback(() => {
+    if (typeof window.electron !== "undefined") {
+      window.electron.forceRefreshUsage();
+    }
+  }, []);
+
   // Setup IPC listeners and request cached data on mount
   useEffect(() => {
     if (typeof window.electron === "undefined") return;
@@ -130,5 +137,6 @@ export function useUsage() {
     lastUpdated,
     fetchUsage,
     refresh,
+    forceRefresh,
   };
 }

@@ -34,6 +34,7 @@ export interface Settings {
   predictionPeriod: 7 | 14 | 21; // days
   launchAtLogin: boolean;
   startMinimized: boolean; // Auto-hide window on startup/login
+  debugToolsEnabled: boolean;
   notifications: NotificationSettings;
   theme: "light" | "dark" | "system";
   trayIconFormat: TrayIconFormat;
@@ -44,6 +45,7 @@ export const DEFAULT_SETTINGS: Settings = {
   predictionPeriod: 7,
   launchAtLogin: false,
   startMinimized: true, // Auto-hide window on startup by default
+  debugToolsEnabled: false,
   notifications: {
     enabled: true,
     thresholds: [75, 90, 100],

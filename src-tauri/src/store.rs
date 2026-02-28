@@ -29,7 +29,7 @@ pub struct AppSettings {
     /// Usage limit for the current period
     pub usage_limit: u32,
     /// Last known usage count
-    pub last_usage: u32,
+    pub last_usage: f64,
     /// Last time usage was fetched (timestamp)
     pub last_fetch_timestamp: i64,
     /// Last time update check was performed (timestamp)
@@ -55,6 +55,9 @@ pub struct AppSettings {
     /// Start minimized
     #[serde(default = "default_start_minimized")]
     pub start_minimized: bool,
+    /// Enable debug tools in dashboard
+    #[serde(default = "default_debug_tools_enabled")]
+    pub debug_tools_enabled: bool,
     /// Theme
     #[serde(default = "default_theme")]
     pub theme: String,
@@ -105,6 +108,10 @@ fn default_start_minimized() -> bool {
     true
 }
 
+fn default_debug_tools_enabled() -> bool {
+    false
+}
+
 fn default_theme() -> String {
     "system".to_string()
 }
@@ -134,7 +141,7 @@ impl Default for AppSettings {
         Self {
             customer_id: None,
             usage_limit: 1200, // Default Copilot limit
-            last_usage: 0,
+            last_usage: 0.0,
             last_fetch_timestamp: 0,
             last_update_check_timestamp: 0,
             launch_at_login: false,
@@ -145,6 +152,7 @@ impl Default for AppSettings {
             refresh_interval: default_refresh_interval(),
             prediction_period: default_prediction_period(),
             start_minimized: default_start_minimized(),
+            debug_tools_enabled: default_debug_tools_enabled(),
             theme: default_theme(),
             tray_icon_format: default_tray_icon_format(),
             widget_enabled: default_widget_enabled(),
@@ -158,10 +166,10 @@ impl Default for AppSettings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageCache {
     pub customer_id: u64,
-    pub net_quantity: u64,
-    pub discount_quantity: u64,
-    pub user_premium_request_entitlement: u64,
-    pub filtered_user_premium_request_entitlement: u64,
+    pub net_quantity: f64,
+    pub discount_quantity: f64,
+    pub user_premium_request_entitlement: u32,
+    pub filtered_user_premium_request_entitlement: u32,
     pub net_billed_amount: f64,
     pub timestamp: i64,
 }
@@ -306,7 +314,7 @@ impl StoreManager {
     }
 
     /// Set usage data
-    pub fn set_usage(&self, used: u32, limit: u32) -> Result<(), String> {
+    pub fn set_usage(&self, used: f64, limit: u32) -> Result<(), String> {
         self.update_settings(|s| {
             s.last_usage = used;
             s.usage_limit = limit;
@@ -315,7 +323,7 @@ impl StoreManager {
     }
 
     /// Get usage data
-    pub fn get_usage(&self) -> (u32, u32) {
+    pub fn get_usage(&self) -> (f64, u32) {
         let settings = self.settings.lock().unwrap();
         (settings.last_usage, settings.usage_limit)
     }
@@ -382,8 +390,8 @@ impl StoreManager {
 
         Ok(UsageCache {
             customer_id,
-            net_quantity: settings.last_usage as u64,
-            discount_quantity: 0,
+            net_quantity: settings.last_usage,
+            discount_quantity: 0.0,
             user_premium_request_entitlement: 0,
             filtered_user_premium_request_entitlement: 0,
             net_billed_amount: 0.0,
@@ -398,6 +406,22 @@ impl StoreManager {
 
     pub fn get_usage_cache(&self) -> Option<UsageCache> {
         self.usage_cache.lock().unwrap().clone()
+    }
+
+    pub fn clear_usage_cache(&self) {
+        let mut guard = self.usage_cache.lock().unwrap();
+        *guard = None;
+        log::info!("Usage cache cleared");
+    }
+
+    pub fn clear_usage_history(&self) {
+        let mut guard = self.usage_history.lock().unwrap();
+        guard.clear();
+        // Also delete the history file
+        if self.history_path.exists() {
+            let _ = std::fs::remove_file(&self.history_path);
+        }
+        log::info!("Usage history cleared");
     }
 
     pub fn set_usage_history(&self, history: Vec<UsageEntry>) {

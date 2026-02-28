@@ -33,14 +33,15 @@ pub struct ExtractionResult {
     pub customer_id: Option<u64>,
     pub usage_data: Option<UsageData>,
     pub usage_history: Option<Vec<UsageHistoryRow>>,
+    pub raw_usage_payload: Option<serde_json::Value>,
     pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageHistoryRow {
     pub date: String,
-    pub included_requests: u32,
-    pub billed_requests: u32,
+    pub included_requests: f64,
+    pub billed_requests: f64,
     pub gross_amount: f64,
     pub billed_amount: f64,
     pub models: Vec<UsageModelRow>,
@@ -49,8 +50,8 @@ pub struct UsageHistoryRow {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageModelRow {
     pub name: String,
-    pub included_requests: u32,
-    pub billed_requests: u32,
+    pub included_requests: f64,
+    pub billed_requests: f64,
     pub gross_amount: f64,
     pub billed_amount: f64,
 }
@@ -58,10 +59,120 @@ pub struct UsageModelRow {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageData {
     pub net_billed_amount: f64,
-    pub net_quantity: u64,
-    pub discount_quantity: u64,
-    pub user_premium_request_entitlement: u64,
-    pub filtered_user_premium_request_entitlement: u64,
+    pub net_quantity: f64,
+    pub discount_quantity: f64,
+    pub user_premium_request_entitlement: u32,
+    pub filtered_user_premium_request_entitlement: u32,
+}
+
+fn round_request_count(value: f64) -> f64 {
+    (value * 10.0).round() / 10.0
+}
+
+fn parse_json_number(value: &serde_json::Value) -> Option<f64> {
+    match value {
+        serde_json::Value::Number(n) => n.as_f64(),
+        serde_json::Value::String(s) => s.trim().replace(',', "").parse::<f64>().ok(),
+        _ => None,
+    }
+}
+
+fn parse_json_u32(value: &serde_json::Value) -> Option<u32> {
+    parse_json_number(value).and_then(|v| {
+        if v.is_finite() && v >= 0.0 {
+            Some(v.round() as u32)
+        } else {
+            None
+        }
+    })
+}
+
+fn parse_usage_card_data(usage_card: &serde_json::Value) -> Option<UsageData> {
+    let used_opt = usage_card
+        .get("discountQuantity")
+        .and_then(parse_json_number)
+        .map(round_request_count);
+    let limit_opt = usage_card
+        .get("userPremiumRequestEntitlement")
+        .and_then(parse_json_u32);
+
+    if used_opt.is_none() && limit_opt.is_none() {
+        return None;
+    }
+
+    Some(UsageData {
+        net_billed_amount: usage_card
+            .get("netBilledAmount")
+            .and_then(parse_json_number)
+            .unwrap_or(0.0),
+        net_quantity: usage_card
+            .get("netQuantity")
+            .and_then(parse_json_number)
+            .map(round_request_count)
+            .unwrap_or_else(|| used_opt.unwrap_or(0.0)),
+        discount_quantity: used_opt.unwrap_or(0.0),
+        user_premium_request_entitlement: limit_opt.unwrap_or(0),
+        filtered_user_premium_request_entitlement: usage_card
+            .get("filteredUserPremiumRequestEntitlement")
+            .and_then(parse_json_u32)
+            .unwrap_or_else(|| limit_opt.unwrap_or(0)),
+    })
+}
+
+fn merge_entitlement_usage(
+    usage_data: Option<UsageData>,
+    entitlement: Option<&serde_json::Value>,
+) -> Option<UsageData> {
+    let mut merged = usage_data;
+
+    let Some(ent) = entitlement else {
+        log::warn!("No entitlement field in extraction payload");
+        return merged;
+    };
+
+    if !ent
+        .get("success")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        let err = ent
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        log::warn!("Entitlement fetch failed: {}", err);
+        return merged;
+    }
+
+    let entitlement_limit = ent.get("limit").and_then(parse_json_u32).unwrap_or(0);
+    let entitlement_used = ent
+        .get("used")
+        .and_then(parse_json_number)
+        .map(round_request_count)
+        .unwrap_or(0.0);
+
+    if let Some(existing) = merged.as_mut() {
+        // usageCard count is authoritative for display when present.
+        if entitlement_limit > 0 {
+            existing.user_premium_request_entitlement = entitlement_limit;
+            existing.filtered_user_premium_request_entitlement = entitlement_limit;
+        }
+        if existing.discount_quantity <= 0.0 && entitlement_used > 0.0 {
+            existing.discount_quantity = entitlement_used;
+        }
+        return merged;
+    }
+
+    if entitlement_limit > 0 || entitlement_used > 0.0 {
+        return Some(UsageData {
+            net_billed_amount: 0.0,
+            net_quantity: entitlement_used,
+            discount_quantity: entitlement_used,
+            user_premium_request_entitlement: entitlement_limit,
+            filtered_user_premium_request_entitlement: entitlement_limit,
+        });
+    }
+
+    merged
 }
 
 /// Parses a single usage history row from JSON data
@@ -74,9 +185,9 @@ fn parse_usage_history_row(row: &serde_json::Value) -> Option<UsageHistoryRow> {
         return None;
     }
 
-    let included_requests = cells.get(1)?.get("value")?.as_str()?.parse::<u32>().ok()?;
+    let included_requests = parse_request_count(cells.get(1)?.get("value")?)?;
 
-    let billed_requests = cells.get(2)?.get("value")?.as_str()?.parse::<u32>().ok()?;
+    let billed_requests = parse_request_count(cells.get(2)?.get("value")?)?;
 
     let gross_amount = cells
         .get(3)?
@@ -123,18 +234,8 @@ fn parse_usage_model_row(sub_row: &serde_json::Value) -> Option<UsageModelRow> {
     }
 
     let name = sub_cells.first()?.get("value")?.as_str()?.to_string();
-    let included_requests = sub_cells
-        .get(1)?
-        .get("value")?
-        .as_str()?
-        .parse::<u32>()
-        .ok()?;
-    let billed_requests = sub_cells
-        .get(2)?
-        .get("value")?
-        .as_str()?
-        .parse::<u32>()
-        .ok()?;
+    let included_requests = parse_request_count(sub_cells.get(1)?.get("value")?)?;
+    let billed_requests = parse_request_count(sub_cells.get(2)?.get("value")?)?;
     let gross_amount = sub_cells
         .get(3)?
         .get("value")?
@@ -157,6 +258,21 @@ fn parse_usage_model_row(sub_row: &serde_json::Value) -> Option<UsageModelRow> {
         gross_amount,
         billed_amount,
     })
+}
+
+/// Parse GitHub request counts that may be integer or decimal strings (e.g. "6.90").
+fn parse_request_count(value: &serde_json::Value) -> Option<f64> {
+    match value {
+        serde_json::Value::Number(n) => n.as_f64().map(|v| (v * 10.0).round() / 10.0),
+        serde_json::Value::String(s) => {
+            let cleaned = s.trim().replace(',', "");
+            cleaned
+                .parse::<f64>()
+                .ok()
+                .map(|v| (v * 10.0).round() / 10.0)
+        }
+        _ => None,
+    }
 }
 
 #[derive(Clone)]
@@ -224,36 +340,12 @@ impl AuthManager {
                                     extracted_id = Some(id);
 
                                     // Extract Usage Data
-                                    if let Some(usage_card) = json.get("usageCard").and_then(|v| v.get("data")) {
-                                        log::info!("Raw usage card data: {:?}", usage_card);
-                                        extracted_usage_data = Some(UsageData {
-                                            net_billed_amount: usage_card.get("netBilledAmount").and_then(|v| v.as_f64()).unwrap_or(0.0),
-                                            net_quantity: usage_card.get("netQuantity").and_then(|v| v.as_u64()).unwrap_or(0),
-                                            discount_quantity: usage_card.get("discountQuantity").and_then(|v| v.as_u64()).unwrap_or(0),
-                                            user_premium_request_entitlement: usage_card.get("userPremiumRequestEntitlement").and_then(|v| v.as_u64()).unwrap_or(0),
-                                            filtered_user_premium_request_entitlement: usage_card.get("filteredUserPremiumRequestEntitlement").and_then(|v| v.as_u64()).unwrap_or(0),
-                                        });
-                                    }
-
-                                    // Always prefer entitlement data when available and successful.
-                                    // The usageCard API may return a non-zero limit but zero used
-                                    // for enterprise (Copilot Business) users.
-                                    if let Some(ent) = json.get("entitlement") {
-                                        if ent.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
-                                            let limit = ent.get("limit").and_then(|v| v.as_u64()).unwrap_or(0);
-                                            let used = ent.get("used").and_then(|v| v.as_u64()).unwrap_or(0);
-                                            if limit > 0 {
-                                                log::info!("Using enterprise entitlement data: used={}, limit={}", used, limit);
-                                                extracted_usage_data = Some(UsageData {
-                                                    net_billed_amount: 0.0,
-                                                    net_quantity: 0,
-                                                    discount_quantity: used,
-                                                    user_premium_request_entitlement: limit,
-                                                    filtered_user_premium_request_entitlement: limit,
-                                                });
-                                            }
-                                        }
-                                    }
+                                    extracted_usage_data = json
+                                      .get("usageCard")
+                                      .and_then(|v| v.get("data"))
+                                      .and_then(parse_usage_card_data);
+                                    extracted_usage_data =
+                                      merge_entitlement_usage(extracted_usage_data, json.get("entitlement"));
 
                                     // Extract Usage History
                                     if let Some(rows) = json.get("usageTable")
@@ -296,10 +388,10 @@ impl AuthManager {
                               log::info!("Extracted usage data: net_quantity={}, discount_quantity={}, entitlement={}",
                                   usage.net_quantity, usage.discount_quantity, usage.user_premium_request_entitlement);
 
-                              let used = usage.discount_quantity as u32;
-                              let limit = usage.user_premium_request_entitlement as u32;
+                              let used = round_request_count(usage.discount_quantity);
+                              let limit = usage.user_premium_request_entitlement;
 
-                              if used == 0 && limit == 0 {
+                                if used == 0.0 && limit == 0 {
                                   log::warn!("Usage data shows 0/0 - API may have returned empty data");
                               }
 
@@ -318,8 +410,8 @@ impl AuthManager {
                               store.set_usage_cache(cache);
 
                               // Create summary
-                              let remaining = limit.saturating_sub(used);
-                              let percentage = if limit > 0 { (used as f32 / limit as f32) * 100.0 } else { 0.0 };
+                              let remaining = (limit as f64 - used).max(0.0);
+                              let percentage = if limit > 0 { (used / limit as f64 * 100.0) as f32 } else { 0.0 };
                               usage_summary = Some(crate::usage::UsageSummary {
                                   used,
                                   limit,
@@ -570,22 +662,110 @@ impl AuthManager {
                 }
               }
 
+              async function fetchUsageTablePage(customerId, page) {
+                const res = await fetch(`/settings/billing/copilot_usage_table?customer_id=${customerId}&group=0&period=3&query=&page=${page}`, {
+                  headers: {
+                    'Accept': 'application/json',
+                    'x-requested-with': 'XMLHttpRequest'
+                  }
+                });
+
+                if (!res.ok) {
+                  return { success: false, error: 'Usage table request failed: ' + res.status };
+                }
+
+                const data = await res.json();
+                return { success: true, data };
+              }
+
+              function getUsageTableTotalPages(data) {
+                const candidates = [
+                  data?.table?.pagination?.totalPages,
+                  data?.table?.pagination?.total_pages,
+                  data?.pagination?.totalPages,
+                  data?.pagination?.total_pages,
+                  data?.table?.totalPages,
+                  data?.table?.total_pages,
+                  data?.totalPages,
+                  data?.total_pages
+                ];
+
+                for (const value of candidates) {
+                  const parsed = Number(value);
+                  if (Number.isFinite(parsed) && parsed > 0) {
+                    return parsed;
+                  }
+                }
+
+                return null;
+              }
+
               async function fetchUsageTable(customerId) {
                 try {
                   console.log('[AuthInjector] Fetching usage table for customer:', customerId);
-                  const res = await fetch(`/settings/billing/copilot_usage_table?customer_id=${customerId}&group=0&period=3&query=&page=1`, {
-                    headers: {
-                      'Accept': 'application/json',
-                      'x-requested-with': 'XMLHttpRequest'
+
+                  // Wait for billing page hydration.
+                  await new Promise(resolve => setTimeout(resolve, 3000));
+
+                  const MAX_PAGES = 10;
+                  const seenRowIds = new Set();
+                  const mergedRows = [];
+                  let totalPages = null;
+                  let page = 1;
+                  let baseData = null;
+
+                  while (page <= (totalPages ?? MAX_PAGES)) {
+                    const pageResult = await fetchUsageTablePage(customerId, page);
+                    if (!pageResult.success) {
+                      if (page === 1) {
+                        return pageResult;
+                      }
+                      break;
                     }
-                  });
-                  console.log('[AuthInjector] Usage table response status:', res.status);
-                  if (!res.ok) {
-                    console.error('[AuthInjector] Usage table request failed:', res.status);
-                    return { success: false, error: 'Usage table request failed: ' + res.status };
+
+                    if (!baseData) {
+                      baseData = pageResult.data;
+                    }
+
+                    if (totalPages === null) {
+                      totalPages = getUsageTableTotalPages(pageResult.data);
+                    }
+
+                    const pageRows = pageResult.data?.table?.rows || [];
+                    if (pageRows.length === 0) {
+                      break;
+                    }
+
+                    let added = 0;
+                    for (const row of pageRows) {
+                      const key = row?.id || JSON.stringify(row?.cells?.[0]?.value || row);
+                      if (!seenRowIds.has(key)) {
+                        seenRowIds.add(key);
+                        mergedRows.push(row);
+                        added += 1;
+                      }
+                    }
+
+                    if (added === 0) {
+                      break;
+                    }
+
+                    if (totalPages !== null && page >= totalPages) {
+                      break;
+                    }
+
+                    page += 1;
                   }
-                  const data = await res.json();
-                  console.log('[AuthInjector] Usage table data received:', data ? 'YES' : 'NO', 'Rows:', data?.data?.rows?.length || 0);
+
+                  const data = {
+                    ...(baseData || {}),
+                    table: {
+                      ...((baseData && baseData.table) ? baseData.table : {}),
+                      rows: mergedRows,
+                    },
+                  };
+
+                  console.log('[AuthInjector] Usage table merged rows:', mergedRows.length);
                   return { success: true, data };
                 } catch (error) {
                   console.error('[AuthInjector] Usage table fetch error:', error);
@@ -839,18 +1019,108 @@ impl AuthManager {
                 }
               }
 
+              async function fetchUsageTablePage(customerId, page) {
+                const res = await fetch(`/settings/billing/copilot_usage_table?customer_id=${customerId}&group=0&period=3&query=&page=${page}`, {
+                  headers: {
+                    'Accept': 'application/json',
+                    'x-requested-with': 'XMLHttpRequest'
+                  }
+                });
+
+                if (!res.ok) {
+                  return { success: false, error: 'Usage table request failed: ' + res.status };
+                }
+
+                const data = await res.json();
+                return { success: true, data };
+              }
+
+              function getUsageTableTotalPages(data) {
+                const candidates = [
+                  data?.table?.pagination?.totalPages,
+                  data?.table?.pagination?.total_pages,
+                  data?.pagination?.totalPages,
+                  data?.pagination?.total_pages,
+                  data?.table?.totalPages,
+                  data?.table?.total_pages,
+                  data?.totalPages,
+                  data?.total_pages
+                ];
+
+                for (const value of candidates) {
+                  const parsed = Number(value);
+                  if (Number.isFinite(parsed) && parsed > 0) {
+                    return parsed;
+                  }
+                }
+
+                return null;
+              }
+
               async function fetchUsageTable(customerId) {
                 try {
-                  const res = await fetch(`/settings/billing/copilot_usage_table?customer_id=${customerId}&group=0&period=3&query=&page=1`, {
-                    headers: {
-                      'Accept': 'application/json',
-                      'x-requested-with': 'XMLHttpRequest'
+                  // Wait for billing page hydration.
+                  await new Promise(resolve => setTimeout(resolve, 3000));
+
+                  const MAX_PAGES = 10;
+                  const seenRowIds = new Set();
+                  const mergedRows = [];
+                  let totalPages = null;
+                  let page = 1;
+                  let baseData = null;
+
+                  while (page <= (totalPages ?? MAX_PAGES)) {
+                    const pageResult = await fetchUsageTablePage(customerId, page);
+                    if (!pageResult.success) {
+                      if (page === 1) {
+                        return pageResult;
+                      }
+                      break;
                     }
-                  });
-                  if (!res.ok) {
-                    return { success: false, error: 'Usage table request failed: ' + res.status };
+
+                    if (!baseData) {
+                      baseData = pageResult.data;
+                    }
+
+                    if (totalPages === null) {
+                      totalPages = getUsageTableTotalPages(pageResult.data);
+                    }
+
+                    const pageRows = pageResult.data?.table?.rows || [];
+                    if (pageRows.length === 0) {
+                      break;
+                    }
+
+                    let added = 0;
+                    for (const row of pageRows) {
+                      const key = row?.id || JSON.stringify(row?.cells?.[0]?.value || row);
+                      if (!seenRowIds.has(key)) {
+                        seenRowIds.add(key);
+                        mergedRows.push(row);
+                        added += 1;
+                      }
+                    }
+
+                    if (added === 0) {
+                      break;
+                    }
+
+                    if (totalPages !== null && page >= totalPages) {
+                      break;
+                    }
+
+                    page += 1;
                   }
-                  const data = await res.json();
+
+                  const data = {
+                    ...(baseData || {}),
+                    table: {
+                      ...((baseData && baseData.table) ? baseData.table : {}),
+                      rows: mergedRows,
+                    },
+                  };
+
+                  console.log('[HiddenAuth] Usage table merged rows:', mergedRows.length);
                   return { success: true, data };
                 } catch (error) {
                   return { success: false, error: error.message };
@@ -965,6 +1235,7 @@ impl AuthManager {
             let mut customer_id: Option<u64> = None;
             let mut usage_data: Option<UsageData> = None;
             let mut usage_history: Option<Vec<UsageHistoryRow>> = None;
+            let mut raw_usage_payload: Option<serde_json::Value> = None;
             let mut error: Option<String> = None;
 
             while let Some(event) = rx.recv().await {
@@ -993,77 +1264,14 @@ impl AuthManager {
                         if let Ok(result) =
                             serde_json::from_str::<serde_json::Value>(&event.payload)
                         {
-                            // Parse usage card
-                            if let Some(usage_card) =
-                                result.get("usageCard").and_then(|v| v.get("data"))
-                            {
-                                usage_data = Some(UsageData {
-                                    net_billed_amount: usage_card
-                                        .get("netBilledAmount")
-                                        .and_then(|v| v.as_f64())
-                                        .unwrap_or(0.0),
-                                    net_quantity: usage_card
-                                        .get("netQuantity")
-                                        .and_then(|v| v.as_u64())
-                                        .unwrap_or(0),
-                                    discount_quantity: usage_card
-                                        .get("discountQuantity")
-                                        .and_then(|v| v.as_u64())
-                                        .unwrap_or(0),
-                                    user_premium_request_entitlement: usage_card
-                                        .get("userPremiumRequestEntitlement")
-                                        .and_then(|v| v.as_u64())
-                                        .unwrap_or(0),
-                                    filtered_user_premium_request_entitlement: usage_card
-                                        .get("filteredUserPremiumRequestEntitlement")
-                                        .and_then(|v| v.as_u64())
-                                        .unwrap_or(0),
-                                });
-                            }
+                            raw_usage_payload = Some(result.clone());
 
-                            // Always prefer entitlement data when available and successful.
-                            // The usageCard API may return a non-zero limit but zero used count
-                            // for enterprise users (Copilot Business), making a 0/0 guard
-                            // insufficient. The /github-copilot/chat/entitlement endpoint is
-                            // the authoritative source for used + limit on enterprise plans.
-                            if let Some(ent) = result.get("entitlement") {
-                                log::info!("Entitlement payload received: {:?}", ent);
-                                if ent
-                                    .get("success")
-                                    .and_then(|v| v.as_bool())
-                                    .unwrap_or(false)
-                                {
-                                    let limit =
-                                        ent.get("limit").and_then(|v| v.as_u64()).unwrap_or(0);
-                                    let used =
-                                        ent.get("used").and_then(|v| v.as_u64()).unwrap_or(0);
-                                    if limit > 0 {
-                                        log::info!(
-                                            "Using enterprise entitlement data: used={}, limit={}",
-                                            used,
-                                            limit
-                                        );
-                                        usage_data = Some(UsageData {
-                                            net_billed_amount: 0.0,
-                                            net_quantity: 0,
-                                            discount_quantity: used,
-                                            user_premium_request_entitlement: limit,
-                                            filtered_user_premium_request_entitlement: limit,
-                                        });
-                                    } else {
-                                        log::warn!("Entitlement data has limit=0, not using");
-                                    }
-                                } else {
-                                    let err = ent
-                                        .get("error")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("unknown");
-                                    log::warn!("Entitlement fetch failed: {}", err);
-                                    // Keep usageCard data as fallback for personal plan users
-                                }
-                            } else {
-                                log::warn!("No entitlement field in extraction payload");
-                            }
+                            usage_data = result
+                                .get("usageCard")
+                                .and_then(|v| v.get("data"))
+                                .and_then(parse_usage_card_data);
+                            usage_data =
+                                merge_entitlement_usage(usage_data, result.get("entitlement"));
 
                             // Parse usage table
                             if let Some(rows) = result
@@ -1091,6 +1299,7 @@ impl AuthManager {
                 customer_id,
                 usage_data,
                 usage_history,
+                raw_usage_payload,
                 error,
             }
         })
@@ -1111,6 +1320,7 @@ impl AuthManager {
                 customer_id: None,
                 usage_data: None,
                 usage_history: None,
+                raw_usage_payload: None,
                 error: Some("Extraction timed out".to_string()),
             }),
         }

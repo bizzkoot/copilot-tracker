@@ -10,6 +10,7 @@ import {
   getTotalRequests,
   isWeekend,
   formatCurrency,
+  formatRequestCount,
 } from "@renderer/types/usage";
 
 interface HistoryTableProps {
@@ -68,15 +69,15 @@ function TableRow({ day, isExpanded, onToggle }: TableRowProps) {
           </div>
         </td>
         <td className="py-3 px-4 text-right font-medium">
-          {total.toLocaleString()}
+          {formatRequestCount(total)}
         </td>
         <td className="py-3 px-4 text-right">
-          {day.includedRequests.toLocaleString()}
+          {formatRequestCount(day.includedRequests)}
         </td>
         <td className="py-3 px-4 text-right">
           {day.billedRequests > 0 ? (
             <span className="text-orange-500">
-              {day.billedRequests.toLocaleString()}
+              {formatRequestCount(day.billedRequests)}
             </span>
           ) : (
             <span className="text-muted-foreground">0</span>
@@ -246,7 +247,7 @@ export function HistoryTable({ history, isLoading }: HistoryTableProps) {
               </tr>
             </thead>
             <tbody>
-              {history.days.slice(0, 10).map((day, index) => (
+              {history.days.map((day, index) => (
                 <TableRow
                   key={index}
                   day={day}
@@ -273,15 +274,15 @@ export function HistoryTable({ history, isLoading }: HistoryTableProps) {
                   <span>Total</span>
                 </td>
                 <td className="py-3 px-4 text-right">
-                  {totals.total.toLocaleString()}
+                  {formatRequestCount(totals.total)}
                 </td>
                 <td className="py-3 px-4 text-right">
-                  {totals.included.toLocaleString()}
+                  {formatRequestCount(totals.included)}
                 </td>
                 <td className="py-3 px-4 text-right">
                   {totals.billed > 0 ? (
                     <span className="text-orange-500">
-                      {totals.billed.toLocaleString()}
+                      {formatRequestCount(totals.billed)}
                     </span>
                   ) : (
                     "0"
@@ -328,10 +329,10 @@ export function HistoryTable({ history, isLoading }: HistoryTableProps) {
                                 {model.name}
                               </td>
                               <td className="py-2 text-right text-muted-foreground">
-                                {model.includedRequests.toLocaleString()}
+                                {formatRequestCount(model.includedRequests)}
                               </td>
                               <td className="py-2 text-right text-muted-foreground">
-                                {model.billedRequests.toLocaleString()}
+                                {formatRequestCount(model.billedRequests)}
                               </td>
                               <td className="py-2 text-right text-muted-foreground">
                                 {formatCurrency(model.billedAmount)}

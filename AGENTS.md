@@ -4,6 +4,11 @@ Guidelines for AI agents working on this Tauri + React codebase.
 
 ## ALWAYS USE `ask_user` TOOL FOR ANY REPLY, RESPONSE, SUMMARY OR ANY INTENTION TO END THE SESSION, THIS IS COMPULSORY. WHEN `ask_user` TOOL IS NOT AVAILABLE, THEN FALLBACK TO `askquestions` OR `question` TOOLS.
 
+`When the task requires multiple steps or non-trivial changes, present a detailed plan using #planReview and wait for approval before executing.
+If the plan is rejected, incorporate the comments and submit an updated plan with #planReview.
+When the user asks for a step-by-step guide or walkthrough, present it using #walkthroughReview.
+Always use #askUser before completing any task to confirm the result matches what the user asked for.`
+
 ## Tech Stack
 
 - **Frontend:** React 18, TypeScript 5, Tailwind CSS 3, Zustand 4

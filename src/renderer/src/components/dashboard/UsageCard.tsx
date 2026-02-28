@@ -13,6 +13,7 @@ import {
   getLimitRequests,
   getUsagePercentage,
   formatCurrency,
+  formatRequestCount,
 } from "@renderer/types/usage";
 import { useTrayIconFormat } from "@renderer/stores/settingsStore";
 import {
@@ -96,7 +97,7 @@ export function UsageCard({ usage, isLoading }: UsageCardProps) {
       <CardContent className="flex flex-col items-center justify-center pt-2 pb-6 space-y-6">
         <div className="relative group">
           <Tooltip
-            content={`${used.toLocaleString()} of ${limit.toLocaleString()} requests used`}
+            content={`${formatRequestCount(used)} of ${formatRequestCount(limit)} requests used`}
           >
             <Gauge
               value={displayPercentage}
@@ -111,10 +112,10 @@ export function UsageCard({ usage, isLoading }: UsageCardProps) {
         <div className="text-center">
           <div className="flex items-baseline justify-center gap-1">
             <span className="text-3xl font-bold tracking-tight">
-              {displayUsed.toLocaleString()}
+              {formatRequestCount(displayUsed)}
             </span>
             <span className="text-sm text-muted-foreground font-medium">
-              / {limit.toLocaleString()}
+              / {formatRequestCount(limit)}
             </span>
           </div>
           <p className="text-xs text-muted-foreground mt-1 font-medium">

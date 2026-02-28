@@ -95,6 +95,8 @@ export interface AppAPI {
   // Usage
   fetchUsage: () => void;
   refreshUsage: () => void;
+  forceRefreshUsage: () => void;
+  captureExtractionDebug: () => Promise<unknown>;
   getCachedUsage: () => Promise<UsageFetchResult | null>;
   onUsageData: (callback: (data: UsageFetchResult) => void) => () => void;
   onUsageLoading: (callback: (loading: boolean) => void) => () => void;

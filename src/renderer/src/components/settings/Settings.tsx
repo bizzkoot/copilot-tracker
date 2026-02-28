@@ -60,6 +60,7 @@ export function Settings({ onClose }: SettingsProps) {
     theme,
     launchAtLogin,
     startMinimized,
+    debugToolsEnabled,
     notifications,
     trayIconFormat,
     setRefreshInterval,
@@ -67,6 +68,7 @@ export function Settings({ onClose }: SettingsProps) {
     setTheme,
     setLaunchAtLogin,
     setStartMinimized,
+    setDebugToolsEnabled,
     setNotificationsEnabled,
     setNotificationThresholds,
     setTrayIconFormat,
@@ -150,6 +152,12 @@ export function Settings({ onClose }: SettingsProps) {
     const newValue = !startMinimized;
     setStartMinimized(newValue);
     await window.electron.setSettings({ startMinimized: newValue });
+  };
+
+  const handleDebugToolsToggle = async () => {
+    const newValue = !debugToolsEnabled;
+    setDebugToolsEnabled(newValue);
+    await window.electron.setSettings({ debugToolsEnabled: newValue });
   };
 
   const handleToggleWidget = async () => {
@@ -500,6 +508,45 @@ export function Settings({ onClose }: SettingsProps) {
                 >
                   {widgetEnabled ? "Enabled" : "Disabled"}
                 </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Debug Tools */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Debug Tools</CardTitle>
+              <CardDescription>
+                Show advanced troubleshooting actions on the dashboard
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <span className="text-sm">Enable debug actions</span>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    When enabled, dashboard shows Debug, Capture, and Force buttons.
+                  </p>
+                </div>
+                <Button
+                  variant={debugToolsEnabled ? "default" : "outline"}
+                  size="sm"
+                  onClick={handleDebugToolsToggle}
+                >
+                  {debugToolsEnabled ? "Enabled" : "Disabled"}
+                </Button>
+              </div>
+
+              <div className="rounded-md border border-border/60 p-3 space-y-2 text-xs text-muted-foreground">
+                <p>
+                  <span className="font-medium text-foreground">Debug:</span> export normalized app state (usage, history, prediction).
+                </p>
+                <p>
+                  <span className="font-medium text-foreground">Capture:</span> export full raw extraction payload from GitHub billing fetches.
+                </p>
+                <p>
+                  <span className="font-medium text-foreground">Force:</span> clear cache and force fresh extraction from GitHub.
+                </p>
               </div>
             </CardContent>
           </Card>

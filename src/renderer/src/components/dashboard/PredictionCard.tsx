@@ -18,6 +18,7 @@ import {
   getLimitRequests,
   formatCurrency,
   getUsedRequests,
+  formatRequestCount,
 } from "@renderer/types/usage";
 import {
   getConfidenceDescription,
@@ -120,7 +121,7 @@ export function PredictionCard({
           <div>
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-bold tracking-tight">
-                {prediction.predictedMonthlyRequests.toLocaleString()}
+                {formatRequestCount(prediction.predictedMonthlyRequests)}
               </span>
               <span className="text-sm text-muted-foreground font-medium uppercase">
                 Expected
@@ -151,7 +152,7 @@ export function PredictionCard({
               </span>
             </div>
             <div className="text-xl font-bold">
-              {dailyBudget}
+              {formatRequestCount(dailyBudget)}
               <span className="text-xs font-normal text-muted-foreground ml-1">
                 req
               </span>
@@ -167,7 +168,7 @@ export function PredictionCard({
               <span className="text-sm font-bold">Capacity Alert</span>
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
-              Estimated {excessAmount.toLocaleString()} requests over limit.
+              Estimated {formatRequestCount(excessAmount)} requests over limit.
               {prediction.predictedBilledAmount > 0 && (
                 <span className="block mt-1 font-bold text-orange-600 dark:text-orange-400">
                   Est. extra cost:{" "}

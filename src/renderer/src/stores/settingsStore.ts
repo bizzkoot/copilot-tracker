@@ -14,6 +14,7 @@ interface SettingsState extends Settings {
   setPredictionPeriod: (period: Settings["predictionPeriod"]) => void;
   setLaunchAtLogin: (enabled: boolean) => void;
   setStartMinimized: (enabled: boolean) => void;
+  setDebugToolsEnabled: (enabled: boolean) => void;
   setNotificationsEnabled: (enabled: boolean) => void;
   setNotificationThresholds: (thresholds: number[]) => void;
   setTheme: (theme: Settings["theme"]) => void;
@@ -36,6 +37,8 @@ export const useSettingsStore = create<SettingsState>()(
       setLaunchAtLogin: (launchAtLogin) => set({ launchAtLogin }),
 
       setStartMinimized: (startMinimized) => set({ startMinimized }),
+
+      setDebugToolsEnabled: (debugToolsEnabled) => set({ debugToolsEnabled }),
 
       setNotificationsEnabled: (enabled) =>
         set((state) => ({

@@ -89,7 +89,7 @@ export const COST_PER_REQUEST = 0.04;
  * Get total used requests from usage data
  */
 export function getUsedRequests(usage: CopilotUsage): number {
-  return Math.round(usage.discountQuantity);
+  return usage.discountQuantity;
 }
 
 /**
@@ -113,6 +113,19 @@ export function getUsagePercentage(usage: CopilotUsage): number {
  */
 export function getTotalRequests(day: DailyUsage): number {
   return day.includedRequests + day.billedRequests;
+}
+
+/**
+ * Format request counts with up to 1 decimal place when fractional.
+ */
+export function formatRequestCount(count: number): string {
+  const roundedTenth = Math.round(count * 10) / 10;
+  const hasFraction = Math.abs(roundedTenth % 1) > 0.001;
+
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: hasFraction ? 1 : 0,
+    maximumFractionDigits: hasFraction ? 1 : 0,
+  }).format(roundedTenth);
 }
 
 /**

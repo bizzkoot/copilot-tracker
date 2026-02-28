@@ -30,6 +30,7 @@ interface RustAppSettings {
   predictionPeriod: number;
   launchAtLogin: boolean;
   startMinimized: boolean;
+  debugToolsEnabled: boolean;
   theme: string;
   customerId?: number;
   usageLimit: number;
@@ -213,6 +214,7 @@ export async function initTauriAdapter() {
           timestamp: number;
           used: number;
           limit: number;
+          included_requests?: number;
           billed_requests?: number;
           gross_amount?: number;
           billed_amount?: number;
@@ -246,9 +248,10 @@ export async function initTauriAdapter() {
             days: payload.history.map((entry) => ({
               date: new Date(entry.timestamp * 1000),
               includedRequests:
-                entry.used - (entry.billed_requests ?? 0) < 0
+                entry.included_requests ??
+                (entry.used - (entry.billed_requests ?? 0) < 0
                   ? 0
-                  : entry.used - (entry.billed_requests ?? 0),
+                  : entry.used - (entry.billed_requests ?? 0)),
               billedRequests: entry.billed_requests ?? 0,
               grossAmount: entry.gross_amount ?? 0,
               billedAmount: entry.billed_amount ?? 0,
@@ -388,6 +391,24 @@ export async function initTauriAdapter() {
           });
         }
       },
+      forceRefreshUsage: async () => {
+        try {
+          const summary = await invoke<RustUsageSummary>("force_fetch_usage");
+          const result = convertUsageData(summary);
+          notifyUsageListeners(result);
+        } catch (err) {
+          if (import.meta.env.DEV) {
+            console.error("forceRefreshUsage failed:", err);
+          }
+          notifyUsageListeners({
+            success: false,
+            error: String(err),
+          });
+        }
+      },
+      captureExtractionDebug: async () => {
+        return await invoke<unknown>("perform_auth_extraction");
+      },
       getCachedUsage: async () => {
         try {
           const payload = await invoke<{
@@ -396,6 +417,7 @@ export async function initTauriAdapter() {
               timestamp: number;
               used: number;
               limit: number;
+              included_requests?: number;
               billed_requests?: number;
               gross_amount?: number;
               billed_amount?: number;
@@ -433,9 +455,10 @@ export async function initTauriAdapter() {
               days: payload.history.map((entry) => ({
                 date: new Date(entry.timestamp * 1000),
                 includedRequests:
-                  entry.used - (entry.billed_requests ?? 0) < 0
+                  entry.included_requests ??
+                  (entry.used - (entry.billed_requests ?? 0) < 0
                     ? 0
-                    : entry.used - (entry.billed_requests ?? 0),
+                    : entry.used - (entry.billed_requests ?? 0)),
                 billedRequests: entry.billed_requests ?? 0,
                 grossAmount: entry.gross_amount ?? 0,
                 billedAmount: entry.billed_amount ?? 0,
@@ -505,6 +528,7 @@ export async function initTauriAdapter() {
               rustSettings.predictionPeriod as Settings["predictionPeriod"],
             launchAtLogin: rustSettings.launchAtLogin,
             startMinimized: rustSettings.startMinimized,
+            debugToolsEnabled: rustSettings.debugToolsEnabled,
             theme: rustSettings.theme as Settings["theme"],
             notifications: {
               enabled: rustSettings.showNotifications,
@@ -551,6 +575,8 @@ export async function initTauriAdapter() {
             launchAtLogin: newSettings.launchAtLogin ?? current.launchAtLogin,
             startMinimized:
               newSettings.startMinimized ?? current.startMinimized,
+            debugToolsEnabled:
+              newSettings.debugToolsEnabled ?? current.debugToolsEnabled,
             theme: newSettings.theme ?? current.theme,
             showNotifications,
             notificationThresholds,
@@ -604,6 +630,7 @@ export async function initTauriAdapter() {
             rustSettings.predictionPeriod as Settings["predictionPeriod"],
           launchAtLogin: rustSettings.launchAtLogin,
           startMinimized: rustSettings.startMinimized,
+          debugToolsEnabled: rustSettings.debugToolsEnabled,
           theme: rustSettings.theme as Settings["theme"],
           notifications: {
             enabled: rustSettings.showNotifications,
@@ -648,6 +675,7 @@ export async function initTauriAdapter() {
               rustSettings.predictionPeriod as Settings["predictionPeriod"],
             launchAtLogin: rustSettings.launchAtLogin,
             startMinimized: rustSettings.startMinimized,
+            debugToolsEnabled: rustSettings.debugToolsEnabled,
             theme: rustSettings.theme as Settings["theme"],
             notifications: {
               enabled: rustSettings.showNotifications,
@@ -807,6 +835,8 @@ function setupMockAdapter() {
     onAuthExtractionFailed: () => () => {},
     fetchUsage: async () => {},
     refreshUsage: async () => {},
+    forceRefreshUsage: async () => {},
+    captureExtractionDebug: async () => ({}),
     getCachedUsage: async () => null,
     onUsageData: () => () => {},
     onUsageLoading: () => () => {},

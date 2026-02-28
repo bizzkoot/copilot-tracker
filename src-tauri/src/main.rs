@@ -218,25 +218,39 @@ fn format_timestamp(date: Option<chrono::DateTime<chrono::Local>>) -> String {
 }
 
 /// Format tray icon text based on the specified format
-fn format_tray_text(used: u32, limit: u32, format: &str) -> String {
+fn format_request_count(value: f64) -> String {
+    let rounded = (value * 10.0).round() / 10.0;
+    if (rounded.fract()).abs() < 0.001 {
+        format!("{:.0}", rounded)
+    } else {
+        format!("{:.1}", rounded)
+    }
+}
+
+fn format_tray_text(used: f64, limit: u32, format: &str) -> String {
     // Handle unauthenticated state (limit == 0)
     if limit == 0 {
-        return used.to_string();
+        return format_request_count(used);
     }
 
-    let remaining = limit.saturating_sub(used);
-    let percentage = (used as f32 / limit as f32) * 100.0;
+    let remaining = (limit as f64 - used).max(0.0);
+    let percentage = (used / limit as f64 * 100.0) as f32;
     let remaining_pct = 100.0 - percentage;
+    let used_text = format_request_count(used);
+    let limit_text = format_request_count(limit as f64);
+    let remaining_text = format_request_count(remaining);
 
     match format {
-        "current" => used.to_string(),
-        "currentTotal" => format!("{used}/{limit}"),
-        "remainingTotal" => format!("{remaining}/{limit}"),
+        "current" => used_text,
+        "currentTotal" => format!("{used_text}/{limit_text}"),
+        "remainingTotal" => format!("{remaining_text}/{limit_text}"),
         "percentage" => format!("{:.0}%", percentage),
         "remainingPercent" => format!("{:.0}%", remaining_pct),
-        "combined" => format!("{used}/{limit} ({:.0}%)", percentage),
-        "remainingCombined" => format!("{remaining}/{limit} ({:.0}%)", remaining_pct),
-        _ => format!("{used}/{limit}"), // fallback to current default
+        "combined" => format!("{used_text}/{limit_text} ({:.0}%)", percentage),
+        "remainingCombined" => {
+            format!("{remaining_text}/{limit_text} ({:.0}%)", remaining_pct)
+        }
+        _ => format!("{used_text}/{limit_text}"), // fallback to current default
     }
 }
 
@@ -256,7 +270,7 @@ fn tray_text_color(theme_preference: &str) -> (u8, u8, u8) {
 fn update_tray_icon(
     app: &AppHandle,
     state: &TrayState,
-    used: u32,
+    used: f64,
     limit: u32,
     format: &str,
 ) -> Result<(), String> {
@@ -313,9 +327,9 @@ fn build_tray_menu(
     );
 
     // Calculate metrics for dual-perspective display
-    let remaining = limit.saturating_sub(used);
+    let remaining = (limit as f64 - used).max(0.0);
     let percentage_used = if limit > 0 {
-        (used as f32 / limit as f32) * 100.0
+        (used / limit as f64 * 100.0) as f32
     } else {
         0.0
     };
@@ -368,7 +382,11 @@ fn build_tray_menu(
         let quota_line = MenuItem::with_id(
             app,
             "quota_line",
-            format!("   {used} / {limit} requests ({percentage_used:.0}%)"),
+            format!(
+                "   {} / {} requests ({percentage_used:.0}%)",
+                format_request_count(used),
+                format_request_count(limit as f64)
+            ),
             true,
             None::<&str>,
         )
@@ -380,7 +398,10 @@ fn build_tray_menu(
         let remaining_line = MenuItem::with_id(
             app,
             "remaining_line",
-            format!("   {remaining} remaining ({percentage_remaining:.0}%)"),
+            format!(
+                "   {} remaining ({percentage_remaining:.0}%)",
+                format_request_count(remaining)
+            ),
             true,
             None::<&str>,
         )
@@ -461,15 +482,15 @@ fn build_tray_menu(
             .append(&prediction_header)
             .map_err(|e| e.to_string())?;
 
-        let status_label = if prediction.predicted_monthly_requests > limit {
+        let status_label = if prediction.predicted_monthly_requests > limit as f64 {
             format!(
                 "   ⚠️ Exceed by {}",
-                prediction.predicted_monthly_requests - limit
+                format_request_count(prediction.predicted_monthly_requests - limit as f64)
             )
         } else {
             format!(
                 "   ✅ Safe ({} left)",
-                limit - prediction.predicted_monthly_requests
+                format_request_count(limit as f64 - prediction.predicted_monthly_requests)
             )
         };
         let status_line = MenuItem::with_id(app, "status_line", status_label, true, None::<&str>)
@@ -488,7 +509,7 @@ fn build_tray_menu(
             "forecast_line",
             format!(
                 "   {confidence_icon} Expected: {} total",
-                prediction.predicted_monthly_requests
+                format_request_count(prediction.predicted_monthly_requests)
             ),
             true,
             None::<&str>,
@@ -519,7 +540,11 @@ fn build_tray_menu(
             let date = chrono::DateTime::from_timestamp(entry.timestamp, 0)
                 .map(|dt| dt.date_naive())
                 .unwrap_or_else(|| chrono::Utc::now().date_naive());
-            let label = format!("{}: {} req", date.format("%b %d"), entry.used);
+            let label = format!(
+                "{}: {} req",
+                date.format("%b %d"),
+                format_request_count(entry.used)
+            );
             let item = MenuItem::new(app, label, false, None::<&str>).map_err(|e| e.to_string())?;
             history_submenu.append(&item).map_err(|e| e.to_string())?;
         }
@@ -834,6 +859,47 @@ async fn fetch_usage(
 }
 
 #[tauri::command]
+async fn force_fetch_usage(
+    app: AppHandle,
+    _state: tauri::State<'_, AuthManagerState>,
+) -> Result<copilot_tracker::UsageSummary, String> {
+    log::info!("Force fetch usage - clearing cache first");
+
+    // Clear cache first
+    {
+        let store = app.state::<StoreManager>();
+        store.clear_usage_cache();
+        store.clear_usage_history();
+    }
+
+    // Now fetch fresh data
+    let _ = app.emit("usage:loading", true);
+    let mut usage_manager = UsageManager::new();
+    let result = usage_manager.fetch_usage(&app).await;
+    let _ = app.emit("usage:loading", false);
+
+    if let Ok(summary) = &result {
+        let history = UsageManager::get_cached_history(&app);
+        let store = app.state::<StoreManager>();
+        let settings = store.get_settings();
+        let prediction = UsageManager::predict_usage_from_history(
+            &history,
+            summary.used,
+            summary.limit,
+            settings.prediction_period,
+        );
+        let payload = copilot_tracker::UsagePayload {
+            summary: summary.clone(),
+            history,
+            prediction,
+        };
+        let _ = app.emit("usage:data", payload);
+    }
+
+    result
+}
+
+#[tauri::command]
 fn get_cached_usage(app: AppHandle) -> Result<copilot_tracker::UsageSummary, String> {
     UsageManager::get_cached_usage(&app)
 }
@@ -858,9 +924,9 @@ fn get_cached_usage_data(app: AppHandle) -> Result<Option<copilot_tracker::Usage
         return Ok(None);
     }
 
-    let remaining = limit.saturating_sub(used);
+    let remaining = (limit as f64 - used).max(0.0);
     let percentage = if limit > 0 {
-        (used as f32 / limit as f32) * 100.0
+        (used / limit as f64 * 100.0) as f32
     } else {
         0.0
     };
@@ -969,9 +1035,9 @@ fn reset_settings(app: AppHandle) -> Result<copilot_tracker::AppSettings, String
     let summary = copilot_tracker::UsageSummary {
         used,
         limit,
-        remaining: limit.saturating_sub(used),
+        remaining: (limit as f64 - used).max(0.0),
         percentage: if limit > 0 {
-            (used as f32 / limit as f32) * 100.0
+            (used / limit as f64 * 100.0) as f32
         } else {
             0.0
         },
@@ -982,7 +1048,7 @@ fn reset_settings(app: AppHandle) -> Result<copilot_tracker::AppSettings, String
 
     // Update tray icon directly to "1" (unauthenticated state)
     let tray_state = app.state::<TrayState>();
-    let _ = update_tray_icon(&app, &tray_state, 1, 0, "currentTotal");
+    let _ = update_tray_icon(&app, &tray_state, 1.0, 0, "currentTotal");
     log::info!("Updated tray icon to default '1' for unauthenticated state");
 
     // Rebuild tray menu
@@ -1813,7 +1879,7 @@ fn get_update_info(app: AppHandle) -> Result<Option<UpdateInfo>, String> {
 fn update_tray_usage(
     app: AppHandle,
     state: tauri::State<TrayState>,
-    used: u32,
+    used: f64,
     limit: u32,
 ) -> Result<(), String> {
     let store = app.state::<StoreManager>();
@@ -1901,6 +1967,7 @@ fn main() {
             copilot_tracker::hidden_webview_event,
             // Usage commands
             fetch_usage,
+            force_fetch_usage,
             get_cached_usage,
             predict_eom_usage,
             days_until_limit,
@@ -2242,7 +2309,7 @@ fn main() {
 
             // Always emit if authenticated, even if used=0 (might have zero usage but still have history)
             if is_authenticated {
-                if used > 0 {
+                if used > 0.0 {
                     let _ = update_tray_icon_from_store(app.handle());
                 }
 
@@ -2257,9 +2324,9 @@ fn main() {
 
                     log::info!("About to emit startup data: used={}, limit={}", used, limit);
 
-                    let remaining = limit.saturating_sub(used);
+                    let remaining = (limit as f64 - used).max(0.0);
                     let percentage = if limit > 0 {
-                        (used as f32 / limit as f32) * 100.0
+                        (used / limit as f64 * 100.0) as f32
                     } else {
                         0.0
                     };
