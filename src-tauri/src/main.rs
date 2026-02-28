@@ -524,12 +524,12 @@ fn build_tray_menu(
                 date.format("%b %d"),
                 format_request_count(entry.used)
             );
-            let item = MenuItem::new(app, label, false, None::<&str>).map_err(|e| e.to_string())?;
+            let item = MenuItem::new(app, label, true, None::<&str>).map_err(|e| e.to_string())?;
             history_submenu.append(&item).map_err(|e| e.to_string())?;
         }
     } else {
         let item =
-            MenuItem::new(app, "No history yet", false, None::<&str>).map_err(|e| e.to_string())?;
+            MenuItem::new(app, "No history yet", true, None::<&str>).map_err(|e| e.to_string())?;
         history_submenu.append(&item).map_err(|e| e.to_string())?;
     }
     menu.append(&history_submenu).map_err(|e| e.to_string())?;
