@@ -1,5 +1,28 @@
 # Changelog
 
+## [2.4.6](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.5...v2.4.6) (2026-02-28)
+
+
+### Bug Fixes
+
+* preserve decimal usage display across app surfaces ([2d94e2f](https://github.com/bizzkoot/copilot-tracker/commit/2d94e2fdbef146be0e35df9203befca706c2aa61))
+* **release:** include refactor commits in changelog and version bump ([c820b8e](https://github.com/bizzkoot/copilot-tracker/commit/c820b8ebb308abfebe0fcb5ff8ad40368cecc489))
+* **tray:** enable usage history items to fix greyed-out text ([5cb2c7b](https://github.com/bizzkoot/copilot-tracker/commit/5cb2c7bdc490aa68cc0dfb9eade38894325e51a0))
+* **tray:** rename 'target' to 'budget' for clarity ([81956e3](https://github.com/bizzkoot/copilot-tracker/commit/81956e32a0ca4b8d38d10b43989241a9d9462da8))
+* **ui:** prevent double arrows in tray submenus ([ac26808](https://github.com/bizzkoot/copilot-tracker/commit/ac26808c7be4cadc4e1cc4f73fa5cafd17a424ea))
+
+
+### Refactoring
+
+* **dashboard:** overhaul usage trend chart with 7-day SMA and dynamic pacing ([8e13bc5](https://github.com/bizzkoot/copilot-tracker/commit/8e13bc521b1545e65c6f1f845a8e2190b9c9ad19))
+* **tray:** simplify menu UI and align daily metrics ([45df14b](https://github.com/bizzkoot/copilot-tracker/commit/45df14bae7dff2260e30d0a32811716bd4e50670))
+* **ui:** implement DashboardSkeleton for perceived performance ([2fa896f](https://github.com/bizzkoot/copilot-tracker/commit/2fa896f07587fe19dc85d30099909a33e872a448))
+
+
+### Documentation
+
+* update README and assets for version 2.4.5 ([652cd32](https://github.com/bizzkoot/copilot-tracker/commit/652cd32c2ee83857a6c86943ea69e632bf284d44))
+
 ## [2.4.5](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.4...v2.4.5) (2026-02-23)
 
 
