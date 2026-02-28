@@ -368,7 +368,7 @@ fn build_tray_menu(
 
     // === QUOTA SUBMENU (simplified: TODAY + MONTH FORECAST) ===
     let quota_submenu =
-        Submenu::with_id(app, "quota", "📊 Quota ▶", true).map_err(|e| e.to_string())?;
+        Submenu::with_id(app, "quota", "📊 Quota", true).map_err(|e| e.to_string())?;
 
     // TODAY'S STATUS header
     let today_header =
@@ -512,7 +512,7 @@ fn build_tray_menu(
     menu.append(&quota_submenu).map_err(|e| e.to_string())?;
 
     // === USAGE HISTORY SECTION ===
-    let history_submenu = Submenu::with_id(app, "usage_history", "📜 Usage History ▶", true)
+    let history_submenu = Submenu::with_id(app, "usage_history", "📜 Usage History", true)
         .map_err(|e| e.to_string())?;
     if !usage_history.is_empty() {
         for entry in usage_history.iter().take(7) {
@@ -671,7 +671,7 @@ fn build_tray_menu(
 
     // GitHub Links submenu
     let github_submenu =
-        Submenu::with_id(app, "github", "⭐ GitHub ▶", true).map_err(|e| e.to_string())?;
+        Submenu::with_id(app, "github", "⭐ GitHub", true).map_err(|e| e.to_string())?;
     let github_stars =
         MenuItem::with_id(app, "github_repo", "⭐ Star on GitHub", true, None::<&str>)
             .map_err(|e| e.to_string())?;
