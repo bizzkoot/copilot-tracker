@@ -415,7 +415,7 @@ fn build_tray_menu(
             app,
             "budget_line",
             format!(
-                "   🎯 Daily target: {} req",
+                "   🎯 Daily budget: {} req",
                 format_request_count(budget as f64)
             ),
             true,
@@ -429,7 +429,7 @@ fn build_tray_menu(
         let percent_line = MenuItem::with_id(
             app,
             "percent_line",
-            format!("   {} {} of daily target", status_icon, percent_str),
+            format!("   {} {} of daily budget", status_icon, percent_str),
             true,
             None::<&str>,
         )
