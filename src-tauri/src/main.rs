@@ -382,12 +382,10 @@ fn build_tray_menu(
         let budget = daily_budget as i64;
         let usage_percent = if budget > 0 {
             ((today_usage_actual / budget as f64) * 100.0).round() as i32
+        } else if today_usage_actual > 0.0 {
+            100
         } else {
-            if today_usage_actual > 0.0 {
-                100
-            } else {
-                0
-            }
+            0
         };
         let (status_icon, percent_str) = if budget == 0 && today_usage_actual > 0.0 {
             ("⚠️", "Exceeded".to_string())

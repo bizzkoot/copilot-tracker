@@ -9,6 +9,7 @@ import { Dashboard } from "../dashboard/Dashboard";
 import { Settings } from "../settings/Settings";
 import { LoginPrompt } from "../auth/LoginPrompt";
 import { UpdateBanner } from "../ui/UpdateBanner";
+import { DashboardSkeleton } from "../dashboard/DashboardSkeleton";
 import { useAuth } from "@renderer/hooks/useAuth";
 
 type View = "dashboard" | "settings";
@@ -37,16 +38,15 @@ export function Layout() {
     return <LoginPrompt />;
   }
 
-  // Show loading state
+  // Show skeleton loading state while determining auth/initial data
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="mt-4 text-muted-foreground">
-            Checking authentication...
-          </p>
-        </div>
+      <div className="min-h-screen bg-background flex flex-col">
+        <Header onSettingsClick={handleSettingsClick} />
+        <main className="flex-1 container mx-auto px-4 py-4">
+          <DashboardSkeleton />
+        </main>
+        <UpdateBanner />
       </div>
     );
   }
