@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.4.6](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.5...v2.4.6) (2026-02-28)
+
+
+### Bug Fixes
+
+* preserve decimal usage display across app surfaces ([2d94e2f](https://github.com/bizzkoot/copilot-tracker/commit/2d94e2fdbef146be0e35df9203befca706c2aa61))
+* **tray:** enable usage history items to fix greyed-out text ([5cb2c7b](https://github.com/bizzkoot/copilot-tracker/commit/5cb2c7bdc490aa68cc0dfb9eade38894325e51a0))
+* **tray:** rename 'target' to 'budget' for clarity ([81956e3](https://github.com/bizzkoot/copilot-tracker/commit/81956e32a0ca4b8d38d10b43989241a9d9462da8))
+* **ui:** prevent double arrows in tray submenus ([ac26808](https://github.com/bizzkoot/copilot-tracker/commit/ac26808c7be4cadc4e1cc4f73fa5cafd17a424ea))
+
+
+### Documentation
+
+* update README and assets for version 2.4.5 ([652cd32](https://github.com/bizzkoot/copilot-tracker/commit/652cd32c2ee83857a6c86943ea69e632bf284d44))
+
 ## [2.4.5](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.4...v2.4.5) (2026-02-23)
 
 
