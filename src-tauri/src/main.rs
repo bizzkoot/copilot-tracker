@@ -333,9 +333,9 @@ fn build_tray_menu(
     } else {
         0.0
     };
-    let percentage_remaining = 100.0 - percentage_used;
+    let _percentage_remaining = 100.0 - percentage_used;
 
-    // Calculate daily metrics
+    // Calculate daily metrics aligned with Dashboard
     let now = chrono::Utc::now();
     let current_day = now.day() as f32;
     let days_in_month = if now.month() == 12 {
@@ -346,68 +346,98 @@ fn build_tray_menu(
         let current_month = chrono::NaiveDate::from_ymd_opt(now.year(), now.month(), 1).unwrap();
         (next_month - current_month).num_days() as u32
     };
-    let days_remaining = days_in_month as f32 - current_day;
-    let daily_rate = if current_day > 0.0 {
-        used as f32 / current_day
-    } else {
-        0.0
-    };
+    // Match dashboard logic: Math.max(1, daysInMonth - currentDay)
+    let days_remaining = (days_in_month as f32 - current_day).max(1.0);
     // Floor the daily budget to be conservative (synced with Dashboard)
-    let daily_budget = if days_remaining > 0.0 {
-        (remaining as f32 / days_remaining).floor()
-    } else {
-        0.0
-    };
+    let daily_budget = (remaining as f32 / days_remaining).floor();
+
+    // Get actual today's usage from history (if available)
+    let today_timestamp = now
+        .date_naive()
+        .and_hms_opt(0, 0, 0)
+        .unwrap()
+        .and_utc()
+        .timestamp();
+    let today_usage_actual = usage_history
+        .iter()
+        .find(|e| e.timestamp == today_timestamp)
+        .map(|e| e.used)
+        .unwrap_or(0.0);
 
     let menu = Menu::new(app).map_err(|e| e.to_string())?;
 
-    // === QUOTA SUBMENU (combines QUOTA STATUS + ACTIVITY + FORECAST) ===
+    // === QUOTA SUBMENU (simplified: TODAY + MONTH FORECAST) ===
     let quota_submenu =
         Submenu::with_id(app, "quota", "📊 Quota ▶", true).map_err(|e| e.to_string())?;
 
-    // QUOTA STATUS header
-    let overview_header = MenuItem::with_id(
-        app,
-        "overview_header",
-        "📊 QUOTA STATUS",
-        true,
-        None::<&str>,
-    )
-    .map_err(|e| e.to_string())?;
+    // TODAY'S STATUS header
+    let today_header =
+        MenuItem::with_id(app, "today_header", "📊 TODAY'S STATUS", true, None::<&str>)
+            .map_err(|e| e.to_string())?;
     quota_submenu
-        .append(&overview_header)
+        .append(&today_header)
         .map_err(|e| e.to_string())?;
 
     if limit > 0 {
-        let quota_line = MenuItem::with_id(
+        let budget = daily_budget as i64;
+        let usage_percent = if budget > 0 {
+            ((today_usage_actual / budget as f64) * 100.0).round() as i32
+        } else {
+            if today_usage_actual > 0.0 {
+                100
+            } else {
+                0
+            }
+        };
+        let (status_icon, percent_str) = if budget == 0 && today_usage_actual > 0.0 {
+            ("⚠️", "Exceeded".to_string())
+        } else if today_usage_actual > budget as f64 {
+            ("⚠️", format!("{}%", usage_percent))
+        } else if usage_percent > 75 {
+            ("🟡", format!("{}%", usage_percent))
+        } else {
+            ("✅", format!("{}%", usage_percent))
+        };
+        let today_line = MenuItem::with_id(
             app,
-            "quota_line",
+            "today_line",
             format!(
-                "   {} / {} requests ({percentage_used:.0}%)",
-                format_request_count(used),
-                format_request_count(limit as f64)
+                "   ⚡ Used today: {} req",
+                format_request_count(today_usage_actual)
             ),
             true,
             None::<&str>,
         )
         .map_err(|e| e.to_string())?;
         quota_submenu
-            .append(&quota_line)
+            .append(&today_line)
             .map_err(|e| e.to_string())?;
 
-        let remaining_line = MenuItem::with_id(
+        let budget_line = MenuItem::with_id(
             app,
-            "remaining_line",
+            "budget_line",
             format!(
-                "   {} remaining ({percentage_remaining:.0}%)",
-                format_request_count(remaining)
+                "   🎯 Daily target: {} req",
+                format_request_count(budget as f64)
             ),
             true,
             None::<&str>,
         )
         .map_err(|e| e.to_string())?;
         quota_submenu
-            .append(&remaining_line)
+            .append(&budget_line)
+            .map_err(|e| e.to_string())?;
+
+        let percent_line = MenuItem::with_id(
+            app,
+            "percent_line",
+            format!("   {} {} of daily target", status_icon, percent_str),
+            true,
+            None::<&str>,
+        )
+        .map_err(|e| e.to_string())?;
+        quota_submenu
+            .append(&percent_line)
             .map_err(|e| e.to_string())?;
     } else {
         let loading_line =
@@ -422,76 +452,24 @@ fn build_tray_menu(
         .append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
 
-    // ACTIVITY section
-    if limit > 0 && current_day > 0.0 {
-        let rate_header = MenuItem::with_id(app, "rate_header", "📈 ACTIVITY", true, None::<&str>)
-            .map_err(|e| e.to_string())?;
-        quota_submenu
-            .append(&rate_header)
-            .map_err(|e| e.to_string())?;
-
-        let daily_rate_line = MenuItem::with_id(
-            app,
-            "daily_rate_line",
-            format!("   ⚡ Usage: {:.0} req/day", daily_rate),
-            true,
-            None::<&str>,
-        )
-        .map_err(|e| e.to_string())?;
-        quota_submenu
-            .append(&daily_rate_line)
-            .map_err(|e| e.to_string())?;
-
-        if daily_budget > 0.0 {
-            let budget_line = MenuItem::with_id(
-                app,
-                "budget_line",
-                format!("   🎯 Budget: {:.0} req/day", daily_budget),
-                true,
-                None::<&str>,
-            )
-            .map_err(|e| e.to_string())?;
-            quota_submenu
-                .append(&budget_line)
-                .map_err(|e| e.to_string())?;
-        }
-
-        let days_left_line = MenuItem::with_id(
-            app,
-            "days_left_line",
-            format!("   🗓️ {:.0} days remaining", days_remaining),
-            true,
-            None::<&str>,
-        )
-        .map_err(|e| e.to_string())?;
-        quota_submenu
-            .append(&days_left_line)
-            .map_err(|e| e.to_string())?;
-
-        quota_submenu
-            .append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?;
-    }
-
-    // FORECAST section
+    // MONTH FORECAST section
     if let Some(prediction) = prediction {
-        let prediction_header =
-            MenuItem::with_id(app, "prediction_header", "🔮 FORECAST", true, None::<&str>)
-                .map_err(|e| e.to_string())?;
+        let forecast_header = MenuItem::with_id(
+            app,
+            "forecast_header",
+            "🔮 END OF MONTH FORECAST",
+            true,
+            None::<&str>,
+        )
+        .map_err(|e| e.to_string())?;
         quota_submenu
-            .append(&prediction_header)
+            .append(&forecast_header)
             .map_err(|e| e.to_string())?;
 
         let status_label = if prediction.predicted_monthly_requests > limit as f64 {
-            format!(
-                "   ⚠️ Exceed by {}",
-                format_request_count(prediction.predicted_monthly_requests - limit as f64)
-            )
+            "   ⚠️ Alert: Will exceed quota".to_string()
         } else {
-            format!(
-                "   ✅ Safe ({} left)",
-                format_request_count(limit as f64 - prediction.predicted_monthly_requests)
-            )
+            "   ✅ Safe: Won't exceed quota".to_string()
         };
         let status_line = MenuItem::with_id(app, "status_line", status_label, true, None::<&str>)
             .map_err(|e| e.to_string())?;
@@ -499,17 +477,13 @@ fn build_tray_menu(
             .append(&status_line)
             .map_err(|e| e.to_string())?;
 
-        let confidence_icon = match prediction.confidence_level.as_str() {
-            "high" => "🟢",
-            "medium" => "🟡",
-            _ => "🔴",
-        };
         let forecast_line = MenuItem::with_id(
             app,
             "forecast_line",
             format!(
-                "   {confidence_icon} Expected: {} total",
-                format_request_count(prediction.predicted_monthly_requests)
+                "   📈 Est. final usage: {} / {} req",
+                format_request_count(prediction.predicted_monthly_requests),
+                format_request_count(limit as f64)
             ),
             true,
             None::<&str>,
@@ -519,11 +493,16 @@ fn build_tray_menu(
             .append(&forecast_line)
             .map_err(|e| e.to_string())?;
     } else {
-        let prediction_header =
-            MenuItem::with_id(app, "prediction_header", "🔮 FORECAST", true, None::<&str>)
-                .map_err(|e| e.to_string())?;
+        let forecast_header = MenuItem::with_id(
+            app,
+            "forecast_header",
+            "🔮 END OF MONTH FORECAST",
+            true,
+            None::<&str>,
+        )
+        .map_err(|e| e.to_string())?;
         quota_submenu
-            .append(&prediction_header)
+            .append(&forecast_header)
             .map_err(|e| e.to_string())?;
         let no_data = MenuItem::with_id(app, "no_data", "   Insufficient data", true, None::<&str>)
             .map_err(|e| e.to_string())?;
