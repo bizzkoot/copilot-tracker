@@ -69,8 +69,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build project (updates lock files)
-        run: npm run build
+      - name: Update Cargo.lock (reflect version bump in Cargo.toml)
+        working-directory: src-tauri
+        run: cargo check
+
+      - name: Build frontend assets
+        run: npm run build:web
 
       - name: Run formatting (after build)
         run: npm run format
