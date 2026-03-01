@@ -218,12 +218,21 @@ impl UsageManager {
             0.0
         };
 
+        // Use the stored fetch timestamp so callers (and the dashboard) always
+        // show when the data was actually fetched, not when this function ran.
+        let last_fetch = store.get_last_fetch_timestamp();
+        let timestamp = if last_fetch > 0 {
+            last_fetch
+        } else {
+            chrono::Utc::now().timestamp()
+        };
+
         Ok(UsageSummary {
             used,
             limit,
             remaining,
             percentage,
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp,
         })
     }
 

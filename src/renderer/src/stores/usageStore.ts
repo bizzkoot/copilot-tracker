@@ -63,7 +63,12 @@ export const useUsageStore = create<UsageState>((set) => ({
       history: data.history !== undefined ? data.history : state.history,
       prediction:
         data.prediction !== undefined ? data.prediction : state.prediction,
-      lastUpdated: new Date(),
+      // Use fetchedAt from the history payload (which carries the backend's
+      // last_fetch_timestamp) so the dashboard shows when data was actually
+      // fetched, not when the frontend received the event.
+      lastUpdated: data.history?.fetchedAt
+        ? new Date(data.history.fetchedAt)
+        : new Date(),
       error: null,
     })),
 

@@ -908,12 +908,21 @@ fn get_cached_usage_data(app: AppHandle) -> Result<Option<copilot_tracker::Usage
         0.0
     };
 
+    // Use the stored fetch timestamp so the dashboard shows when data was actually fetched,
+    // not the current time.  Falls back to now() only on first launch (timestamp == 0).
+    let last_fetch = store.get_last_fetch_timestamp();
+    let summary_timestamp = if last_fetch > 0 {
+        last_fetch
+    } else {
+        chrono::Utc::now().timestamp()
+    };
+
     let summary = copilot_tracker::UsageSummary {
         used,
         limit,
         remaining,
         percentage,
-        timestamp: chrono::Utc::now().timestamp(),
+        timestamp: summary_timestamp,
     };
 
     let history = UsageManager::get_cached_history(&app);
@@ -2284,11 +2293,10 @@ fn main() {
 
             log::info!("Startup: used={}, limit={}, authenticated={}", used, limit, is_authenticated);
 
-            // Always emit if authenticated, even if used=0 (might have zero usage but still have history)
+            // Always update tray icon if authenticated, even if used=0
+            // The initial "1" icon is only for unauthenticated state
             if is_authenticated {
-                if used > 0.0 {
-                    let _ = update_tray_icon_from_store(app.handle());
-                }
+                let _ = update_tray_icon_from_store(app.handle());
 
                 // Emit initial usage data to frontend (delayed to allow frontend listeners to attach)
                 let app_handle_for_emit = app.handle().clone();
@@ -2312,7 +2320,12 @@ fn main() {
                         limit,
                         remaining,
                         percentage,
-                        timestamp: chrono::Utc::now().timestamp(),
+                        // Use the stored fetch timestamp so the dashboard shows
+                        // when data was actually fetched, not the current time.
+                        timestamp: {
+                            let ts = store.get_last_fetch_timestamp();
+                            if ts > 0 { ts } else { chrono::Utc::now().timestamp() }
+                        },
                     };
 
                     let history = UsageManager::get_cached_history(&app_handle_for_emit);
@@ -2364,6 +2377,7 @@ fn main() {
             // Spawn a delayed task to ensure polling starts after initialization is complete
             let app_for_polling = app_handle.clone();
             let polling_interval = settings.refresh_interval.max(10) as u64;
+            let is_authenticated = settings.is_authenticated;
             tauri::async_runtime::spawn(async move {
                 // Small delay to ensure setup() completes and all state is managed
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -2371,6 +2385,51 @@ fn main() {
                 let polling_state = app_for_polling.state::<PollingState>();
                 polling_state.restart_polling(app_for_polling.clone(), polling_interval);
                 log::info!("[Startup] Started background polling with interval: {}s", polling_interval);
+
+                // Smart startup fetch: If data is stale, fetch immediately
+                if is_authenticated {
+                    let store = app_for_polling.state::<StoreManager>();
+                    let last_fetch = store.get_last_fetch_timestamp();
+                    let now = chrono::Utc::now().timestamp();
+
+                    // Consider data stale if:
+                    // 1. Never fetched (corruption recovery, first launch) -> last_fetch == 0
+                    // 2. Last fetch was more than 1 hour ago (3600 seconds)
+                    const STALE_THRESHOLD: i64 = 3600; // 1 hour
+
+                    if last_fetch == 0 || (now - last_fetch) > STALE_THRESHOLD {
+                        let stale_reason = if last_fetch == 0 {
+                            "never fetched (corruption recovery or first launch)"
+                        } else {
+                            &format!("{} seconds old", now - last_fetch)
+                        };
+
+                        log::info!("[Startup] Data is stale ({}), triggering immediate fetch", stale_reason);
+
+                        // Trigger immediate fetch
+                        let mut usage_manager = UsageManager::new();
+                        match usage_manager.fetch_usage(&app_for_polling).await {
+                            Ok(summary) => {
+                                log::info!(
+                                    "[Startup] Immediate fetch successful: {}/{} ({}%)",
+                                    summary.used,
+                                    summary.limit,
+                                    summary.percentage
+                                );
+                                // Tray icon is updated via the usage:updated event listener
+                                // that fetch_usage() emits internally — no explicit call needed.
+                            }
+                            Err(e) => {
+                                log::warn!("[Startup] Immediate fetch failed (will retry on next poll): {}", e);
+                            }
+                        }
+                    } else {
+                        log::info!(
+                            "[Startup] Data is fresh ({} seconds old), skipping startup fetch",
+                            now - last_fetch
+                        );
+                    }
+                }
             });
 
             // Initialize widget state from settings

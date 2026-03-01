@@ -1,10 +1,12 @@
 use serde::{Deserialize, Serialize};
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
 use crate::usage::UsageEntry;
 
 const STORE_FILENAME: &str = "settings.json";
+const USAGE_CACHE_FILENAME: &str = "usage_cache.json";
 const HISTORY_FILENAME: &str = "usage_history.json";
 
 /// Valid tray icon display formats
@@ -21,22 +23,35 @@ pub const TRAY_ICON_FORMATS: &[&str] = &[
 /// Default tray icon format - must be one of TRAY_ICON_FORMATS
 pub const DEFAULT_TRAY_ICON_FORMAT: &str = "currentTotal";
 
+/// AppSettings - PASSIVE data (user preferences + auth)
+/// Stored in settings.json
+/// Changes infrequently: only when user changes settings or logs in/out
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
-    /// Customer ID from GitHub
+    /// Customer ID from GitHub (passive - only on login)
     pub customer_id: Option<u64>,
-    /// Usage limit for the current period
-    pub usage_limit: u32,
-    /// Last known usage count
-    pub last_usage: f64,
-    /// Last time usage was fetched (timestamp)
-    pub last_fetch_timestamp: i64,
-    /// Last time update check was performed (timestamp)
-    #[serde(default)]
-    pub last_update_check_timestamp: i64,
     /// Whether to launch at login
     pub launch_at_login: bool,
+    // -------------------------------------------------------------------------
+    // BACKWARD COMPATIBILITY FIELDS
+    // These fields are no longer used by new code (data lives in usage_cache.json).
+    // They are kept in this struct so that:
+    //   1. New code serializes them as defaults → old builds can parse settings.json
+    //      without crashing (safe downgrade from new → old build).
+    //   2. Old settings.json files with real values in these fields are silently
+    //      accepted by new code without a parse error (safe upgrade path).
+    // On upgrade: smart startup fetch (last_fetch_timestamp==0) immediately refreshes.
+    // On downgrade: old build reads 0/1200 → treats as first launch → fetches data.
+    // -------------------------------------------------------------------------
+    #[serde(default = "legacy_default_usage_limit")]
+    pub usage_limit: u32,
+    #[serde(default)]
+    pub last_usage: f64,
+    #[serde(default)]
+    pub last_fetch_timestamp: i64,
+    #[serde(default)]
+    pub last_update_check_timestamp: i64,
     /// Whether to show notifications
     pub show_notifications: bool,
     /// Notification thresholds
@@ -44,7 +59,7 @@ pub struct AppSettings {
     pub notification_thresholds: Vec<u32>,
     /// Update channel (stable, beta)
     pub update_channel: String,
-    /// Authenticated state
+    /// Authenticated state (passive - only on login/logout)
     pub is_authenticated: bool,
     /// Refresh interval in seconds
     #[serde(default = "default_refresh_interval")]
@@ -76,6 +91,23 @@ pub struct AppSettings {
     /// Widget visible
     #[serde(default = "default_widget_visible")]
     pub widget_visible: bool,
+}
+
+/// UsageCacheData - ACTIVE data (volatile usage information)
+/// Stored in usage_cache.json
+/// Changes frequently: on every usage refresh/poll
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageCacheData {
+    /// Usage limit for the current period (cached from API)
+    pub usage_limit: u32,
+    /// Last known usage count
+    pub last_usage: f64,
+    /// Last time usage was fetched (timestamp)
+    pub last_fetch_timestamp: i64,
+    /// Last time update check was performed (timestamp)
+    #[serde(default)]
+    pub last_update_check_timestamp: i64,
 }
 
 /// Widget position on screen
@@ -136,15 +168,20 @@ fn default_widget_position() -> WidgetPosition {
     WidgetPosition::default()
 }
 
+fn legacy_default_usage_limit() -> u32 {
+    1200
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
             customer_id: None,
-            usage_limit: 1200, // Default Copilot limit
+            launch_at_login: false,
+            // Legacy compat fields — always zero/default in new builds
+            usage_limit: legacy_default_usage_limit(),
             last_usage: 0.0,
             last_fetch_timestamp: 0,
             last_update_check_timestamp: 0,
-            launch_at_login: false,
             show_notifications: true,
             notification_thresholds: default_thresholds(),
             update_channel: "stable".to_string(),
@@ -163,6 +200,17 @@ impl Default for AppSettings {
     }
 }
 
+impl Default for UsageCacheData {
+    fn default() -> Self {
+        Self {
+            usage_limit: 1200, // Default Copilot limit
+            last_usage: 0.0,
+            last_fetch_timestamp: 0,
+            last_update_check_timestamp: 0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageCache {
     pub customer_id: u64,
@@ -176,9 +224,10 @@ pub struct UsageCache {
 
 pub struct StoreManager {
     settings_path: PathBuf,
+    usage_cache_path: PathBuf,
     history_path: PathBuf,
     settings: Mutex<AppSettings>,
-    usage_cache: Mutex<Option<UsageCache>>,
+    usage_cache: Mutex<UsageCacheData>,
     usage_history: Mutex<Vec<UsageEntry>>,
 }
 
@@ -192,93 +241,143 @@ impl StoreManager {
         }
 
         let settings_path = app_dir.join(STORE_FILENAME);
+        let usage_cache_path = app_dir.join(USAGE_CACHE_FILENAME);
         let history_path = app_dir.join(HISTORY_FILENAME);
 
         // Load existing settings or create defaults
+        // Note: load_settings_from_disk now handles corrupted files by backing them up
+        // and returning default settings, so this will never fail
         let settings = if settings_path.exists() {
-            Self::load_settings_from_disk(&settings_path)?
+            match Self::load_settings_from_disk(&settings_path) {
+                Ok(s) => s,
+                Err(e) => {
+                    log::error!("Failed to load settings (will use defaults): {}", e);
+                    AppSettings::default()
+                }
+            }
         } else {
             AppSettings::default()
         };
 
+        // Load existing usage cache or create defaults
+        // Note: load_usage_cache_from_disk handles corrupted files by backing them up
+        // and returning default cache, so this will never fail
+        let usage_cache = if usage_cache_path.exists() {
+            match Self::load_usage_cache_from_disk(&usage_cache_path) {
+                Ok(c) => c,
+                Err(e) => {
+                    log::error!("Failed to load usage cache (will use defaults): {}", e);
+                    UsageCacheData::default()
+                }
+            }
+        } else {
+            UsageCacheData::default()
+        };
+
         // Load existing history or create empty
+        // Note: load_history_from_disk now handles corrupted files by backing them up
+        // and returning empty history, so this will never fail
         let history = if history_path.exists() {
-            Self::load_history_from_disk(&history_path)?
+            match Self::load_history_from_disk(&history_path) {
+                Ok(h) => h,
+                Err(e) => {
+                    log::error!("Failed to load history (will use empty): {}", e);
+                    Vec::new()
+                }
+            }
         } else {
             Vec::new()
         };
 
         Ok(Self {
             settings_path,
+            usage_cache_path,
             history_path,
             settings: Mutex::new(settings),
-            usage_cache: Mutex::new(None),
+            usage_cache: Mutex::new(usage_cache),
             usage_history: Mutex::new(history),
         })
     }
 
-    /// Load settings from disk
+    /// Load settings from disk with automatic corruption recovery
     fn load_settings_from_disk(path: &PathBuf) -> Result<AppSettings, String> {
         let content = std::fs::read_to_string(path)
             .map_err(|e| format!("Failed to read settings file: {}", e))?;
 
         let settings: AppSettings = serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse settings file: {}", e))?;
+            .map_err(|e| {
+                // JSON parse error - file is corrupted
+                log::error!("Corrupted settings file: {}", e);
+                backup_corrupted_file(path);
+                format!(
+                    "Failed to parse settings file (corrupted). Backed up and recovered with defaults: {}",
+                    e
+                )
+            })?;
 
         Ok(settings)
     }
 
-    /// Save settings to disk
+    /// Save settings to disk using atomic write pattern (prevents corruption)
     fn save_settings_to_disk(path: &PathBuf, settings: &AppSettings) -> Result<(), String> {
         let content = serde_json::to_string_pretty(settings)
             .map_err(|e| format!("Failed to serialize settings: {}", e))?;
 
-        // Use a single file handle for both write and sync to avoid race conditions
-        // on Windows where the file may still be locked after std::fs::write closes
-        use std::io::Write;
-        let mut file = std::fs::File::create(path)
-            .map_err(|e| format!("Failed to create settings file: {}", e))?;
-
-        file.write_all(content.as_bytes())
-            .map_err(|e| format!("Failed to write settings file: {}", e))?;
-
-        // Ensure data is flushed to disk (important for shutdown scenarios)
-        file.sync_all()
-            .map_err(|e| format!("Failed to sync settings file: {}", e))?;
-
-        Ok(())
+        write_file_atomic(path, &content)
     }
 
-    /// Load history from disk
+    /// Load history from disk with automatic corruption recovery
     fn load_history_from_disk(path: &PathBuf) -> Result<Vec<UsageEntry>, String> {
         let content = std::fs::read_to_string(path)
             .map_err(|e| format!("Failed to read history file: {}", e))?;
 
         let history: Vec<UsageEntry> = serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse history file: {}", e))?;
+            .map_err(|e| {
+                // JSON parse error - file is corrupted
+                log::error!("Corrupted history file: {}", e);
+                backup_corrupted_file(path);
+                format!(
+                    "Failed to parse history file (corrupted). Backed up and recovered with empty history: {}",
+                    e
+                )
+            })?;
 
         Ok(history)
     }
 
-    /// Save history to disk
+    /// Save history to disk using atomic write pattern (prevents corruption)
     fn save_history_to_disk(path: &PathBuf, history: &Vec<UsageEntry>) -> Result<(), String> {
         let content = serde_json::to_string_pretty(history)
             .map_err(|e| format!("Failed to serialize history: {}", e))?;
 
-        // Use a single file handle for both write and sync to avoid race conditions
-        // on Windows where the file may still be locked after std::fs::write closes
-        use std::io::Write;
-        let mut file = std::fs::File::create(path)
-            .map_err(|e| format!("Failed to create history file: {}", e))?;
+        write_file_atomic(path, &content)
+    }
 
-        file.write_all(content.as_bytes())
-            .map_err(|e| format!("Failed to write history file: {}", e))?;
+    /// Load usage cache from disk with automatic corruption recovery
+    fn load_usage_cache_from_disk(path: &PathBuf) -> Result<UsageCacheData, String> {
+        let content = std::fs::read_to_string(path)
+            .map_err(|e| format!("Failed to read usage cache file: {}", e))?;
 
-        // Ensure data is flushed to disk (important for shutdown scenarios)
-        file.sync_all()
-            .map_err(|e| format!("Failed to sync history file: {}", e))?;
+        let cache: UsageCacheData = serde_json::from_str(&content)
+            .map_err(|e| {
+                // JSON parse error - file is corrupted
+                log::error!("Corrupted usage cache file: {}", e);
+                backup_corrupted_file(path);
+                format!(
+                    "Failed to parse usage cache file (corrupted). Backed up and recovered with defaults: {}",
+                    e
+                )
+            })?;
 
-        Ok(())
+        Ok(cache)
+    }
+
+    /// Save usage cache to disk using atomic write pattern (prevents corruption)
+    fn save_usage_cache_to_disk(path: &PathBuf, cache: &UsageCacheData) -> Result<(), String> {
+        let content = serde_json::to_string_pretty(cache)
+            .map_err(|e| format!("Failed to serialize usage cache: {}", e))?;
+
+        write_file_atomic(path, &content)
     }
 
     /// Get a copy of current settings
@@ -313,36 +412,46 @@ impl StoreManager {
         self.settings.lock().unwrap().customer_id
     }
 
-    /// Set usage data
+    /// Set usage data (active data - written to usage_cache.json)
     pub fn set_usage(&self, used: f64, limit: u32) -> Result<(), String> {
-        self.update_settings(|s| {
-            s.last_usage = used;
-            s.usage_limit = limit;
-            s.last_fetch_timestamp = chrono::Utc::now().timestamp();
-        })
+        let mut cache = self.usage_cache.lock().unwrap();
+        cache.last_usage = used;
+        cache.usage_limit = limit;
+        cache.last_fetch_timestamp = chrono::Utc::now().timestamp();
+
+        // Persist to usage_cache.json
+        Self::save_usage_cache_to_disk(&self.usage_cache_path, &cache)?;
+        drop(cache);
+
+        Ok(())
     }
 
-    /// Get usage data
+    /// Get usage data (from usage_cache.json)
     pub fn get_usage(&self) -> (f64, u32) {
-        let settings = self.settings.lock().unwrap();
-        (settings.last_usage, settings.usage_limit)
+        let cache = self.usage_cache.lock().unwrap();
+        (cache.last_usage, cache.usage_limit)
     }
 
-    /// Get last fetch timestamp
+    /// Get last fetch timestamp (from usage_cache.json)
     pub fn get_last_fetch_timestamp(&self) -> i64 {
-        self.settings.lock().unwrap().last_fetch_timestamp
+        self.usage_cache.lock().unwrap().last_fetch_timestamp
     }
 
-    /// Get last update check timestamp
-    pub fn get_last_update_check_timestamp(&self) -> i64 {
-        self.settings.lock().unwrap().last_update_check_timestamp
-    }
-
-    /// Set last update check timestamp
+    /// Set last update check timestamp (active data - written to usage_cache.json)
     pub fn set_last_update_check_timestamp(&self, timestamp: i64) -> Result<(), String> {
-        self.update_settings(|s| {
-            s.last_update_check_timestamp = timestamp;
-        })
+        let mut cache = self.usage_cache.lock().unwrap();
+        cache.last_update_check_timestamp = timestamp;
+
+        // Persist to usage_cache.json
+        Self::save_usage_cache_to_disk(&self.usage_cache_path, &cache)?;
+        drop(cache);
+
+        Ok(())
+    }
+
+    /// Get last update check timestamp (from usage_cache.json)
+    pub fn get_last_update_check_timestamp(&self) -> i64 {
+        self.usage_cache.lock().unwrap().last_update_check_timestamp
     }
 
     /// Set launch at login preference
@@ -382,36 +491,74 @@ impl StoreManager {
         })
     }
 
-    /// Export usage cache for persistence
+    /// Export usage cache for API responses (legacy compatibility)
     pub fn export_usage_cache(&self) -> Result<UsageCache, String> {
         let settings = self.settings.lock().unwrap();
+        let cache = self.usage_cache.lock().unwrap();
 
         let customer_id = settings.customer_id.ok_or("No customer ID available")?;
 
         Ok(UsageCache {
             customer_id,
-            net_quantity: settings.last_usage,
-            discount_quantity: 0.0,
-            user_premium_request_entitlement: 0,
-            filtered_user_premium_request_entitlement: 0,
+            net_quantity: cache.last_usage,
+            // last_usage is the rounded discount_quantity (written by set_usage)
+            discount_quantity: cache.last_usage,
+            user_premium_request_entitlement: cache.usage_limit,
+            filtered_user_premium_request_entitlement: cache.usage_limit,
             net_billed_amount: 0.0,
-            timestamp: settings.last_fetch_timestamp,
+            timestamp: cache.last_fetch_timestamp,
         })
     }
 
     pub fn set_usage_cache(&self, cache: UsageCache) {
-        let mut guard = self.usage_cache.lock().unwrap();
-        *guard = Some(cache);
+        // Updates auth state in settings.json (passive file — infrequent writes).
+        // NOTE: Usage numbers (last_usage, usage_limit, last_fetch_timestamp) are
+        // intentionally NOT updated here — they are already written to usage_cache.json
+        // by set_usage(), which is always called before this method in every fetch path.
+        // Mixing both writes here would overwrite the correct rounded discount_quantity
+        // value (from set_usage) with the raw net_quantity from the API response.
+        if let Err(e) = self.update_settings(|s| {
+            s.customer_id = Some(cache.customer_id);
+            s.is_authenticated = true;
+        }) {
+            log::error!(
+                "[set_usage_cache] Failed to persist auth state to settings.json: {}",
+                e
+            );
+        }
     }
 
     pub fn get_usage_cache(&self) -> Option<UsageCache> {
-        self.usage_cache.lock().unwrap().clone()
+        let settings = self.settings.lock().unwrap();
+        let cache = self.usage_cache.lock().unwrap();
+
+        settings.customer_id.map(|customer_id| UsageCache {
+            customer_id,
+            net_quantity: cache.last_usage,
+            // last_usage stores the rounded discount_quantity (set by set_usage).
+            // Using it here so fallback history entries show the correct `used` value.
+            discount_quantity: cache.last_usage,
+            user_premium_request_entitlement: cache.usage_limit,
+            filtered_user_premium_request_entitlement: cache.usage_limit,
+            net_billed_amount: 0.0,
+            timestamp: cache.last_fetch_timestamp,
+        })
     }
 
     pub fn clear_usage_cache(&self) {
-        let mut guard = self.usage_cache.lock().unwrap();
-        *guard = None;
-        log::info!("Usage cache cleared");
+        let defaults = UsageCacheData::default();
+        {
+            let mut cache = self.usage_cache.lock().unwrap();
+            *cache = defaults.clone();
+        }
+        // Persist the cleared state so next startup doesn't load stale data
+        if let Err(e) = Self::save_usage_cache_to_disk(&self.usage_cache_path, &defaults) {
+            log::error!(
+                "[clear_usage_cache] Failed to persist cleared cache to disk: {}",
+                e
+            );
+        }
+        log::info!("Usage cache cleared and persisted");
     }
 
     pub fn clear_usage_history(&self) {
@@ -450,10 +597,20 @@ impl StoreManager {
             *s = defaults.clone();
         })?;
 
-        // Clear usage cache
+        // Clear usage cache to defaults AND persist to disk
         {
-            let mut cache = self.usage_cache.lock().unwrap();
-            *cache = None;
+            let cleared_cache = UsageCacheData::default();
+            {
+                let mut cache = self.usage_cache.lock().unwrap();
+                *cache = cleared_cache.clone();
+            }
+            // Must persist — otherwise next restart loads stale cache from disk
+            if let Err(e) = Self::save_usage_cache_to_disk(&self.usage_cache_path, &cleared_cache) {
+                log::error!(
+                    "[reset_settings] Failed to persist cleared usage cache: {}",
+                    e
+                );
+            }
         }
 
         // Clear usage history
@@ -533,5 +690,64 @@ impl StoreManager {
         self.update_settings(|s| {
             s.widget_visible = visible;
         })
+    }
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Write content to file atomically (prevents corruption on crash/restart)
+///
+/// This uses an atomic write pattern:
+/// 1. Write content to a temporary file (.tmp)
+/// 2. Sync the temporary file to disk
+/// 3. Atomically rename the temporary file to the target file
+///
+/// The atomic rename ensures that either the old file remains intact or the new
+/// file is completely written - never a partially written/corrupted state.
+/// This is critical for preventing data loss during system crashes or restarts.
+fn write_file_atomic(path: &PathBuf, content: &str) -> Result<(), String> {
+    let temp_path = path.with_extension("tmp");
+
+    // Step 1: Write to temporary file
+    let mut file = std::fs::File::create(&temp_path)
+        .map_err(|e| format!("Failed to create temp file: {}", e))?;
+
+    file.write_all(content.as_bytes())
+        .map_err(|e| format!("Failed to write to temp file: {}", e))?;
+
+    // Step 2: Sync temp file to disk (ensure data is physically written)
+    file.sync_all()
+        .map_err(|e| format!("Failed to sync temp file: {}", e))?;
+
+    // Step 3: Atomic rename (POSIX guarantees this is atomic)
+    // On success: old file is replaced, new file is complete
+    // On failure: old file remains intact
+    std::fs::rename(&temp_path, path).map_err(|e| format!("Failed to rename temp file: {}", e))?;
+
+    log::debug!("File written atomically: {:?}", path);
+    Ok(())
+}
+
+/// Backup a corrupted file by renaming it with a timestamp
+///
+/// When JSON parsing fails, we preserve the corrupted file for debugging
+/// by renaming it to .bak.TIMESTAMP. This allows investigation of what went wrong.
+fn backup_corrupted_file(path: &PathBuf) {
+    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+    let backup_path = path.with_extension(format!("bak.{}", timestamp));
+
+    match std::fs::rename(path, &backup_path) {
+        Ok(_) => {
+            log::warn!(
+                "Backed up corrupted file from {:?} to {:?}",
+                path,
+                backup_path
+            );
+        }
+        Err(e) => {
+            log::error!("Failed to backup corrupted file {:?}: {}", path, e);
+        }
     }
 }
