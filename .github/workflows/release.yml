@@ -48,6 +48,9 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    outputs:
+      pr_found: ${{ steps.release-pr.outputs.pr_found }}
+      pr_number: ${{ steps.release-pr.outputs.pr_number }}
     steps:
       - name: Resolve release PR branch
         id: release-pr
@@ -87,15 +90,18 @@ jobs:
             }
 
             if (!pr) {
-              core.setFailed('No open release-please PR found for base main.');
+              core.info('No open release-please PR found for base main. Skipping format step.');
+              core.setOutput('pr_found', 'false');
               return;
             }
 
             core.info(`Using release PR #${pr.number} (${pr.head.ref})`);
+            core.setOutput('pr_found', 'true');
             core.setOutput('pr_number', String(pr.number));
             core.setOutput('head_ref', pr.head.ref);
 
       - name: Check out Git repository
+        if: steps.release-pr.outputs.pr_found == 'true'
         uses: actions/checkout@v4
         with:
           # Checkout the actual PR head branch so commits/pushes are deterministic
@@ -104,18 +110,22 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
       - name: Install Node.js
+        if: steps.release-pr.outputs.pr_found == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: "npm"
 
       - name: Install Rust
+        if: steps.release-pr.outputs.pr_found == 'true'
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install dependencies
+        if: steps.release-pr.outputs.pr_found == 'true'
         run: npm ci
 
       - name: Update Cargo.lock (deterministic sync with Cargo.toml)
+        if: steps.release-pr.outputs.pr_found == 'true'
         working-directory: src-tauri
         run: |
           set -euo pipefail
@@ -166,12 +176,15 @@ jobs:
           cargo metadata --locked --format-version=1 > /dev/null
 
       - name: Build frontend assets
+        if: steps.release-pr.outputs.pr_found == 'true'
         run: npm run build:web
 
       - name: Run formatting (after build)
+        if: steps.release-pr.outputs.pr_found == 'true'
         run: npm run format
 
       - name: Update contributors
+        if: steps.release-pr.outputs.pr_found == 'true'
         id: contributors
         run: |
           # Get current tag (the one we're releasing FROM - previous release)
@@ -268,6 +281,7 @@ jobs:
           fi
 
       - name: Commit all changes (build + format + contributors)
+        if: steps.release-pr.outputs.pr_found == 'true'
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
@@ -280,8 +294,8 @@ jobs:
   # ============================================================================
   validate-release-pr:
     needs: [release-please, format-release-pr]
-    # Only run if formatting was successful
-    if: ${{ needs.format-release-pr.result == 'success' }}
+    # Only run if formatting was successful and a release PR was found
+    if: ${{ needs.format-release-pr.result == 'success' && needs.format-release-pr.outputs.pr_found == 'true' }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -294,8 +308,8 @@ jobs:
       - name: Check out Git repository
         uses: actions/checkout@v4
         with:
-          # Checkout the PR branch
-          ref: refs/pull/${{ needs.release-please.outputs.pr_number }}/head
+          # Checkout the PR branch (use pr_number resolved by format-release-pr)
+          ref: refs/pull/${{ needs.format-release-pr.outputs.pr_number }}/head
           fetch-depth: 0
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
