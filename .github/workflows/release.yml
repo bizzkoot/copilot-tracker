@@ -42,8 +42,8 @@ jobs:
   # ============================================================================
   format-release-pr:
     needs: release-please
-    # Only run if a PR was created by release-please
-    if: ${{ needs.release-please.outputs.pr_created }}
+    # Run when release-please has an open release PR (new or updated)
+    if: ${{ needs.release-please.outputs.pr_number != '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
