@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.8](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.7...v2.4.8) (2026-03-05)
+
+
+### Bug Fixes
+
+* **ci:** skip format-release-pr gracefully when no open release PR exists ([b293edf](https://github.com/bizzkoot/copilot-tracker/commit/b293edfe400e92958dd7d10fbbd3953c885ed1fd))
+
 ## [2.4.7](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.6...v2.4.7) (2026-03-05)
 
 ### Bug Fixes
