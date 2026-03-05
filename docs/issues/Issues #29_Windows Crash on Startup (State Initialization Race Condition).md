@@ -609,13 +609,13 @@ impl PollingState {
             let now = std::time::Instant::now();
             let mut last_restart = self.last_restart.lock().unwrap();
             let mut last_interval = self.last_interval.lock().unwrap();
-            
+
             if *last_interval == interval_seconds &&
                 now.duration_since(*last_restart) < std::time::Duration::from_millis(POLLING_RESTART_DEBOUNCE_MS) {
                 log::debug!("[PollingState] Skipping duplicate restart request (interval: {}s)", interval_seconds);
                 return;
             }
-            
+
             // Update tracking before restart
             *last_restart = now;
             *last_interval = interval_seconds;
@@ -651,7 +651,7 @@ impl PollingState {
             *shutting_down = true;
             log::info!("[PollingState] Shutdown flag set");
         }
-        
+
         // Then cancel the polling task
         if let Ok(mut guard) = self.cancel_tx.lock() {
             if let Some(tx) = guard.take() {
@@ -746,12 +746,12 @@ fn build_tray_menu(
     let (used, limit) = store.get_usage();
     let usage_history = UsageManager::get_cached_history(app);
     let prediction = UsageManager::predict_usage_from_history(&usage_history, used, limit, settings.prediction_period);
-    
+
     // Calculate metrics for dual-perspective display
     let remaining = limit.saturating_sub(used);
     let percentage_used = if limit > 0 { (used as f32 / limit as f32) * 100.0 } else { 0.0 };
     let percentage_remaining = 100.0 - percentage_used;
-    
+
     // Calculate daily metrics
     let now = chrono::Utc::now();
     let current_day = now.day() as f32;
@@ -770,20 +770,20 @@ fn build_tray_menu(
     let daily_budget = if days_remaining > 0.0 { (remaining as f32 / days_remaining).floor() } else { 0.0 };
 
     let menu = Menu::new(app).map_err(|e| e.to_string())?;
-    
+
     // === USAGE OVERVIEW SECTION ===
     // === USAGE OVERVIEW SECTION ===
     let overview_header = MenuItem::with_id(app, "overview_header", "📊 QUOTA STATUS", true, None::<&str>)
         .map_err(|e| e.to_string())?;
     menu.append(&overview_header).map_err(|e| e.to_string())?;
-    
+
     if limit > 0 {
-        let quota_line = MenuItem::with_id(app, "quota_line", 
+        let quota_line = MenuItem::with_id(app, "quota_line",
             format!("   {used} / {limit} requests ({percentage_used:.0}%)"), true, None::<&str>)
             .map_err(|e| e.to_string())?;
         menu.append(&quota_line).map_err(|e| e.to_string())?;
-        
-        let remaining_line = MenuItem::with_id(app, "remaining_line", 
+
+        let remaining_line = MenuItem::with_id(app, "remaining_line",
             format!("   {remaining} remaining ({percentage_remaining:.0}%)"), true, None::<&str>)
             .map_err(|e| e.to_string())?;
         menu.append(&remaining_line).map_err(|e| e.to_string())?;
@@ -792,33 +792,33 @@ fn build_tray_menu(
             .map_err(|e| e.to_string())?;
         menu.append(&loading_line).map_err(|e| e.to_string())?;
     }
-    
+
     menu.append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
-    
+
     // === CONSUMPTION RATE SECTION ===
     if limit > 0 && current_day > 0.0 {
         let rate_header = MenuItem::with_id(app, "rate_header", "📈 ACTIVITY", true, None::<&str>)
             .map_err(|e| e.to_string())?;
         menu.append(&rate_header).map_err(|e| e.to_string())?;
-        
-        let daily_rate_line = MenuItem::with_id(app, "daily_rate_line", 
+
+        let daily_rate_line = MenuItem::with_id(app, "daily_rate_line",
             format!("   ⚡ Usage: {:.0} req/day", daily_rate), true, None::<&str>)
             .map_err(|e| e.to_string())?;
         menu.append(&daily_rate_line).map_err(|e| e.to_string())?;
-        
+
         if daily_budget > 0.0 {
-            let budget_line = MenuItem::with_id(app, "budget_line", 
+            let budget_line = MenuItem::with_id(app, "budget_line",
                 format!("   🎯 Budget: {:.0} req/day", daily_budget), true, None::<&str>)
                 .map_err(|e| e.to_string())?;
             menu.append(&budget_line).map_err(|e| e.to_string())?;
         }
 
-        let days_left_line = MenuItem::with_id(app, "days_left_line", 
+        let days_left_line = MenuItem::with_id(app, "days_left_line",
             format!("   🗓️ {days_remaining:.0} days remaining"), true, None::<&str>)
             .map_err(|e| e.to_string())?;
         menu.append(&days_left_line).map_err(|e| e.to_string())?;
-        
+
         menu.append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())?;
     }
@@ -828,7 +828,7 @@ fn build_tray_menu(
         let prediction_header = MenuItem::with_id(app, "prediction_header", "🔮 FORECAST", true, None::<&str>)
             .map_err(|e| e.to_string())?;
         menu.append(&prediction_header).map_err(|e| e.to_string())?;
-        
+
         let status_label = if prediction.predicted_monthly_requests > limit {
             format!("   ⚠️ Exceed by {}", prediction.predicted_monthly_requests - limit)
         } else {
@@ -856,7 +856,7 @@ fn build_tray_menu(
             .map_err(|e| e.to_string())?;
         menu.append(&no_data).map_err(|e| e.to_string())?;
     }
-    
+
     menu.append(&PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
 
@@ -990,7 +990,7 @@ fn build_tray_menu(
 
 fn rebuild_tray_menu(app: &AppHandle, update: Option<&UpdateInfo>) -> Result<(), String> {
     let tray_state = app.state::<TrayState>();
-    
+
     // Debounce: Don't rebuild more than once per second
     {
         let mut last_rebuild = tray_state.last_menu_rebuild.lock().map_err(|_| "lock poisoned")?;
@@ -1001,17 +1001,17 @@ fn rebuild_tray_menu(app: &AppHandle, update: Option<&UpdateInfo>) -> Result<(),
         }
         *last_rebuild = now;
     }
-    
+
     let menu = build_tray_menu(app, update)?;
     let tray_guard = tray_state.tray.lock().map_err(|_| "tray lock poisoned".to_string())?;
     let tray = tray_guard.as_ref().ok_or("tray not initialized".to_string())?;
-    
+
     // Set new menu (Tauri automatically cleans up old menu)
     tray.set_menu(Some(menu)).map_err(|e| e.to_string())?;
-    
+
     // Force cleanup of old menu references by dropping the guard early
     drop(tray_guard);
-    
+
     log::debug!("Tray menu rebuilt successfully");
     Ok(())
 }
@@ -1136,18 +1136,18 @@ fn get_cached_usage_data(
     let store = app.state::<StoreManager>();
     let (used, limit) = store.get_usage();
     let is_authenticated = store.is_authenticated();
-    
+
     if !is_authenticated {
         return Ok(None);
     }
-    
+
     let remaining = limit.saturating_sub(used);
     let percentage = if limit > 0 {
         (used as f32 / limit as f32) * 100.0
     } else {
         0.0
     };
-    
+
     let summary = copilot_tracker::UsageSummary {
         used,
         limit,
@@ -1155,11 +1155,11 @@ fn get_cached_usage_data(
         percentage,
         timestamp: chrono::Utc::now().timestamp(),
     };
-    
+
     let history = UsageManager::get_cached_history(&app);
     let settings = store.get_settings();
     let prediction = UsageManager::predict_usage_from_history(&history, used, limit, settings.prediction_period);
-    
+
     Ok(Some(copilot_tracker::UsagePayload {
         summary,
         history,
@@ -1228,22 +1228,22 @@ fn update_settings(
 #[tauri::command]
 fn reset_settings(app: AppHandle) -> Result<copilot_tracker::AppSettings, String> {
     log::info!("Resetting all settings and data...");
-    
+
     let store = app.state::<StoreManager>();
     let defaults = store.reset_settings()?;
-    
+
     log::info!("Store reset complete, customer_id is now: {:?}", store.get_customer_id());
-    
+
     // IMPORTANT: Emit auth state changed FIRST before settings changed
     // This ensures frontend clears auth state before any other events
     let _ = app.emit("auth:state-changed", "unauthenticated");
     log::info!("Emitted auth:state-changed = unauthenticated");
-    
+
     // Small delay to ensure auth event is processed before settings event.
     // Note: This is a synchronous command, so blocking sleep is acceptable here.
     // The Tauri runtime handles this in a thread pool.
     std::thread::sleep(std::time::Duration::from_millis(50));
-    
+
     // Then emit settings changed
     let _ = app.emit("settings:changed", defaults.clone());
     log::info!("Emitted settings:changed with defaults");
@@ -1251,7 +1251,7 @@ fn reset_settings(app: AppHandle) -> Result<copilot_tracker::AppSettings, String
     // CRITICAL: Emit usage:updated with empty data to reset tray icon
     let (used, limit) = store.get_usage();
     log::info!("Reset usage values: used={}, limit={}", used, limit);
-    
+
     let summary = copilot_tracker::UsageSummary {
         used,
         limit,
@@ -1279,15 +1279,15 @@ fn reset_settings(app: AppHandle) -> Result<copilot_tracker::AppSettings, String
 async fn logout(app: AppHandle) -> Result<(), String> {
     let store = app.state::<StoreManager>();
     store.clear_auth()?;
-    
+
     // Stop background polling when user logs out
     let polling_state = app.state::<PollingState>();
     polling_state.stop_polling();
     log::info!("[Logout] Background polling stopped");
-    
+
     // Emit event to frontend
     let _ = app.emit("auth:state-changed", "unauthenticated");
-    
+
     Ok(())
 }
 
@@ -1380,10 +1380,10 @@ fn hide_widget(app: AppHandle) -> Result<(), String> {
         // Fully disable widget when closing (must re-enable from settings)
         let _ = store.set_widget_enabled(false);
         let _ = store.set_widget_visible(false);
-        
+
         // Notify all windows of widget state change
         let _ = app.emit("widget:enabled-changed", false);
-        
+
         // Rebuild tray menu to update "Show Widget" label
         if let Ok(menu) = build_tray_menu(&app, None) {
             if let Some(tray_state) = app.try_state::<TrayState>() {
@@ -1412,7 +1412,7 @@ fn minimize_widget(app: AppHandle) -> Result<(), String> {
 fn show_widget_without_focus(widget: &tauri::WebviewWindow) -> Result<(), String> {
     // Show the widget
     widget.show().map_err(|e| e.to_string())?;
-    
+
     // Platform-specific focus prevention
     #[cfg(target_os = "macos")]
     {
@@ -1420,13 +1420,13 @@ fn show_widget_without_focus(widget: &tauri::WebviewWindow) -> Result<(), String
         // The window is configured with skip_taskbar and decorations=false
         // which helps, but we also minimize and restore to avoid focus steal
         // This is a workaround since we can't easily access NSWindow APIs without objc
-        
+
         // Small delay to let the show complete, then minimize and restore
         // This breaks the focus chain
         std::thread::sleep(std::time::Duration::from_millis(10));
         let _ = widget.set_always_on_top(true);
     }
-    
+
     #[cfg(target_os = "windows")]
     {
         // On Windows, the window configuration (skip_taskbar, decorations=false)
@@ -1434,14 +1434,14 @@ fn show_widget_without_focus(widget: &tauri::WebviewWindow) -> Result<(), String
         // We ensure always_on_top is set to keep it floating
         let _ = widget.set_always_on_top(true);
     }
-    
+
     #[cfg(target_os = "linux")]
     {
         // On Linux, most window managers respect the window type
         // The skip_taskbar and decorations settings help prevent focus stealing
         let _ = widget.set_always_on_top(true);
     }
-    
+
     Ok(())
 }
 
@@ -1469,7 +1469,7 @@ async fn set_widget_position(app: AppHandle, x: i32, y: i32) -> Result<(), Strin
 #[tauri::command]
 async fn get_widget_position(app: AppHandle) -> Result<WidgetPosition, String> {
     let store = app.state::<StoreManager>();
-    
+
     if let Some(widget) = app.get_webview_window("widget") {
         let pos = widget.outer_position().map_err(|e| e.to_string())?;
         Ok(WidgetPosition { x: pos.x, y: pos.y })
@@ -1508,10 +1508,10 @@ async fn is_widget_enabled(app: AppHandle) -> Result<bool, String> {
 async fn set_widget_enabled(app: AppHandle, enabled: bool) -> Result<(), String> {
     let store = app.state::<StoreManager>();
     store.set_widget_enabled(enabled).map_err(|e| e.to_string())?;
-    
+
     // Emit event to notify all windows of widget state change
     let _ = app.emit("widget:enabled-changed", enabled);
-    
+
     // If enabling, also show the widget
     if enabled {
         if let Some(widget) = app.get_webview_window("widget") {
@@ -1533,10 +1533,10 @@ async fn set_widget_enabled(app: AppHandle, enabled: bool) -> Result<(), String>
             let _ = store.set_widget_visible(false);
         }
     }
-    
+
     // Rebuild tray menu to update the widget toggle label
     let _ = rebuild_tray_menu(&app, None);
-    
+
     Ok(())
 }
 
@@ -1712,7 +1712,7 @@ fn main() {
     // We generate the context here to access config/identifier, then pass it to the runner
     let context = tauri::generate_context!();
     let identifier = context.config().tauri.bundle.identifier.clone();
-    
+
     // Resolve app directory manually using helper (Standard paths for Win/Mac/Linux)
     let app_dir = resolve_app_dir(&identifier);
     log::info!("Resolved app data directory: {:?}", app_dir);
@@ -1792,7 +1792,7 @@ fn main() {
 
             // NOTE: StoreManager is already initialized and managed in Builder::default() above.
             // init_store_manager(app.handle())?; <--- REMOVED (Caused the race condition)
-            
+
             log::info!("StoreManager initialized and managed successfully (in main)");
 
             // Now safe to build tray menu (it accesses StoreManager)
@@ -1846,7 +1846,7 @@ fn main() {
                             let mut usage_manager = UsageManager::new();
                             match usage_manager.fetch_usage(&app_handle).await {
                                 Ok(summary) => {
-                                    log::info!("Refresh successful: {}/{} ({}%)", 
+                                    log::info!("Refresh successful: {}/{} ({}%)",
                                         summary.used, summary.limit, summary.percentage);
                                     // Show notification on success (if enabled)
                                     if let Some(store) = app_handle.try_state::<StoreManager>() {
@@ -1924,7 +1924,7 @@ fn main() {
                             let old_interval = settings.refresh_interval;
                             settings.refresh_interval = value;
                             let _ = update_settings(app.clone(), settings);
-                            
+
                             // Restart background polling with new interval
                             if old_interval != value {
                                 let polling_state = app.state::<PollingState>();
@@ -1969,7 +1969,7 @@ fn main() {
             app_handle.listen("usage:updated", move |event| {
                 let payload = event.payload();
                 log::info!("[TrayListener] Received usage:updated event, payload: {}", payload);
-                
+
                 // usage:updated emits UsageSummary, not UsagePayload
                 let parsed: copilot_tracker::UsageSummary = match serde_json::from_str(payload) {
                     Ok(parsed) => parsed,
@@ -1999,7 +1999,7 @@ fn main() {
                     let app_handle = app_handle_close.clone();
                     if let Some(window) = app_handle.get_webview_window("main") {
                         let _ = window.hide();
-                        
+
                         // Hide app from dock/taskbar when window closes (cross-platform)
                         // macOS: Set activation policy to accessory to remove dock icon
                         #[cfg(target_os = "macos")]
@@ -2007,13 +2007,13 @@ fn main() {
                             let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
                             let _ = app_handle.hide();
                         }
-                        
+
                         // Windows: Hide from taskbar using skipTaskbar
                         #[cfg(target_os = "windows")]
                         {
                             let _ = window.set_skip_taskbar(true);
                         }
-                        
+
                         // Linux: Window manager handles taskbar visibility automatically
                     }
                 }
@@ -2023,26 +2023,26 @@ fn main() {
             let store = app.state::<StoreManager>();
             let (used, limit) = store.get_usage();
             let is_authenticated = store.is_authenticated();
-            
+
             log::info!("Startup: used={}, limit={}, authenticated={}", used, limit, is_authenticated);
-            
+
             // Always emit if authenticated, even if used=0 (might have zero usage but still have history)
             if is_authenticated {
                 if used > 0 {
                     let _ = update_tray_icon_from_store(app.handle());
                 }
-                
+
                 // Emit initial usage data to frontend (delayed to allow frontend listeners to attach)
                 let app_handle_for_emit = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     // Wait for frontend to initialize listeners
                     tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-                    
+
                     let store = app_handle_for_emit.state::<StoreManager>();
                     let (used, limit) = store.get_usage();
-                    
+
                     log::info!("About to emit startup data: used={}, limit={}", used, limit);
-                    
+
                     let remaining = limit.saturating_sub(used);
                     let percentage = if limit > 0 {
                         (used as f32 / limit as f32) * 100.0
@@ -2056,7 +2056,7 @@ fn main() {
                         percentage,
                         timestamp: chrono::Utc::now().timestamp(),
                     };
-                    
+
                     let history = UsageManager::get_cached_history(&app_handle_for_emit);
                     let store = app_handle_for_emit.state::<StoreManager>();
                     let settings = store.get_settings();
@@ -2066,15 +2066,15 @@ fn main() {
                         limit,
                         settings.prediction_period,
                     );
-                    
+
                     log::info!("History entries: {}", history.len());
-                    
+
                     let payload = copilot_tracker::UsagePayload {
                         summary,
                         history,
                         prediction,
                     };
-                    
+
                     log::info!("Emitting initial usage:data on startup");
                     match app_handle_for_emit.emit("usage:data", payload) {
                         Ok(_) => log::info!("Successfully emitted startup usage:data"),
@@ -2116,7 +2116,7 @@ fn main() {
             tauri::async_runtime::spawn(async move {
                 // Small delay to ensure setup() completes and all state is managed
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                
+
                 let polling_state = app_for_polling.state::<PollingState>();
                 polling_state.restart_polling(app_for_polling.clone(), polling_interval);
                 log::info!("[Startup] Started background polling with interval: {}s", polling_interval);
@@ -2128,10 +2128,10 @@ fn main() {
             let widget_visible = store.get_widget_visible();
             let widget_pinned = store.get_widget_pinned();
             let widget_position = store.get_widget_position();
-            
+
             log::info!("Widget state: enabled={}, visible={}, pinned={}, position=({},{})",
                 widget_enabled, widget_visible, widget_pinned, widget_position.x, widget_position.y);
-            
+
             // Restore widget state if enabled
             if widget_enabled {
                 if let Some(widget) = app.get_webview_window("widget") {
@@ -2142,15 +2142,15 @@ fn main() {
                             y: widget_position.y
                         }
                     ));
-                    
+
                     // Set pinned state
                     let _ = widget.set_always_on_top(widget_pinned);
-                    
+
                     // Show widget if it was visible (without stealing focus)
                     if widget_visible {
                         let _ = show_widget_without_focus(&widget);
                     }
-                    
+
                     log::info!("Widget state restored successfully");
                 }
             }
@@ -2205,7 +2205,7 @@ mod usage;
 
 pub use auth::{AuthManager, AuthState, ExtractionResult, UsageData, hidden_webview_event};
 // REMOVED init_store_manager from this line below:
-pub use store::{AppSettings, StoreManager, UsageCache, WidgetPosition}; 
+pub use store::{AppSettings, StoreManager, UsageCache, WidgetPosition};
 pub use tray_icon_renderer::{TrayIconRenderer, TrayImage};
 pub use usage::{UsageEntry, UsageHistory, UsageManager, UsagePayload, UsageSummary};
 

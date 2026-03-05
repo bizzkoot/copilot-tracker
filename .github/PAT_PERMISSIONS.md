@@ -12,7 +12,7 @@ The `RELEASE_PLEASE_TOKEN` must have the following scopes:
   - Required for: Creating/updating release PRs, reading repository content
   - Note: For public repositories, `public_repo` scope is sufficient
 
-- ✅ **`workflow`** - Update GitHub Action workflows  
+- ✅ **`workflow`** - Update GitHub Action workflows
   - Required for: Triggering PR Checks workflow on release PRs created by bot
   - Without this, PRs created by github-actions[bot] won't trigger other workflows
 
@@ -50,7 +50,7 @@ The token is used in `.github/workflows/release.yml`:
   with:
     token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
-# Line 113: Validate release PR checkout  
+# Line 113: Validate release PR checkout
 - uses: actions/checkout@v4
   with:
     token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
@@ -70,6 +70,7 @@ The token is used in `.github/workflows/release.yml`:
 **Next rotation due:** [To be filled on rotation]
 
 When rotating:
+
 1. Generate new token with same permissions
 2. Update `RELEASE_PLEASE_TOKEN` secret in repository settings
 3. Verify release workflow runs successfully
@@ -81,6 +82,7 @@ When rotating:
 **Problem:** GitHub Actions by default doesn't trigger workflows on PRs created by bots (using `GITHUB_TOKEN`) to prevent infinite workflow loops.
 
 **Solution:** Using a PAT with `workflow` scope allows:
+
 - Release-please to create PRs that **automatically trigger PR Checks**
 - No manual close/reopen required for validation
 - Fully automated release workflow
