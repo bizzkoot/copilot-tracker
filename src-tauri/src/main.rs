@@ -830,6 +830,20 @@ async fn fetch_usage(
             prediction,
         };
         let _ = app.emit("usage:data", payload);
+
+        // Auto backup if scheduled
+        let store = app.state::<StoreManager>();
+        if store.should_auto_backup() {
+            match store.create_backup() {
+                Ok(backup_id) => {
+                    log::info!("Auto backup created: {}", backup_id);
+                    let _ = store.record_auto_backup_time();
+                }
+                Err(e) => {
+                    log::warn!("Auto backup failed (non-fatal): {}", e);
+                }
+            }
+        }
     }
 
     result
@@ -871,6 +885,20 @@ async fn force_fetch_usage(
             prediction,
         };
         let _ = app.emit("usage:data", payload);
+
+        // Auto backup if scheduled
+        let store = app.state::<StoreManager>();
+        if store.should_auto_backup() {
+            match store.create_backup() {
+                Ok(backup_id) => {
+                    log::info!("Auto backup created: {}", backup_id);
+                    let _ = store.record_auto_backup_time();
+                }
+                Err(e) => {
+                    log::warn!("Auto backup failed (non-fatal): {}", e);
+                }
+            }
+        }
     }
 
     result
@@ -1043,6 +1071,34 @@ fn reset_settings(app: AppHandle) -> Result<copilot_tracker::AppSettings, String
     let _ = rebuild_tray_menu(&app, latest.as_ref());
 
     Ok(defaults)
+}
+
+#[tauri::command]
+fn create_backup(app: AppHandle) -> Result<String, String> {
+    log::info!("Creating backup...");
+    let store = app.state::<StoreManager>();
+    store.create_backup()
+}
+
+#[tauri::command]
+fn restore_backup(app: AppHandle, backup_id: String) -> Result<(), String> {
+    log::info!("Restoring backup: {}", backup_id);
+    let store = app.state::<StoreManager>();
+    store.restore_backup(&backup_id)
+}
+
+#[tauri::command]
+fn list_backups(app: AppHandle) -> Result<Vec<copilot_tracker::BackupInfo>, String> {
+    log::info!("Listing backups...");
+    let store = app.state::<StoreManager>();
+    store.list_backups()
+}
+
+#[tauri::command]
+fn delete_backup(app: AppHandle, backup_id: String) -> Result<(), String> {
+    log::info!("Deleting backup: {}", backup_id);
+    let store = app.state::<StoreManager>();
+    store.delete_backup(&backup_id)
 }
 
 #[tauri::command]
@@ -1963,6 +2019,11 @@ fn main() {
             update_settings,
             reset_settings,
             set_launch_at_login,
+            // Backup commands
+            create_backup,
+            restore_backup,
+            list_backups,
+            delete_backup,
             // Tray commands
             update_tray_usage,
             // Widget commands

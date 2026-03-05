@@ -23,6 +23,22 @@ pub const TRAY_ICON_FORMATS: &[&str] = &[
 /// Default tray icon format - must be one of TRAY_ICON_FORMATS
 pub const DEFAULT_TRAY_ICON_FORMAT: &str = "currentTotal";
 
+/// Backup frequency for auto-backup
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BackupFrequency {
+    EveryRefresh,
+    Daily,
+    Every3Days,
+    Weekly,
+}
+
+impl Default for BackupFrequency {
+    fn default() -> Self {
+        BackupFrequency::Daily
+    }
+}
+
 /// AppSettings - PASSIVE data (user preferences + auth)
 /// Stored in settings.json
 /// Changes infrequently: only when user changes settings or logs in/out
@@ -91,6 +107,21 @@ pub struct AppSettings {
     /// Widget visible
     #[serde(default = "default_widget_visible")]
     pub widget_visible: bool,
+    /// Auto backup usage data after each fetch
+    #[serde(default = "default_auto_backup_enabled")]
+    pub auto_backup_enabled: bool,
+    /// Backup frequency for auto-backup
+    #[serde(default = "default_backup_frequency")]
+    pub backup_frequency: BackupFrequency,
+    /// Maximum number of backups to keep (0 = unlimited)
+    #[serde(default = "default_backup_retention_count")]
+    pub backup_retention_count: u32,
+    /// Timestamp of last auto-backup (ISO 8601)
+    #[serde(default)]
+    pub last_auto_backup_at: Option<String>,
+    /// Custom backup directory (None = default ./backups/)
+    #[serde(default)]
+    pub backup_directory: Option<String>,
 }
 
 /// UsageCacheData - ACTIVE data (volatile usage information)
@@ -168,6 +199,18 @@ fn default_widget_position() -> WidgetPosition {
     WidgetPosition::default()
 }
 
+fn default_auto_backup_enabled() -> bool {
+    false
+}
+
+fn default_backup_frequency() -> BackupFrequency {
+    BackupFrequency::Daily
+}
+
+fn default_backup_retention_count() -> u32 {
+    10
+}
+
 fn legacy_default_usage_limit() -> u32 {
     1200
 }
@@ -196,6 +239,11 @@ impl Default for AppSettings {
             widget_position: default_widget_position(),
             widget_pinned: default_widget_pinned(),
             widget_visible: default_widget_visible(),
+            auto_backup_enabled: default_auto_backup_enabled(),
+            backup_frequency: default_backup_frequency(),
+            backup_retention_count: default_backup_retention_count(),
+            last_auto_backup_at: None,
+            backup_directory: None,
         }
     }
 }
@@ -691,6 +739,325 @@ impl StoreManager {
             s.widget_visible = visible;
         })
     }
+
+    /// Get auto backup enabled state
+    pub fn get_auto_backup_enabled(&self) -> bool {
+        self.settings.lock().unwrap().auto_backup_enabled
+    }
+
+    /// Set auto backup enabled state
+    pub fn set_auto_backup_enabled(&self, enabled: bool) -> Result<(), String> {
+        self.update_settings(|s| {
+            s.auto_backup_enabled = enabled;
+        })
+    }
+
+    /// Check if an auto-backup should run now based on frequency settings
+    pub fn should_auto_backup(&self) -> bool {
+        let settings = self.settings.lock().unwrap();
+        if !settings.auto_backup_enabled {
+            return false;
+        }
+
+        let threshold_hours: i64 = match settings.backup_frequency {
+            BackupFrequency::EveryRefresh => 0,
+            BackupFrequency::Daily => 24,
+            BackupFrequency::Every3Days => 72,
+            BackupFrequency::Weekly => 168,
+        };
+
+        if threshold_hours == 0 {
+            return true; // always backup
+        }
+
+        if let Some(ref ts) = settings.last_auto_backup_at {
+            if let Ok(last) = chrono::DateTime::parse_from_rfc3339(ts) {
+                let now = chrono::Utc::now();
+                let elapsed = now.signed_duration_since(last.with_timezone(&chrono::Utc));
+                return elapsed.num_hours() >= threshold_hours;
+            }
+        }
+
+        true // no previous backup recorded, should backup
+    }
+
+    /// Record the current time as the last auto-backup timestamp
+    pub fn record_auto_backup_time(&self) -> Result<(), String> {
+        let timestamp = chrono::Utc::now().to_rfc3339();
+        self.update_settings(|s| {
+            s.last_auto_backup_at = Some(timestamp.clone());
+        })
+    }
+
+    /// Get backup directory
+    pub fn get_backup_directory(&self) -> Option<String> {
+        self.settings.lock().unwrap().backup_directory.clone()
+    }
+
+    /// Set backup directory
+    pub fn set_backup_directory(&self, directory: Option<String>) -> Result<(), String> {
+        self.update_settings(|s| {
+            s.backup_directory = directory;
+        })
+    }
+
+    /// Get the backups directory path
+    pub fn get_backups_path(&self) -> PathBuf {
+        if let Some(ref custom) = self.get_backup_directory() {
+            PathBuf::from(custom)
+        } else {
+            self.settings_path.parent().unwrap().join("backups")
+        }
+    }
+
+    /// Create a backup of usage data (history + cache)
+    pub fn create_backup(&self) -> Result<String, String> {
+        let backups_dir = self.get_backups_path();
+
+        // Ensure backups directory exists
+        std::fs::create_dir_all(&backups_dir)
+            .map_err(|e| format!("Failed to create backups directory: {}", e))?;
+
+        // Generate timestamp-based backup ID
+        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+        let backup_id = format!("backup_{}", timestamp);
+        let backup_dir = backups_dir.join(&backup_id);
+
+        std::fs::create_dir_all(&backup_dir)
+            .map_err(|e| format!("Failed to create backup directory: {}", e))?;
+
+        // Copy usage_history.json if exists
+        if self.history_path.exists() {
+            let dest = backup_dir.join("usage_history.json");
+            std::fs::copy(&self.history_path, &dest)
+                .map_err(|e| format!("Failed to backup history: {}", e))?;
+        }
+
+        // Copy usage_cache.json if exists
+        if self.usage_cache_path.exists() {
+            let dest = backup_dir.join("usage_cache.json");
+            std::fs::copy(&self.usage_cache_path, &dest)
+                .map_err(|e| format!("Failed to backup cache: {}", e))?;
+        }
+
+        // Write metadata
+        let mut files = Vec::new();
+        if self.history_path.exists() {
+            files.push("usage_history.json");
+        }
+        if self.usage_cache_path.exists() {
+            files.push("usage_cache.json");
+        }
+
+        let metadata = serde_json::json!({
+            "backup_id": backup_id,
+            "created_at": chrono::Utc::now().to_rfc3339(),
+            "files": files
+        });
+
+        let metadata_path = backup_dir.join("metadata.json");
+        std::fs::write(
+            &metadata_path,
+            serde_json::to_string_pretty(&metadata).unwrap(),
+        )
+        .map_err(|e| format!("Failed to write metadata: {}", e))?;
+
+        log::info!("Backup created: {}", backup_id);
+
+        // Prune old backups if retention limit is set
+        let retention = self.settings.lock().unwrap().backup_retention_count;
+        if retention > 0 {
+            if let Err(e) = self.prune_backups(retention) {
+                log::warn!("Backup pruning failed (non-fatal): {}", e);
+            }
+        }
+
+        Ok(backup_id)
+    }
+
+    /// Restore usage data from a backup
+    pub fn restore_backup(&self, backup_id: &str) -> Result<(), String> {
+        let backups_dir = self.get_backups_path();
+        let backup_dir = backups_dir.join(backup_id);
+
+        if !backup_dir.exists() {
+            return Err(format!("Backup not found: {}", backup_id));
+        }
+
+        // Read metadata to verify
+        let metadata_path = backup_dir.join("metadata.json");
+        if metadata_path.exists() {
+            let _metadata: serde_json::Value = serde_json::from_str(
+                &std::fs::read_to_string(&metadata_path)
+                    .map_err(|e| format!("Failed to read metadata: {}", e))?,
+            )
+            .map_err(|e| format!("Invalid metadata: {}", e))?;
+        }
+
+        // Restore usage_history.json if exists in backup
+        let history_backup = backup_dir.join("usage_history.json");
+        if history_backup.exists() {
+            // Load and validate
+            let history: Vec<crate::usage::UsageEntry> = serde_json::from_str(
+                &std::fs::read_to_string(&history_backup)
+                    .map_err(|e| format!("Failed to read history backup: {}", e))?,
+            )
+            .map_err(|e| format!("Invalid history backup: {}", e))?;
+
+            // Restore to current history
+            self.set_usage_history(history);
+        }
+
+        // Restore usage_cache.json if exists in backup
+        let cache_backup = backup_dir.join("usage_cache.json");
+        if cache_backup.exists() {
+            let cache: UsageCacheData = serde_json::from_str(
+                &std::fs::read_to_string(&cache_backup)
+                    .map_err(|e| format!("Failed to read cache backup: {}", e))?,
+            )
+            .map_err(|e| format!("Invalid cache backup: {}", e))?;
+
+            // Restore to current cache
+            {
+                let mut current_cache = self.usage_cache.lock().unwrap();
+                *current_cache = cache.clone();
+            }
+            Self::save_usage_cache_to_disk(&self.usage_cache_path, &cache)?;
+        }
+
+        log::info!("Backup restored: {}", backup_id);
+        Ok(())
+    }
+
+    /// List all available backups
+    pub fn list_backups(&self) -> Result<Vec<BackupInfo>, String> {
+        let backups_dir = self.get_backups_path();
+
+        if !backups_dir.exists() {
+            return Ok(Vec::new());
+        }
+
+        let mut backups = Vec::new();
+
+        for entry in std::fs::read_dir(&backups_dir)
+            .map_err(|e| format!("Failed to read backups directory: {}", e))?
+        {
+            let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+            let path = entry.path();
+
+            if path.is_dir() {
+                let backup_id = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("")
+                    .to_string();
+
+                // Read metadata if exists
+                let metadata_path = path.join("metadata.json");
+                let (created_at, files) = if metadata_path.exists() {
+                    if let Ok(content) = std::fs::read_to_string(&metadata_path) {
+                        if let Ok(meta) = serde_json::from_str::<serde_json::Value>(&content) {
+                            let created = meta
+                                .get("created_at")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("unknown")
+                                .to_string();
+                            let files: Vec<String> = meta
+                                .get("files")
+                                .and_then(|v| v.as_array())
+                                .map(|arr| {
+                                    arr.iter()
+                                        .filter_map(|v| v.as_str().map(String::from))
+                                        .collect()
+                                })
+                                .unwrap_or_default();
+                            (created, files)
+                        } else {
+                            (String::new(), Vec::new())
+                        }
+                    } else {
+                        (String::new(), Vec::new())
+                    }
+                } else {
+                    (String::new(), Vec::new())
+                };
+
+                // Calculate size
+                let size = std::fs::read_dir(&path)
+                    .map(|entries| {
+                        entries
+                            .filter_map(|e| e.ok())
+                            .filter_map(|e| e.metadata().ok())
+                            .map(|m| m.len())
+                            .sum()
+                    })
+                    .unwrap_or(0);
+
+                backups.push(BackupInfo {
+                    backup_id,
+                    created_at,
+                    files,
+                    size_bytes: size,
+                });
+            }
+        }
+
+        // Sort by creation date (newest first)
+        backups.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
+        Ok(backups)
+    }
+
+    /// Delete a backup
+    pub fn delete_backup(&self, backup_id: &str) -> Result<(), String> {
+        let backups_dir = self.get_backups_path();
+        let backup_dir = backups_dir.join(backup_id);
+
+        if !backup_dir.exists() {
+            return Err(format!("Backup not found: {}", backup_id));
+        }
+
+        std::fs::remove_dir_all(&backup_dir)
+            .map_err(|e| format!("Failed to delete backup: {}", e))?;
+
+        log::info!("Backup deleted: {}", backup_id);
+        Ok(())
+    }
+
+    /// Prune old backups, keeping only the most recent `keep` backups.
+    /// Deletes the oldest backups (sorted by creation date) until count <= keep.
+    pub fn prune_backups(&self, keep: u32) -> Result<(), String> {
+        let mut backups = self.list_backups()?;
+        if backups.len() <= keep as usize {
+            return Ok(());
+        }
+
+        // list_backups returns newest-first; trim from the tail (oldest)
+        let to_delete = backups.split_off(keep as usize);
+
+        for backup in to_delete {
+            let backups_dir = self.get_backups_path();
+            let backup_dir = backups_dir.join(&backup.backup_id);
+            if backup_dir.exists() {
+                std::fs::remove_dir_all(&backup_dir).map_err(|e| {
+                    format!("Failed to prune backup {}: {}", backup.backup_id, e)
+                })?;
+                log::info!("Pruned old backup: {}", backup.backup_id);
+            }
+        }
+
+        Ok(())
+    }
+}
+
+/// Backup information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupInfo {
+    pub backup_id: String,
+    pub created_at: String,
+    pub files: Vec<String>,
+    pub size_bytes: u64,
 }
 
 // ============================================================================
