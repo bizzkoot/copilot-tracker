@@ -31,12 +31,12 @@ fn save_settings_to_disk(path: &PathBuf, settings: &AppSettings) -> Result<(), S
 
 ## Why This Affects Windows But Not macOS/Linux
 
-| Factor | Windows | macOS/Linux |
-|--------|---------|-------------|
-| File Locking | Strict exclusive locks | Permissive shared locks |
-| Lock Duration | Longer (OS + antivirus) | Shorter |
-| Antivirus | Common (Defender, etc.) | Rare |
-| Race Window | 10-100ms | <1ms |
+| Factor        | Windows                 | macOS/Linux             |
+| ------------- | ----------------------- | ----------------------- |
+| File Locking  | Strict exclusive locks  | Permissive shared locks |
+| Lock Duration | Longer (OS + antivirus) | Shorter                 |
+| Antivirus     | Common (Defender, etc.) | Rare                    |
+| Race Window   | 10-100ms                | <1ms                    |
 
 ## Cross-Platform Solution
 
@@ -61,18 +61,19 @@ fn save_settings_to_disk(path: &PathBuf, settings: &AppSettings) -> Result<(), S
     use std::io::Write;
     let mut file = std::fs::File::create(path)
         .map_err(|e| format!("Failed to create settings file: {}", e))?;
-    
+
     file.write_all(content.as_bytes())
         .map_err(|e| format!("Failed to write settings file: {}", e))?;
-    
+
     file.sync_all()
         .map_err(|e| format!("Failed to sync settings file: {}", e))?;
-    
+
     Ok(())
 }
 ```
 
 **Benefits:**
+
 - Single file handle eliminates race condition
 - Works on all platforms
 - Maintains sync guarantee for crash safety
@@ -89,38 +90,41 @@ fn save_settings_to_disk(path: &PathBuf, settings: &AppSettings) -> Result<(), S
 
     // Write to temp file first
     let temp_path = path.with_extension("json.tmp");
-    
+
     use std::io::Write;
     let mut file = std::fs::File::create(&temp_path)
         .map_err(|e| format!("Failed to create temp settings file: {}", e))?;
-    
+
     file.write_all(content.as_bytes())
         .map_err(|e| format!("Failed to write settings file: {}", e))?;
-    
+
     file.sync_all()
         .map_err(|e| format!("Failed to sync settings file: {}", e))?;
-    
+
     // Atomic rename
     std::fs::rename(&temp_path, path)
         .map_err(|e| format!("Failed to rename settings file: {}", e))?;
-    
+
     Ok(())
 }
 ```
 
 **Benefits:**
+
 - Atomic operation - no partial writes
 - Works on all platforms
 - Maximum crash safety
 - Standard pattern for config files
 
 **Drawbacks:**
+
 - Slightly more complex
 - Leaves temp files on failure (cleanup needed)
 
 ## Recommended Implementation
 
 **Use Option A (Single File Handle)** as the primary fix because:
+
 1. Simpler implementation
 2. Solves the immediate Windows issue
 3. Maintains existing behavior
@@ -146,6 +150,7 @@ fn save_settings_to_disk(path: &PathBuf, settings: &AppSettings) -> Result<(), S
 ### Why `sync_all` Was Added
 
 The `sync_all()` call ensures data is flushed to disk, which is important for:
+
 - Crash recovery
 - Power failure protection
 - Ensuring settings persist after unexpected shutdown
@@ -164,13 +169,13 @@ fn save_history_to_disk(path: &PathBuf, history: &Vec<UsageEntry>) -> Result<(),
     use std::io::Write;
     let mut file = std::fs::File::create(path)
         .map_err(|e| format!("Failed to create history file: {}", e))?;
-    
+
     file.write_all(content.as_bytes())
         .map_err(|e| format!("Failed to write history file: {}", e))?;
-    
+
     file.sync_all()
         .map_err(|e| format!("Failed to sync history file: {}", e))?;
-    
+
     Ok(())
 }
 ```

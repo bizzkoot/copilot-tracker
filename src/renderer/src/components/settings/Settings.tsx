@@ -525,7 +525,8 @@ export function Settings({ onClose }: SettingsProps) {
                 <div className="flex-1">
                   <span className="text-sm">Enable debug actions</span>
                   <p className="text-xs text-muted-foreground mt-1">
-                    When enabled, dashboard shows Debug, Capture, and Force buttons.
+                    When enabled, dashboard shows Debug, Capture, and Force
+                    buttons.
                   </p>
                 </div>
                 <Button
@@ -539,13 +540,17 @@ export function Settings({ onClose }: SettingsProps) {
 
               <div className="rounded-md border border-border/60 p-3 space-y-2 text-xs text-muted-foreground">
                 <p>
-                  <span className="font-medium text-foreground">Debug:</span> export normalized app state (usage, history, prediction).
+                  <span className="font-medium text-foreground">Debug:</span>{" "}
+                  export normalized app state (usage, history, prediction).
                 </p>
                 <p>
-                  <span className="font-medium text-foreground">Capture:</span> export full raw extraction payload from GitHub billing fetches.
+                  <span className="font-medium text-foreground">Capture:</span>{" "}
+                  export full raw extraction payload from GitHub billing
+                  fetches.
                 </p>
                 <p>
-                  <span className="font-medium text-foreground">Force:</span> clear cache and force fresh extraction from GitHub.
+                  <span className="font-medium text-foreground">Force:</span>{" "}
+                  clear cache and force fresh extraction from GitHub.
                 </p>
               </div>
             </CardContent>

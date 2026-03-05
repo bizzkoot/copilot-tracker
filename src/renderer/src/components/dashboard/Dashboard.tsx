@@ -74,7 +74,9 @@ export function Dashboard() {
     forceRefresh,
   } = useUsage();
   const { login, isAuthenticated } = useAuth();
-  const debugToolsEnabled = useSettingsStore((state) => state.debugToolsEnabled);
+  const debugToolsEnabled = useSettingsStore(
+    (state) => state.debugToolsEnabled,
+  );
 
   // Check if error is auth-related
   const isAuthError =

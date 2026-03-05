@@ -2,188 +2,166 @@
 
 ## [2.4.7](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.6...v2.4.7) (2026-03-05)
 
-
 ### Bug Fixes
 
-* **ci:** make Cargo.lock update deterministic in release PR workflow ([5fc3169](https://github.com/bizzkoot/copilot-tracker/commit/5fc31695033fd70bb4fbcdfeae635d07370d2baf))
-* **ci:** resolve active release PR branch in format job ([15291c4](https://github.com/bizzkoot/copilot-tracker/commit/15291c4641fcba2f18df911930f2a9394364ed2e))
-* **ci:** run release PR formatting when pr_number exists ([47ed5db](https://github.com/bizzkoot/copilot-tracker/commit/47ed5db74b04399c357ce4f47b1ee8ccc79b076c))
-* **ci:** update Cargo.lock directly in format-release-pr job ([689ec99](https://github.com/bizzkoot/copilot-tracker/commit/689ec99860636b39e892d774f727389236de4ba0))
-* prevent settings.json corruption and sync dashboard/tray timestamps ([25793f0](https://github.com/bizzkoot/copilot-tracker/commit/25793f0b2008699d62e23651591c51dfb4468e53))
+- **ci:** make Cargo.lock update deterministic in release PR workflow ([5fc3169](https://github.com/bizzkoot/copilot-tracker/commit/5fc31695033fd70bb4fbcdfeae635d07370d2baf))
+- **ci:** resolve active release PR branch in format job ([15291c4](https://github.com/bizzkoot/copilot-tracker/commit/15291c4641fcba2f18df911930f2a9394364ed2e))
+- **ci:** run release PR formatting when pr_number exists ([47ed5db](https://github.com/bizzkoot/copilot-tracker/commit/47ed5db74b04399c357ce4f47b1ee8ccc79b076c))
+- **ci:** update Cargo.lock directly in format-release-pr job ([689ec99](https://github.com/bizzkoot/copilot-tracker/commit/689ec99860636b39e892d774f727389236de4ba0))
+- prevent settings.json corruption and sync dashboard/tray timestamps ([25793f0](https://github.com/bizzkoot/copilot-tracker/commit/25793f0b2008699d62e23651591c51dfb4468e53))
 
 ## [2.4.6](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.5...v2.4.6) (2026-02-28)
 
-
 ### Bug Fixes
 
-* preserve decimal usage display across app surfaces ([2d94e2f](https://github.com/bizzkoot/copilot-tracker/commit/2d94e2fdbef146be0e35df9203befca706c2aa61))
-* **release:** include refactor commits in changelog and version bump ([c820b8e](https://github.com/bizzkoot/copilot-tracker/commit/c820b8ebb308abfebe0fcb5ff8ad40368cecc489))
-* **tray:** enable usage history items to fix greyed-out text ([5cb2c7b](https://github.com/bizzkoot/copilot-tracker/commit/5cb2c7bdc490aa68cc0dfb9eade38894325e51a0))
-* **tray:** rename 'target' to 'budget' for clarity ([81956e3](https://github.com/bizzkoot/copilot-tracker/commit/81956e32a0ca4b8d38d10b43989241a9d9462da8))
-* **ui:** prevent double arrows in tray submenus ([ac26808](https://github.com/bizzkoot/copilot-tracker/commit/ac26808c7be4cadc4e1cc4f73fa5cafd17a424ea))
-
+- preserve decimal usage display across app surfaces ([2d94e2f](https://github.com/bizzkoot/copilot-tracker/commit/2d94e2fdbef146be0e35df9203befca706c2aa61))
+- **release:** include refactor commits in changelog and version bump ([c820b8e](https://github.com/bizzkoot/copilot-tracker/commit/c820b8ebb308abfebe0fcb5ff8ad40368cecc489))
+- **tray:** enable usage history items to fix greyed-out text ([5cb2c7b](https://github.com/bizzkoot/copilot-tracker/commit/5cb2c7bdc490aa68cc0dfb9eade38894325e51a0))
+- **tray:** rename 'target' to 'budget' for clarity ([81956e3](https://github.com/bizzkoot/copilot-tracker/commit/81956e32a0ca4b8d38d10b43989241a9d9462da8))
+- **ui:** prevent double arrows in tray submenus ([ac26808](https://github.com/bizzkoot/copilot-tracker/commit/ac26808c7be4cadc4e1cc4f73fa5cafd17a424ea))
 
 ### Refactoring
 
-* **dashboard:** overhaul usage trend chart with 7-day SMA and dynamic pacing ([8e13bc5](https://github.com/bizzkoot/copilot-tracker/commit/8e13bc521b1545e65c6f1f845a8e2190b9c9ad19))
-* **tray:** simplify menu UI and align daily metrics ([45df14b](https://github.com/bizzkoot/copilot-tracker/commit/45df14bae7dff2260e30d0a32811716bd4e50670))
-* **ui:** implement DashboardSkeleton for perceived performance ([2fa896f](https://github.com/bizzkoot/copilot-tracker/commit/2fa896f07587fe19dc85d30099909a33e872a448))
-
+- **dashboard:** overhaul usage trend chart with 7-day SMA and dynamic pacing ([8e13bc5](https://github.com/bizzkoot/copilot-tracker/commit/8e13bc521b1545e65c6f1f845a8e2190b9c9ad19))
+- **tray:** simplify menu UI and align daily metrics ([45df14b](https://github.com/bizzkoot/copilot-tracker/commit/45df14bae7dff2260e30d0a32811716bd4e50670))
+- **ui:** implement DashboardSkeleton for perceived performance ([2fa896f](https://github.com/bizzkoot/copilot-tracker/commit/2fa896f07587fe19dc85d30099909a33e872a448))
 
 ### Documentation
 
-* update README and assets for version 2.4.5 ([652cd32](https://github.com/bizzkoot/copilot-tracker/commit/652cd32c2ee83857a6c86943ea69e632bf284d44))
+- update README and assets for version 2.4.5 ([652cd32](https://github.com/bizzkoot/copilot-tracker/commit/652cd32c2ee83857a6c86943ea69e632bf284d44))
 
 ## [2.4.5](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.4...v2.4.5) (2026-02-23)
 
-
 ### Bug Fixes
 
-* **ci:** improve contributor auto-detection in release workflow ([9615f3f](https://github.com/bizzkoot/copilot-tracker/commit/9615f3f35ba95439d3c80d0d2bb61b6e32a0c1c0))
-* **ci:** repair all-contributors config and non-interactive add ([d44704b](https://github.com/bizzkoot/copilot-tracker/commit/d44704b588dc10a57ca3b7f998502052ce14df8b))
-* **release:** Update contributor retrieval to use previous release tag ([4e0d207](https://github.com/bizzkoot/copilot-tracker/commit/4e0d2075940bed1270639dca4fe128d2f9b317e4))
-* **tray-menu:** Compress tray menu by moving quota/activity/forecast into submenu ([f092c21](https://github.com/bizzkoot/copilot-tracker/commit/f092c21934b1ae19d9c7c0d1b931e55b30b3a06f)), closes [#42](https://github.com/bizzkoot/copilot-tracker/issues/42)
-
+- **ci:** improve contributor auto-detection in release workflow ([9615f3f](https://github.com/bizzkoot/copilot-tracker/commit/9615f3f35ba95439d3c80d0d2bb61b6e32a0c1c0))
+- **ci:** repair all-contributors config and non-interactive add ([d44704b](https://github.com/bizzkoot/copilot-tracker/commit/d44704b588dc10a57ca3b7f998502052ce14df8b))
+- **release:** Update contributor retrieval to use previous release tag ([4e0d207](https://github.com/bizzkoot/copilot-tracker/commit/4e0d2075940bed1270639dca4fe128d2f9b317e4))
+- **tray-menu:** Compress tray menu by moving quota/activity/forecast into submenu ([f092c21](https://github.com/bizzkoot/copilot-tracker/commit/f092c21934b1ae19d9c7c0d1b931e55b30b3a06f)), closes [#42](https://github.com/bizzkoot/copilot-tracker/issues/42)
 
 ### Documentation
 
-* add CONTRIBUTING.md, All Contributors config, and auto-contributor workflow ([1787ee5](https://github.com/bizzkoot/copilot-tracker/commit/1787ee53916d0c46fa8ca942351755916c3d15db))
+- add CONTRIBUTING.md, All Contributors config, and auto-contributor workflow ([1787ee5](https://github.com/bizzkoot/copilot-tracker/commit/1787ee53916d0c46fa8ca942351755916c3d15db))
 
 ## [2.4.4](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.3...v2.4.4) (2026-02-22)
 
-
 ### Bug Fixes
 
-* **widget:** harden pin and position persistence ([deaaf71](https://github.com/bizzkoot/copilot-tracker/commit/deaaf71614624373dea41b37b842e8d541ae216d))
-* **widget:** harden state persistence paths ([4053925](https://github.com/bizzkoot/copilot-tracker/commit/405392523a9a883906da28ed203378538fcea2c3))
-* **widget:** sync startup tray label with restored visibility ([c8e23c3](https://github.com/bizzkoot/copilot-tracker/commit/c8e23c3b488b87977aa0542c31fb5423d36bb35d))
-
+- **widget:** harden pin and position persistence ([deaaf71](https://github.com/bizzkoot/copilot-tracker/commit/deaaf71614624373dea41b37b842e8d541ae216d))
+- **widget:** harden state persistence paths ([4053925](https://github.com/bizzkoot/copilot-tracker/commit/405392523a9a883906da28ed203378538fcea2c3))
+- **widget:** sync startup tray label with restored visibility ([c8e23c3](https://github.com/bizzkoot/copilot-tracker/commit/c8e23c3b488b87977aa0542c31fb5423d36bb35d))
 
 ### Documentation
 
-* update AGENTS.md to enhance guidelines and structure for AI agents ([fa17320](https://github.com/bizzkoot/copilot-tracker/commit/fa17320ec5a7493181518583b19ef76683408d4a))
+- update AGENTS.md to enhance guidelines and structure for AI agents ([fa17320](https://github.com/bizzkoot/copilot-tracker/commit/fa17320ec5a7493181518583b19ef76683408d4a))
 
 ## [2.4.3](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.2...v2.4.3) (2026-02-19)
 
-
 ### Bug Fixes
 
-* **ci:** align tauri build targets with artifact uploads ([ac30140](https://github.com/bizzkoot/copilot-tracker/commit/ac3014032579b4ef093c3da8db3b15a6122353b9))
-* **ci:** resolve windows clippy regressions in update-check flow ([d8bf4c8](https://github.com/bizzkoot/copilot-tracker/commit/d8bf4c8d3a2bbd39d93a2989f6ba8227d320d4b7))
-* resolve clippy warnings needless_return and needless_late_init ([3a8ab18](https://github.com/bizzkoot/copilot-tracker/commit/3a8ab18452956ca399527ab26a2d00dfa04ca0fb))
-* stabilize update-check flow and clean build diagnostics ([8432176](https://github.com/bizzkoot/copilot-tracker/commit/8432176889f770a851bbb4672562928508eefdd1))
-* **update-check:** harden Windows checks and stabilize CI lint ([59d702c](https://github.com/bizzkoot/copilot-tracker/commit/59d702c723e943d170ad6d316664206abad0f48a))
-* **windows:** resolve persistent update check failure on Windows builds ([324198f](https://github.com/bizzkoot/copilot-tracker/commit/324198f5b9c3cef5dde06317a716a671ea8c7207)), closes [#31](https://github.com/bizzkoot/copilot-tracker/issues/31)
+- **ci:** align tauri build targets with artifact uploads ([ac30140](https://github.com/bizzkoot/copilot-tracker/commit/ac3014032579b4ef093c3da8db3b15a6122353b9))
+- **ci:** resolve windows clippy regressions in update-check flow ([d8bf4c8](https://github.com/bizzkoot/copilot-tracker/commit/d8bf4c8d3a2bbd39d93a2989f6ba8227d320d4b7))
+- resolve clippy warnings needless_return and needless_late_init ([3a8ab18](https://github.com/bizzkoot/copilot-tracker/commit/3a8ab18452956ca399527ab26a2d00dfa04ca0fb))
+- stabilize update-check flow and clean build diagnostics ([8432176](https://github.com/bizzkoot/copilot-tracker/commit/8432176889f770a851bbb4672562928508eefdd1))
+- **update-check:** harden Windows checks and stabilize CI lint ([59d702c](https://github.com/bizzkoot/copilot-tracker/commit/59d702c723e943d170ad6d316664206abad0f48a))
+- **windows:** resolve persistent update check failure on Windows builds ([324198f](https://github.com/bizzkoot/copilot-tracker/commit/324198f5b9c3cef5dde06317a716a671ea8c7207)), closes [#31](https://github.com/bizzkoot/copilot-tracker/issues/31)
 
 ## [2.4.2](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.1...v2.4.2) (2026-02-19)
 
-
 ### Bug Fixes
 
-* **ci:** restore universal builds and add manual upload workflow ([2f92c52](https://github.com/bizzkoot/copilot-tracker/commit/2f92c524a38e00a67d9483ce355fe3c2352a5b7f))
-* **release:** remove scheduled trigger for release workflow and clarify conditions for execution ([1fb1646](https://github.com/bizzkoot/copilot-tracker/commit/1fb1646aa0a35e645a477b90bddc85dbf48e8288))
-* **settings:** resolve Windows settings file sync error by using a single file handle ([0531f29](https://github.com/bizzkoot/copilot-tracker/commit/0531f2997013f33988a6fc8d4b64e51afb0591b9))
+- **ci:** restore universal builds and add manual upload workflow ([2f92c52](https://github.com/bizzkoot/copilot-tracker/commit/2f92c524a38e00a67d9483ce355fe3c2352a5b7f))
+- **release:** remove scheduled trigger for release workflow and clarify conditions for execution ([1fb1646](https://github.com/bizzkoot/copilot-tracker/commit/1fb1646aa0a35e645a477b90bddc85dbf48e8288))
+- **settings:** resolve Windows settings file sync error by using a single file handle ([0531f29](https://github.com/bizzkoot/copilot-tracker/commit/0531f2997013f33988a6fc8d4b64e51afb0591b9))
 
 ## [2.4.1](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.0...v2.4.1) (2026-02-18)
 
-
 ### Bug Fixes
 
-* **app:** harden Tauri permissions and remove Electron tooling ([0ccc8b3](https://github.com/bizzkoot/copilot-tracker/commit/0ccc8b31ef7666ab5fa63b5bf196c6479e349fc7))
-* **auth:** add extraction failure event handling ([b9f0013](https://github.com/bizzkoot/copilot-tracker/commit/b9f001362964664802419858e31a9253d67cd97b))
-* **build:** configure Vite output directory to match Tauri frontendDist ([cca2128](https://github.com/bizzkoot/copilot-tracker/commit/cca2128dd9d2735f801fe63b60894ab2284719cd))
-* **build:** move legacy Electron code to temp and align Tauri scripts ([a0f89be](https://github.com/bizzkoot/copilot-tracker/commit/a0f89be130d88b9c6d9323cfeaa0bc25c8902560))
-* **ci:** correct build script references in workflows ([9134648](https://github.com/bizzkoot/copilot-tracker/commit/9134648507fa0f7ef7d2450b471e9feace4dc4da))
-* **ci:** simplify Tauri build commands to avoid target specification issues ([f2bb18e](https://github.com/bizzkoot/copilot-tracker/commit/f2bb18ebf99d32c81612bbb0eac286c79c1e250f))
-* **settings:** redesign About panel with collapsible accordion layout ([56c3ee7](https://github.com/bizzkoot/copilot-tracker/commit/56c3ee700078555dda5a488bdd452b131a24bc4a))
-* **widget:** persist widget visibility state across app restarts ([7bb25ff](https://github.com/bizzkoot/copilot-tracker/commit/7bb25ff5c919a4fad2728915d53b3ced0a07ea61))
+- **app:** harden Tauri permissions and remove Electron tooling ([0ccc8b3](https://github.com/bizzkoot/copilot-tracker/commit/0ccc8b31ef7666ab5fa63b5bf196c6479e349fc7))
+- **auth:** add extraction failure event handling ([b9f0013](https://github.com/bizzkoot/copilot-tracker/commit/b9f001362964664802419858e31a9253d67cd97b))
+- **build:** configure Vite output directory to match Tauri frontendDist ([cca2128](https://github.com/bizzkoot/copilot-tracker/commit/cca2128dd9d2735f801fe63b60894ab2284719cd))
+- **build:** move legacy Electron code to temp and align Tauri scripts ([a0f89be](https://github.com/bizzkoot/copilot-tracker/commit/a0f89be130d88b9c6d9323cfeaa0bc25c8902560))
+- **ci:** correct build script references in workflows ([9134648](https://github.com/bizzkoot/copilot-tracker/commit/9134648507fa0f7ef7d2450b471e9feace4dc4da))
+- **ci:** simplify Tauri build commands to avoid target specification issues ([f2bb18e](https://github.com/bizzkoot/copilot-tracker/commit/f2bb18ebf99d32c81612bbb0eac286c79c1e250f))
+- **settings:** redesign About panel with collapsible accordion layout ([56c3ee7](https://github.com/bizzkoot/copilot-tracker/commit/56c3ee700078555dda5a488bdd452b131a24bc4a))
+- **widget:** persist widget visibility state across app restarts ([7bb25ff](https://github.com/bizzkoot/copilot-tracker/commit/7bb25ff5c919a4fad2728915d53b3ced0a07ea61))
 
 ## [2.4.0](https://github.com/bizzkoot/copilot-tracker/compare/v2.3.4...v2.4.0) (2026-02-14)
 
-
 ### Features
 
-* **tray:** persist refresh/update timestamps to disk ([9ffd5f6](https://github.com/bizzkoot/copilot-tracker/commit/9ffd5f6ded24208197200377adb1e5c36ea17963))
-* **widget:** add reactive header labels for consumed/remaining modes ([0af3dc0](https://github.com/bizzkoot/copilot-tracker/commit/0af3dc07602dd05cae3cca89cc317305363be037))
-
+- **tray:** persist refresh/update timestamps to disk ([9ffd5f6](https://github.com/bizzkoot/copilot-tracker/commit/9ffd5f6ded24208197200377adb1e5c36ea17963))
+- **widget:** add reactive header labels for consumed/remaining modes ([0af3dc0](https://github.com/bizzkoot/copilot-tracker/commit/0af3dc07602dd05cae3cca89cc317305363be037))
 
 ### Bug Fixes
 
-* **dev:** auto-clear stale cargo lock before tauri dev ([3764be6](https://github.com/bizzkoot/copilot-tracker/commit/3764be6e90b3c500d496c9d287970201e3102cc2))
-* redesign widget with circular gauge and compact layout ([a5b7874](https://github.com/bizzkoot/copilot-tracker/commit/a5b787435a029bd74c5715a5173e581c5396e1ef))
-* reflect tray icon format settings in dashboard and widget progress circles ([675e8d8](https://github.com/bizzkoot/copilot-tracker/commit/675e8d829384dcc23890ad3a249fb2a5859e99ef))
-* **tray:** align Windows tray text with system UI theme ([11b38cd](https://github.com/bizzkoot/copilot-tracker/commit/11b38cdbdebb139ce30a49f02b381e73664edbd4))
-* **tray:** improve Linux system theme detection reliability ([079ee7e](https://github.com/bizzkoot/copilot-tracker/commit/079ee7e041b1aa9fd9d940394b64e99f2c07a007))
-* **tray:** use macOS-native template tint and system-aware text color ([a35c32f](https://github.com/bizzkoot/copilot-tracker/commit/a35c32fbc5c5d6f192b31fab6a0efe10935c60cc))
-* **widget:** add last updated timestamp display ([b816cf6](https://github.com/bizzkoot/copilot-tracker/commit/b816cf63ed5df8f068fbb05acab6ce7b9b5e382d))
-* **widget:** clip rounded widget window and mask to remove rectangular outline on transparent windows ([0863db2](https://github.com/bizzkoot/copilot-tracker/commit/0863db2e0a909b65a61c83a5e1431abcfcbe82e7))
-* **windows:** resolve update check failure on unsigned builds ([b4dcdd2](https://github.com/bizzkoot/copilot-tracker/commit/b4dcdd282c09085d863d5155bdcabd9413f26bab)), closes [#31](https://github.com/bizzkoot/copilot-tracker/issues/31)
-
+- **dev:** auto-clear stale cargo lock before tauri dev ([3764be6](https://github.com/bizzkoot/copilot-tracker/commit/3764be6e90b3c500d496c9d287970201e3102cc2))
+- redesign widget with circular gauge and compact layout ([a5b7874](https://github.com/bizzkoot/copilot-tracker/commit/a5b787435a029bd74c5715a5173e581c5396e1ef))
+- reflect tray icon format settings in dashboard and widget progress circles ([675e8d8](https://github.com/bizzkoot/copilot-tracker/commit/675e8d829384dcc23890ad3a249fb2a5859e99ef))
+- **tray:** align Windows tray text with system UI theme ([11b38cd](https://github.com/bizzkoot/copilot-tracker/commit/11b38cdbdebb139ce30a49f02b381e73664edbd4))
+- **tray:** improve Linux system theme detection reliability ([079ee7e](https://github.com/bizzkoot/copilot-tracker/commit/079ee7e041b1aa9fd9d940394b64e99f2c07a007))
+- **tray:** use macOS-native template tint and system-aware text color ([a35c32f](https://github.com/bizzkoot/copilot-tracker/commit/a35c32fbc5c5d6f192b31fab6a0efe10935c60cc))
+- **widget:** add last updated timestamp display ([b816cf6](https://github.com/bizzkoot/copilot-tracker/commit/b816cf63ed5df8f068fbb05acab6ce7b9b5e382d))
+- **widget:** clip rounded widget window and mask to remove rectangular outline on transparent windows ([0863db2](https://github.com/bizzkoot/copilot-tracker/commit/0863db2e0a909b65a61c83a5e1431abcfcbe82e7))
+- **windows:** resolve update check failure on unsigned builds ([b4dcdd2](https://github.com/bizzkoot/copilot-tracker/commit/b4dcdd282c09085d863d5155bdcabd9413f26bab)), closes [#31](https://github.com/bizzkoot/copilot-tracker/issues/31)
 
 ### Documentation
 
-* **readme:** update features and data location, add new assets for dashboard and taskbar ([37c2f98](https://github.com/bizzkoot/copilot-tracker/commit/37c2f98d3da58084d38b1ad7f6f95f5550b725e2))
+- **readme:** update features and data location, add new assets for dashboard and taskbar ([37c2f98](https://github.com/bizzkoot/copilot-tracker/commit/37c2f98d3da58084d38b1ad7f6f95f5550b725e2))
 
 ## [2.3.4](https://github.com/bizzkoot/copilot-tracker/compare/v2.3.3...v2.3.4) (2026-02-12)
 
-
 ### Bug Fixes
 
-* **main:** update identifier retrieval from context configuration ([88455e2](https://github.com/bizzkoot/copilot-tracker/commit/88455e23b328a4458df955d4d6f95e779d0fe91e))
-* Refactor StoreManager initialization to occur before Tauri builder ([763d27a](https://github.com/bizzkoot/copilot-tracker/commit/763d27a40f4b86731a2fc3712b681ed91f94aa3e))
+- **main:** update identifier retrieval from context configuration ([88455e2](https://github.com/bizzkoot/copilot-tracker/commit/88455e23b328a4458df955d4d6f95e779d0fe91e))
+- Refactor StoreManager initialization to occur before Tauri builder ([763d27a](https://github.com/bizzkoot/copilot-tracker/commit/763d27a40f4b86731a2fc3712b681ed91f94aa3e))
 
 ## [2.3.3](https://github.com/bizzkoot/copilot-tracker/compare/v2.3.2...v2.3.3) (2026-02-11)
 
-
 ### Bug Fixes
 
-* add robust polling restart with debounce and shutdown protection ([1cc6061](https://github.com/bizzkoot/copilot-tracker/commit/1cc60611e4050ef170ef7a82a84d7b099fed45dd))
-* update widget to use Tauri 2.x official API ([0223424](https://github.com/bizzkoot/copilot-tracker/commit/0223424156c63ffbce2cb065c99c1fcfc0571c3d))
-* **widget:** ensure widget fills full window height to prevent white bottom bar ([8e453ac](https://github.com/bizzkoot/copilot-tracker/commit/8e453ac21bcea71997dd2caa4ece3f22f69e04e9))
-* **widget:** fetch cached usage data on mount to prevent race condition ([54f6f89](https://github.com/bizzkoot/copilot-tracker/commit/54f6f896d139c4cc5b2cdc667784e2f68a912530))
-* **widget:** fix position initialization and restore usage data display ([af8e6c0](https://github.com/bizzkoot/copilot-tracker/commit/af8e6c054662b7cd3a73608f3b9b912eedb0ee3c))
-* **widget:** improve dragging, focus handling, and tray menu sync ([20cc42f](https://github.com/bizzkoot/copilot-tracker/commit/20cc42fa287a923dd9380d0c0de5d63dc4f0ca2f))
-* **widget:** persist position and sync state between tray and settings ([ec42148](https://github.com/bizzkoot/copilot-tracker/commit/ec42148331b2c1c2506826abfdaca97cf00e107d))
-
+- add robust polling restart with debounce and shutdown protection ([1cc6061](https://github.com/bizzkoot/copilot-tracker/commit/1cc60611e4050ef170ef7a82a84d7b099fed45dd))
+- update widget to use Tauri 2.x official API ([0223424](https://github.com/bizzkoot/copilot-tracker/commit/0223424156c63ffbce2cb065c99c1fcfc0571c3d))
+- **widget:** ensure widget fills full window height to prevent white bottom bar ([8e453ac](https://github.com/bizzkoot/copilot-tracker/commit/8e453ac21bcea71997dd2caa4ece3f22f69e04e9))
+- **widget:** fetch cached usage data on mount to prevent race condition ([54f6f89](https://github.com/bizzkoot/copilot-tracker/commit/54f6f896d139c4cc5b2cdc667784e2f68a912530))
+- **widget:** fix position initialization and restore usage data display ([af8e6c0](https://github.com/bizzkoot/copilot-tracker/commit/af8e6c054662b7cd3a73608f3b9b912eedb0ee3c))
+- **widget:** improve dragging, focus handling, and tray menu sync ([20cc42f](https://github.com/bizzkoot/copilot-tracker/commit/20cc42fa287a923dd9380d0c0de5d63dc4f0ca2f))
+- **widget:** persist position and sync state between tray and settings ([ec42148](https://github.com/bizzkoot/copilot-tracker/commit/ec42148331b2c1c2506826abfdaca97cf00e107d))
 
 ### Documentation
 
-* **widget:** add new widget image asset ([01d8385](https://github.com/bizzkoot/copilot-tracker/commit/01d83852bb8ca33f2d0b3d88c43f2b0bb1148309))
+- **widget:** add new widget image asset ([01d8385](https://github.com/bizzkoot/copilot-tracker/commit/01d83852bb8ca33f2d0b3d88c43f2b0bb1148309))
 
 ## [2.3.2](https://github.com/bizzkoot/copilot-tracker/compare/v2.3.1...v2.3.2) (2026-02-10)
 
-
 ### Bug Fixes
 
-* **build:** include widget entry in renderer build - release ([be93fce](https://github.com/bizzkoot/copilot-tracker/commit/be93fce9c24befb22b3f431313e64568b4de5ce5))
-* **widget:** update positioning API and improve notification handling ([d37444f](https://github.com/bizzkoot/copilot-tracker/commit/d37444f3a5aea4038b2bbe70b5ac7e98fd27b20c))
+- **build:** include widget entry in renderer build - release ([be93fce](https://github.com/bizzkoot/copilot-tracker/commit/be93fce9c24befb22b3f431313e64568b4de5ce5))
+- **widget:** update positioning API and improve notification handling ([d37444f](https://github.com/bizzkoot/copilot-tracker/commit/d37444f3a5aea4038b2bbe70b5ac7e98fd27b20c))
 
 ## [2.3.1](https://github.com/bizzkoot/copilot-tracker/compare/v2.3.0...v2.3.1) (2026-02-10)
 
-
 ### Bug Fixes
 
-* **ci:** use PAT for release-please to trigger PR checks automatically ([89fae57](https://github.com/bizzkoot/copilot-tracker/commit/89fae579c8fc5e37afbe86f472e58013af127a10))
-* **code-quality:** resolve audit findings from P0 to P3-Low ([10a933f](https://github.com/bizzkoot/copilot-tracker/commit/10a933fd19e6b1cc6f4d70c683e0514d338c63f6))
-* resolve build errors and add comprehensive PR checks ([de023db](https://github.com/bizzkoot/copilot-tracker/commit/de023db9799cee7d4197c0c1042099427506889b))
-
+- **ci:** use PAT for release-please to trigger PR checks automatically ([89fae57](https://github.com/bizzkoot/copilot-tracker/commit/89fae579c8fc5e37afbe86f472e58013af127a10))
+- **code-quality:** resolve audit findings from P0 to P3-Low ([10a933f](https://github.com/bizzkoot/copilot-tracker/commit/10a933fd19e6b1cc6f4d70c683e0514d338c63f6))
+- resolve build errors and add comprehensive PR checks ([de023db](https://github.com/bizzkoot/copilot-tracker/commit/de023db9799cee7d4197c0c1042099427506889b))
 
 ### Other
 
-* trigger release-please PR creation ([1ce840f](https://github.com/bizzkoot/copilot-tracker/commit/1ce840f301408b4f946258259bda2b48f91d1490))
+- trigger release-please PR creation ([1ce840f](https://github.com/bizzkoot/copilot-tracker/commit/1ce840f301408b4f946258259bda2b48f91d1490))
 
 ## [2.3.0](https://github.com/bizzkoot/copilot-tracker/compare/v2.2.0...v2.3.0) (2026-02-10)
 
-
 ### Features
 
-* **widget:** add floating usage widget with state persistence ([6a7ff9c](https://github.com/bizzkoot/copilot-tracker/commit/6a7ff9cb4323bfd5835e613ab6cb1590cc9ebf44))
-
+- **widget:** add floating usage widget with state persistence ([6a7ff9c](https://github.com/bizzkoot/copilot-tracker/commit/6a7ff9cb4323bfd5835e613ab6cb1590cc9ebf44))
 
 ### Bug Fixes
 
-* **core:** improve startup and init robustness ([70480d4](https://github.com/bizzkoot/copilot-tracker/commit/70480d41b7956d6080dae5c545430bd846f7a330))
-* **tray:** ensure Open Dashboard navigates to main page ([c78ac8c](https://github.com/bizzkoot/copilot-tracker/commit/c78ac8c6d3a362911e1da36bffc417b431a86fb5))
+- **core:** improve startup and init robustness ([70480d4](https://github.com/bizzkoot/copilot-tracker/commit/70480d41b7956d6080dae5c545430bd846f7a330))
+- **tray:** ensure Open Dashboard navigates to main page ([c78ac8c](https://github.com/bizzkoot/copilot-tracker/commit/c78ac8c6d3a362911e1da36bffc417b431a86fb5))
 
 ## [2.2.0](https://github.com/bizzkoot/copilot-tracker/compare/v2.1.2...v2.2.0) (2026-02-08)
 

@@ -11,12 +11,14 @@ Design and implement a floating, draggable usage widget that provides persistent
 ## Problem Statement
 
 **Current Issue:**
+
 - Custom tray icon with quota data is not easily viewable in Windows
 - When pinning to taskbar, Windows shows the Tauri app icon, not the custom tray icon
 - Users need to hover/click tray icon to see usage data
 
 **Solution:**
 A floating usage widget that:
+
 - Is always visible on screen (user-controlled)
 - Shows real-time usage data at a glance
 - Can be dragged to any position
@@ -84,12 +86,12 @@ Legend:
 
 ### Color Coding
 
-| Usage Range | Color | Meaning |
-|-------------|-------|---------|
-| 0-50% | Green | ✅ On track |
-| 51-80% | Yellow | ⚠️ Monitor |
-| 81-100% | Orange | 🔴 Near limit |
-| >100% | Red | 🚨 Exceeded |
+| Usage Range | Color  | Meaning       |
+| ----------- | ------ | ------------- |
+| 0-50%       | Green  | ✅ On track   |
+| 51-80%      | Yellow | ⚠️ Monitor    |
+| 81-100%     | Orange | 🔴 Near limit |
+| >100%       | Red    | 🚨 Exceeded   |
 
 ### Widget States
 
@@ -101,7 +103,7 @@ stateDiagram-v2
     Minimized --> Visible: User restores
     Visible --> Hidden: User closes
     Minimized --> Hidden: User closes
-    
+
     state Visible {
         [*] --> Pinned: Default
         Pinned --> Unpinned: User clicks pin
@@ -111,12 +113,13 @@ stateDiagram-v2
 
 ### Anchor/Pin Mode Behavior
 
-| Mode | Behavior | Use Case |
-|------|----------|----------|
-| **Pinned (📌)** | Widget floats above ALL windows | Working with multiple apps, need constant visibility |
-| **Unpinned (📌)** | Widget stays on desktop only | Less intrusive, check usage when viewing desktop |
+| Mode              | Behavior                        | Use Case                                             |
+| ----------------- | ------------------------------- | ---------------------------------------------------- |
+| **Pinned (📌)**   | Widget floats above ALL windows | Working with multiple apps, need constant visibility |
+| **Unpinned (📌)** | Widget stays on desktop only    | Less intrusive, check usage when viewing desktop     |
 
 **Visual Indicators:**
+
 - **Pinned**: Pin icon filled (📌) - widget has shadow/depth
 - **Unpinned**: Pin icon outline (📍) - widget appears flatter
 
@@ -124,16 +127,16 @@ stateDiagram-v2
 
 ### Window Properties
 
-| Property | Value | Description |
-|----------|-------|-------------|
-| Type | Dynamic (controlled by pin state) | Pinned = alwaysOnTop, Unpinned = normal |
-| Decorations | `false` | Frameless window for clean look |
-| Transparent | `true` | Supports glassmorphism effect |
-| Resizable | `false` | Fixed size for consistency |
-| Skip Taskbar | `true` | Doesn't appear in taskbar |
-| Size | 280x180 px | Compact footprint |
-| Min Size | 280x180 px | Prevent accidental resizing |
-| Max Size | 280x180 px | Prevent accidental resizing |
+| Property     | Value                             | Description                             |
+| ------------ | --------------------------------- | --------------------------------------- |
+| Type         | Dynamic (controlled by pin state) | Pinned = alwaysOnTop, Unpinned = normal |
+| Decorations  | `false`                           | Frameless window for clean look         |
+| Transparent  | `true`                            | Supports glassmorphism effect           |
+| Resizable    | `false`                           | Fixed size for consistency              |
+| Skip Taskbar | `true`                            | Doesn't appear in taskbar               |
+| Size         | 280x180 px                        | Compact footprint                       |
+| Min Size     | 280x180 px                        | Prevent accidental resizing             |
+| Max Size     | 280x180 px                        | Prevent accidental resizing             |
 
 **Note:** The `alwaysOnTop` property is dynamically toggled based on the pin state.
 
@@ -169,16 +172,16 @@ set_widget_pinned(pinned: boolean): Promise<void>
 
 ```typescript
 interface WidgetSettings {
-  enabled: boolean;           // Widget enabled/disabled
+  enabled: boolean; // Widget enabled/disabled
   position: {
-    x: number;                // X coordinate
-    y: number;                // Y coordinate
+    x: number; // X coordinate
+    y: number; // Y coordinate
   };
-  minimized: boolean;         // Widget minimized state
-  pinned: boolean;            // Anchor/pin mode (NEW)
-  auto_hide: boolean;         // Hide when main window opens
-  show_prediction: boolean;   // Show prediction data
-  compact_mode: boolean;      // Show minimal info only
+  minimized: boolean; // Widget minimized state
+  pinned: boolean; // Anchor/pin mode (NEW)
+  auto_hide: boolean; // Hide when main window opens
+  show_prediction: boolean; // Show prediction data
+  compact_mode: boolean; // Show minimal info only
 }
 ```
 
@@ -187,15 +190,17 @@ interface WidgetSettings {
 ### Phase 1: Tauri Configuration
 
 **Files to modify:**
+
 - `src-tauri/tauri.conf.json` - Add widget window config
 
 **Changes:**
+
 ```json
 {
   "app": {
     "windows": [
       {
-        "label": "main",
+        "label": "main"
         // ... existing config
       },
       {
@@ -209,7 +214,7 @@ interface WidgetSettings {
         "maxHeight": 180,
         "decorations": false,
         "transparent": true,
-        "alwaysOnTop": true,  // Default to pinned, can be toggled at runtime
+        "alwaysOnTop": true, // Default to pinned, can be toggled at runtime
         "skipTaskbar": true,
         "resizable": false,
         "visible": false,
@@ -223,15 +228,18 @@ interface WidgetSettings {
 ### Phase 2: Backend Implementation
 
 **Files to create:**
+
 - `src-tauri/src/widget.rs` - Widget state management
 
 **Files to modify:**
+
 - `src-tauri/src/lib.rs` - Export widget module
 - `src-tauri/src/main.rs` - Add widget IPC commands
 
 ### Phase 3: Frontend Implementation
 
 **Files to create:**
+
 - `src/renderer/src/components/widget/Widget.tsx` - Main widget component
 - `src/renderer/src/components/widget/WidgetControls.tsx` - Widget controls
 - `src/renderer/src/components/widget/WidgetHeader.tsx` - Draggable header with pin button
@@ -239,12 +247,14 @@ interface WidgetSettings {
 - `src/renderer/src/components/widget/index.ts` - Barrel export
 
 **Files to modify:**
+
 - `src/renderer/src/stores/settingsStore.ts` - Add widget settings
 - `src/renderer/src/types/settings.ts` - Add widget types
 
 ### Phase 4: Widget Styling
 
 **Design principles:**
+
 - Glassmorphism effect with backdrop blur
 - Compact layout with clear hierarchy
 - Color-coded progress bar
@@ -252,6 +262,7 @@ interface WidgetSettings {
 - Works in both light and dark themes
 
 **CSS approach:**
+
 ```css
 .widget-window {
   background: rgba(30, 30, 30, 0.85);
@@ -265,33 +276,37 @@ interface WidgetSettings {
 ## User Interactions
 
 ### Drag to Position
+
 1. User clicks and holds on widget header
 2. Widget follows mouse cursor
 3. On release, position is saved to settings
 
 ### Minimize to Tray
+
 1. User clicks minimize button (−)
 2. Widget hides, tray icon shows indicator
 3. Double-click tray icon to restore
 
 ### Show/Hide from Tray Menu
+
 1. Right-click tray icon
 2. Click "Show Widget" / "Hide Widget"
 3. Widget toggles visibility
 
 ### Keyboard Shortcut
+
 - `Ctrl+Shift+W` - Toggle widget visibility
 - `Ctrl+Shift+P` - Toggle anchor/pin mode (NEW)
 
 ## Edge Cases
 
-| Scenario | Behavior |
-|----------|----------|
-| Widget outside screen | Clamp to visible area on restore |
-| Multi-monitor | Remember monitor, handle disconnect |
-| DPI scaling | Adjust position on DPI change |
-| App restart | Restore last position and state |
-| Main window opens | Optional: auto-hide widget |
+| Scenario              | Behavior                            |
+| --------------------- | ----------------------------------- |
+| Widget outside screen | Clamp to visible area on restore    |
+| Multi-monitor         | Remember monitor, handle disconnect |
+| DPI scaling           | Adjust position on DPI change       |
+| App restart           | Restore last position and state     |
+| Main window opens     | Optional: auto-hide widget          |
 
 ## Testing Checklist
 
@@ -320,12 +335,14 @@ interface WidgetSettings {
 The pin mode toggles the window's `alwaysOnTop` property dynamically:
 
 **Pinned Mode (📌):**
+
 ```typescript
 // Window floats above all other windows
 widget.setAlwaysOnTop(true);
 ```
 
 **Unpinned Mode (📍):**
+
 ```typescript
 // Window behaves like a normal window (stays on desktop)
 widget.setAlwaysOnTop(false);
@@ -334,11 +351,13 @@ widget.setAlwaysOnTop(false);
 ### User Experience
 
 **Scenario 1: Working with multiple apps**
+
 1. User enables pin mode (📌)
 2. Widget floats above browser, IDE, email, etc.
 3. Usage data always visible at a glance
 
 **Scenario 2: Less intrusive mode**
+
 1. User disables pin mode (📍)
 2. Widget stays on desktop only
 3. When user minimizes all apps (Win+D), widget is visible
@@ -376,6 +395,7 @@ widget.setAlwaysOnTop(false);
 ## Dependencies
 
 No additional dependencies required - uses existing:
+
 - Tauri v2 window APIs
 - React with Zustand for state
 - Tailwind CSS for styling

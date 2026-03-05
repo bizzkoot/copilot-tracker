@@ -175,7 +175,10 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
     if (!container) return;
 
     const scrollToLatest = () => {
-      container.scrollLeft = Math.max(0, container.scrollWidth - container.clientWidth);
+      container.scrollLeft = Math.max(
+        0,
+        container.scrollWidth - container.clientWidth,
+      );
     };
 
     requestAnimationFrame(() => {
@@ -189,16 +192,19 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
   const maxActualUsage =
     chartData.length > 0
       ? Math.max(
-        ...chartData.map((d) => d.usage),
-        ...chartData.map((d) => d.trend || 0),
-      )
+          ...chartData.map((d) => d.usage),
+          ...chartData.map((d) => d.trend || 0),
+        )
       : 0;
 
   // Provide a minimum ceiling based on a flat daily average
   const baselineBudget = (usage?.userPremiumRequestEntitlement || 0) / 30;
 
   // Cap the Y-axis to the max of actual usage or the baseline budget, ignoring extreme dynamic budget spikes
-  const yAxisMax = Math.max(1, Math.ceil(Math.max(maxActualUsage, baselineBudget) * 1.2));
+  const yAxisMax = Math.max(
+    1,
+    Math.ceil(Math.max(maxActualUsage, baselineBudget) * 1.2),
+  );
 
   if (isLoading) {
     return (
@@ -289,7 +295,9 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
                       return (
                         <div className="rounded-lg border bg-background p-3 shadow-md space-y-2">
                           <div>
-                            <p className="text-sm font-medium">{data.fullDate}</p>
+                            <p className="text-sm font-medium">
+                              {data.fullDate}
+                            </p>
                             <p className="text-xs text-muted-foreground">
                               {data.isWeekend ? "Weekend" : "Weekday"}
                             </p>
@@ -297,7 +305,9 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
                           <div className="space-y-1">
                             <div className="flex items-center gap-2 text-sm">
                               <span className="h-2 w-2 rounded-full bg-primary" />
-                              <span className="text-muted-foreground">Usage:</span>
+                              <span className="text-muted-foreground">
+                                Usage:
+                              </span>
                               <span className="font-medium">
                                 {formatRequestCount(data.usage)}
                               </span>
@@ -305,7 +315,9 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
                             {data.trend !== undefined && (
                               <div className="flex items-center gap-2 text-sm">
                                 <span className="h-2 w-2 rounded-full bg-muted-foreground/50" />
-                                <span className="text-muted-foreground">7-Day Avg:</span>
+                                <span className="text-muted-foreground">
+                                  7-Day Avg:
+                                </span>
                                 <span className="font-medium">
                                   {data.trend.toFixed(1)}
                                 </span>
@@ -314,7 +326,9 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
                             {data.budget !== undefined && (
                               <div className="flex items-center gap-2 text-sm">
                                 <span className="h-2 w-2 rounded-full bg-orange-500/80" />
-                                <span className="text-muted-foreground">Budget:</span>
+                                <span className="text-muted-foreground">
+                                  Budget:
+                                </span>
                                 <span className="font-medium">
                                   {data.budget.toFixed(1)} / day
                                 </span>
@@ -333,22 +347,32 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
                   content={({ payload }) => (
                     <div className="flex justify-end gap-4 text-xs text-muted-foreground pb-2">
                       {payload?.map((entry, index) => {
-                        let icon = <span className="h-2 w-2 rounded-full bg-primary mr-1.5" />;
+                        let icon = (
+                          <span className="h-2 w-2 rounded-full bg-primary mr-1.5" />
+                        );
                         let label = "Daily Usage";
                         let tip = "Actual requests used per day";
 
                         if (entry.value === "Trend") {
-                          icon = <span className="h-0 w-3 border-t-2 border-dashed border-muted-foreground mr-1.5" />;
+                          icon = (
+                            <span className="h-0 w-3 border-t-2 border-dashed border-muted-foreground mr-1.5" />
+                          );
                           label = "7-Day Avg";
                           tip = "Rolling average over the last 7 days";
                         } else if (entry.value === "Budget") {
-                          icon = <span className="h-0 w-3 border-t-2 border-orange-500/80 mr-1.5" />;
+                          icon = (
+                            <span className="h-0 w-3 border-t-2 border-orange-500/80 mr-1.5" />
+                          );
                           label = "Daily Budget";
-                          tip = "Required daily pace to stay within monthly usage limit";
+                          tip =
+                            "Required daily pace to stay within monthly usage limit";
                         }
 
                         return (
-                          <div key={index} className="flex items-center gap-1.5">
+                          <div
+                            key={index}
+                            className="flex items-center gap-1.5"
+                          >
                             <div className="flex items-center" title={tip}>
                               {icon}
                               <span>{label}</span>
