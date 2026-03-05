@@ -42,8 +42,8 @@ jobs:
   # ============================================================================
   format-release-pr:
     needs: release-please
-    # Run when release-please has an open release PR (new or updated)
-    if: ${{ needs.release-please.outputs.pr_number != '' }}
+    # Run whenever release-please succeeds; resolve the active release PR inside the job
+    if: ${{ needs.release-please.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -55,14 +55,45 @@ jobs:
         with:
           github-token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           script: |
-            const prNumber = Number('${{ needs.release-please.outputs.pr_number }}');
-            const { data } = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-            });
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const outputPr = '${{ needs.release-please.outputs.pr_number }}'.trim();
 
-            core.setOutput('head_ref', data.head.ref);
+            let pr;
+            if (outputPr !== '' && outputPr !== 'null' && outputPr !== 'undefined') {
+              const prNumber = Number(outputPr);
+              if (!Number.isNaN(prNumber)) {
+                const { data } = await github.rest.pulls.get({
+                  owner,
+                  repo,
+                  pull_number: prNumber,
+                });
+                pr = data;
+              }
+            }
+
+            if (!pr) {
+              const { data: pulls } = await github.rest.pulls.list({
+                owner,
+                repo,
+                state: 'open',
+                base: 'main',
+                sort: 'updated',
+                direction: 'desc',
+                per_page: 50,
+              });
+
+              pr = pulls.find((item) => item.head.ref.startsWith('release-please--'));
+            }
+
+            if (!pr) {
+              core.setFailed('No open release-please PR found for base main.');
+              return;
+            }
+
+            core.info(`Using release PR #${pr.number} (${pr.head.ref})`);
+            core.setOutput('pr_number', String(pr.number));
+            core.setOutput('head_ref', pr.head.ref);
 
       - name: Check out Git repository
         uses: actions/checkout@v4
