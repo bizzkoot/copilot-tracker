@@ -49,11 +49,26 @@ jobs:
       contents: write
       pull-requests: write
     steps:
+      - name: Resolve release PR branch
+        id: release-pr
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          script: |
+            const prNumber = Number('${{ needs.release-please.outputs.pr_number }}');
+            const { data } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+
+            core.setOutput('head_ref', data.head.ref);
+
       - name: Check out Git repository
         uses: actions/checkout@v4
         with:
-          # Checkout the PR branch directly (not merge commit)
-          ref: refs/pull/${{ needs.release-please.outputs.pr_number }}/head
+          # Checkout the actual PR head branch so commits/pushes are deterministic
+          ref: ${{ steps.release-pr.outputs.head_ref }}
           fetch-depth: 0
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
@@ -69,9 +84,55 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Update Cargo.lock (reflect version bump in Cargo.toml)
+      - name: Update Cargo.lock (deterministic sync with Cargo.toml)
         working-directory: src-tauri
-        run: cargo check
+        run: |
+          set -euo pipefail
+
+          ROOT_VERSION=$(awk -F '"' '/^version = "/ { print $2; exit }' Cargo.toml)
+          if [ -z "$ROOT_VERSION" ]; then
+            echo "Failed to parse package version from Cargo.toml"
+            exit 1
+          fi
+
+          cargo update -p copilot-tracker
+
+          LOCK_VERSION=$(awk '
+            $0 == "name = \"copilot-tracker\"" {
+              getline
+              if ($0 ~ /^version = "/) {
+                gsub(/^version = "|"$/, "", $0)
+                print $0
+                exit
+              }
+            }
+          ' Cargo.lock)
+
+          if [ "$LOCK_VERSION" != "$ROOT_VERSION" ]; then
+            echo "cargo update did not refresh root package version; applying targeted lock sync"
+            sed -i.bak '/^name = "copilot-tracker"$/ { n; s/^version = ".*"$/version = "'"$ROOT_VERSION"'"/; }' Cargo.lock
+            rm -f Cargo.lock.bak
+            LOCK_VERSION=$(awk '
+              $0 == "name = \"copilot-tracker\"" {
+                getline
+                if ($0 ~ /^version = "/) {
+                  gsub(/^version = "|"$/, "", $0)
+                  print $0
+                  exit
+                }
+              }
+            ' Cargo.lock)
+          fi
+
+          if [ "$LOCK_VERSION" != "$ROOT_VERSION" ]; then
+            echo "Cargo.lock root package version mismatch after sync"
+            echo "Cargo.toml: $ROOT_VERSION"
+            echo "Cargo.lock: ${LOCK_VERSION:-<missing>}"
+            exit 1
+          fi
+
+          # Validate lockfile parses in locked mode without triggering dependency drift.
+          cargo metadata --locked --format-version=1 > /dev/null
 
       - name: Build frontend assets
         run: npm run build:web
@@ -181,7 +242,7 @@ jobs:
           git config --local user.name "github-actions[bot]"
           git add -A
           git diff --staged --quiet || git commit -m "style: apply formatting and update contributors"
-          git push
+          git push origin "HEAD:${{ steps.release-pr.outputs.head_ref }}"
 
   # ============================================================================
   # Validate Release PR - Comprehensive checks before merge
