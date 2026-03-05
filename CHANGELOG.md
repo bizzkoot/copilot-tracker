@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.4.7](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.6...v2.4.7) (2026-03-05)
+
+
+### Bug Fixes
+
+* **ci:** make Cargo.lock update deterministic in release PR workflow ([5fc3169](https://github.com/bizzkoot/copilot-tracker/commit/5fc31695033fd70bb4fbcdfeae635d07370d2baf))
+* **ci:** resolve active release PR branch in format job ([15291c4](https://github.com/bizzkoot/copilot-tracker/commit/15291c4641fcba2f18df911930f2a9394364ed2e))
+* **ci:** run release PR formatting when pr_number exists ([47ed5db](https://github.com/bizzkoot/copilot-tracker/commit/47ed5db74b04399c357ce4f47b1ee8ccc79b076c))
+* **ci:** update Cargo.lock directly in format-release-pr job ([689ec99](https://github.com/bizzkoot/copilot-tracker/commit/689ec99860636b39e892d774f727389236de4ba0))
+* prevent settings.json corruption and sync dashboard/tray timestamps ([25793f0](https://github.com/bizzkoot/copilot-tracker/commit/25793f0b2008699d62e23651591c51dfb4468e53))
+
 ## [2.4.6](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.5...v2.4.6) (2026-02-28)
 
 
