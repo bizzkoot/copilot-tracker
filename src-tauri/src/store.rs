@@ -1498,7 +1498,10 @@ mod tests {
         let backup_dir = store.get_backups_path().join(&backup_id);
         assert!(backup_dir.exists());
         store.delete_backup(&backup_id).unwrap();
-        assert!(!backup_dir.exists(), "backup directory must be removed after deletion");
+        assert!(
+            !backup_dir.exists(),
+            "backup directory must be removed after deletion"
+        );
     }
 
     #[test]
@@ -1573,9 +1576,18 @@ mod tests {
             size_bytes: 1024,
         };
         let json = serde_json::to_string(&info).unwrap();
-        assert!(json.contains("\"backupId\""), "backup_id must serialize as backupId");
-        assert!(json.contains("\"createdAt\""), "created_at must serialize as createdAt");
-        assert!(json.contains("\"sizeBytes\""), "size_bytes must serialize as sizeBytes");
+        assert!(
+            json.contains("\"backupId\""),
+            "backup_id must serialize as backupId"
+        );
+        assert!(
+            json.contains("\"createdAt\""),
+            "created_at must serialize as createdAt"
+        );
+        assert!(
+            json.contains("\"sizeBytes\""),
+            "size_bytes must serialize as sizeBytes"
+        );
     }
 
     #[test]
