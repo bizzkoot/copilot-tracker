@@ -1,5 +1,35 @@
 # Changelog
 
+## [3.0.0](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.7...v3.0.0) (2026-03-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* Release workflow no longer triggers automatically on push to main. Releases must now be manually triggered via GitHub Actions UI.
+
+### Features
+
+* add backup and restore functionality in settings ([4e5450c](https://github.com/bizzkoot/copilot-tracker/commit/4e5450c4973562d7fe4f0b08366bfc2ac8b2dd60))
+* add cargo.lock for reproducible builds ([0afc9fb](https://github.com/bizzkoot/copilot-tracker/commit/0afc9fbb3256ee5a18d213473d89f79758c124b7))
+* convert release workflow to manual trigger with intelligent version bumping ([a235a0d](https://github.com/bizzkoot/copilot-tracker/commit/a235a0d9a63212e9bf39dd3666173e0f0be42cc0))
+
+
+### Bug Fixes
+
+* **ci:** skip format-release-pr gracefully when no open release PR exists ([b293edf](https://github.com/bizzkoot/copilot-tracker/commit/b293edfe400e92958dd7d10fbbd3953c885ed1fd))
+* **polling:** restart background timer when settings change from UI ([3108223](https://github.com/bizzkoot/copilot-tracker/commit/31082231be7685cced5e114bb50d2fe47985e1fd)), closes [#55](https://github.com/bizzkoot/copilot-tracker/issues/55)
+* **release:** use dynamic bootstrap-sha to respect exact release-as version ([7715dc4](https://github.com/bizzkoot/copilot-tracker/commit/7715dc4b21a9fde695dd9c135f846ea5cee8e210))
+
+
+### Other
+
+* bump version to 2.4.8-rc.1 ([33792c0](https://github.com/bizzkoot/copilot-tracker/commit/33792c0983907303b94788a0a0db7db55701fffa))
+
+
+### Documentation
+
+* RELEASE_WORKFLOW.md with usage guide ([a235a0d](https://github.com/bizzkoot/copilot-tracker/commit/a235a0d9a63212e9bf39dd3666173e0f0be42cc0))
+
 ## [2.4.7](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.6...v2.4.7) (2026-03-05)
 
 ### Bug Fixes
