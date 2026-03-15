@@ -24,19 +24,14 @@ pub const TRAY_ICON_FORMATS: &[&str] = &[
 pub const DEFAULT_TRAY_ICON_FORMAT: &str = "currentTotal";
 
 /// Backup frequency for auto-backup
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub enum BackupFrequency {
     EveryRefresh,
+    #[default]
     Daily,
     Every3Days,
     Weekly,
-}
-
-impl Default for BackupFrequency {
-    fn default() -> Self {
-        BackupFrequency::Daily
-    }
 }
 
 /// AppSettings - PASSIVE data (user preferences + auth)
@@ -1039,9 +1034,8 @@ impl StoreManager {
             let backups_dir = self.get_backups_path();
             let backup_dir = backups_dir.join(&backup.backup_id);
             if backup_dir.exists() {
-                std::fs::remove_dir_all(&backup_dir).map_err(|e| {
-                    format!("Failed to prune backup {}: {}", backup.backup_id, e)
-                })?;
+                std::fs::remove_dir_all(&backup_dir)
+                    .map_err(|e| format!("Failed to prune backup {}: {}", backup.backup_id, e))?;
                 log::info!("Pruned old backup: {}", backup.backup_id);
             }
         }

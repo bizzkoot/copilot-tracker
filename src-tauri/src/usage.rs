@@ -3,7 +3,6 @@ use crate::store::StoreManager;
 use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
-use tokio::time::Duration;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageSummary {
@@ -379,53 +378,76 @@ impl UsageManager {
     }
 
     /// Start background usage polling with cancellation support
+    /// Uses wall-clock time to handle system sleep/hibernation correctly
     /// Returns a channel sender that can be used to cancel the polling task
     pub fn start_polling(app: AppHandle, interval_seconds: u64) -> tokio::sync::mpsc::Sender<()> {
         let (cancel_tx, mut cancel_rx) = tokio::sync::mpsc::channel::<()>(1);
 
-        tauri::async_runtime::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(interval_seconds));
+        log::info!(
+            "[Background Polling] Starting polling task with interval: {}s",
+            interval_seconds
+        );
 
-            // Skip the first tick (immediate fire)
-            interval.tick().await;
+        tauri::async_runtime::spawn(async move {
+            // Use wall-clock time for reliable timing across system sleep/hibernation
+            let mut last_tick = chrono::Utc::now();
+            let interval_duration = chrono::Duration::seconds(interval_seconds as i64);
 
             loop {
                 tokio::select! {
-                    _ = interval.tick() => {
-                        // SAFETY: Only access StoreManager if it's available
-                        // Use try_state to avoid panicking if state is not yet managed
-                        match app.try_state::<StoreManager>() {
-                            Some(store) => {
-                                if store.is_authenticated() {
-                                    // Create a new usage manager for this poll
-                                    let mut usage_manager = UsageManager::new();
+                    _ = tokio::time::sleep(tokio::time::Duration::from_secs(1)) => {
+                        let now = chrono::Utc::now();
+                        let elapsed = now.signed_duration_since(last_tick);
 
-                                    if let Ok(summary) = usage_manager.fetch_usage(&app).await {
-                                        log::info!(
-                                            "[Background Polling] Usage updated: {}/{} ({}%)",
-                                            summary.used,
-                                            summary.limit,
-                                            summary.percentage
-                                        );
+                        // Check if enough wall-clock time has passed
+                        if elapsed >= interval_duration {
+                            log::info!(
+                                "[Background Polling] Timer tick fired (elapsed: {}s, configured: {}s)",
+                                elapsed.num_seconds(),
+                                interval_seconds
+                            );
+
+                            // SAFETY: Only access StoreManager if it's available
+                            // Use try_state to avoid panicking if state is not yet managed
+                            match app.try_state::<StoreManager>() {
+                                Some(store) => {
+                                    if store.is_authenticated() {
+                                        // Create a new usage manager for this poll
+                                        let mut usage_manager = UsageManager::new();
+
+                                        log::debug!("[Background Polling] Fetching usage data...");
+                                        if let Ok(summary) = usage_manager.fetch_usage(&app).await {
+                                            log::info!(
+                                                "[Background Polling] Usage updated: {}/{} ({}%)",
+                                                summary.used,
+                                                summary.limit,
+                                                summary.percentage
+                                            );
+                                        } else {
+                                            log::warn!("[Background Polling] Failed to fetch usage");
+                                        }
                                     } else {
-                                        log::warn!("[Background Polling] Failed to fetch usage");
+                                        log::debug!("[Background Polling] Skipping - not authenticated");
                                     }
-                                } else {
-                                    log::debug!("[Background Polling] Skipping - not authenticated");
+                                }
+                                None => {
+                                    // StoreManager not yet available - skip this tick
+                                    log::warn!("[Background Polling] StoreManager not available, skipping tick");
                                 }
                             }
-                            None => {
-                                // StoreManager not yet available - skip this tick
-                                log::warn!("[Background Polling] StoreManager not available, skipping tick");
-                            }
+
+                            // Update last_tick to current wall-clock time
+                            last_tick = now;
                         }
                     }
                     _ = cancel_rx.recv() => {
-                        log::info!("[Background Polling] Cancelled");
+                        log::info!("[Background Polling] Received cancel signal, stopping polling task");
                         break;
                     }
                 }
             }
+
+            log::info!("[Background Polling] Polling task stopped");
         });
 
         cancel_tx

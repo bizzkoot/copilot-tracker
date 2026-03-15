@@ -8,14 +8,15 @@ This repository uses a GitHub Personal Access Token (PAT) to enable release-plea
 
 **Changed from automatic to manual release system:**
 
-| Before | After |
-|--------|-------|
-| Automatic trigger on push to `main` | Manual trigger via GitHub Actions UI |
-| release-please determined version from commits | Explicit version input with smart parsing |
-| No pre-release support | Full pre-release support (beta, rc, alpha) |
-| Limited validation | Comprehensive validation with dry-run mode |
+| Before                                         | After                                      |
+| ---------------------------------------------- | ------------------------------------------ |
+| Automatic trigger on push to `main`            | Manual trigger via GitHub Actions UI       |
+| release-please determined version from commits | Explicit version input with smart parsing  |
+| No pre-release support                         | Full pre-release support (beta, rc, alpha) |
+| Limited validation                             | Comprehensive validation with dry-run mode |
 
 **New responsibilities (still requires `RELEASE_PLEASE_TOKEN`):**
+
 - ✅ Manual workflow triggering
 - ✅ Version bump commits (package.json, Cargo.toml, tauri.conf.json)
 - ✅ Pushing version changes to main branch
@@ -107,6 +108,7 @@ The token is used in `.github/workflows/release.yml` for the following operation
 ```
 
 **Usage Summary:**
+
 - **7 total occurrences** in the workflow
 - Used across 4 job types: release-please, format-release-pr, validate-release-pr, build-tauri
 - Enables manual version bumping, release creation, PR management, and artifact uploads
@@ -141,6 +143,7 @@ When rotating:
 **Solution:** Using a PAT with `repo` + `workflow` scopes allows:
 
 #### Manual Release Workflow (New - 2025-03-15)
+
 - ✅ Manual workflow triggering via GitHub Actions UI
 - ✅ Version bump commits to main branch
 - ✅ Pushing version changes (package.json, Cargo.toml, tauri.conf.json)
@@ -149,11 +152,13 @@ When rotating:
 - ✅ Triggering PR validation workflows
 
 #### Legacy PR Workflow (Still Supported)
+
 - ✅ Release-please to create PRs that **automatically trigger PR Checks**
 - ✅ No manual close/reopen required for validation
 - ✅ Fully automated PR formatting and validation
 
 **Without this token:**
+
 - ❌ Cannot manually trigger releases
 - ❌ Cannot commit version bumps
 - ❌ Cannot push to main branch
