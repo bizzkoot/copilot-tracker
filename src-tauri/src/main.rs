@@ -832,18 +832,7 @@ async fn fetch_usage(
         let _ = app.emit("usage:data", payload);
 
         // Auto backup if scheduled
-        let store = app.state::<StoreManager>();
-        if store.should_auto_backup() {
-            match store.create_backup() {
-                Ok(backup_id) => {
-                    log::info!("Auto backup created: {}", backup_id);
-                    let _ = store.record_auto_backup_time();
-                }
-                Err(e) => {
-                    log::warn!("Auto backup failed (non-fatal): {}", e);
-                }
-            }
-        }
+        handle_auto_backup(&app);
     }
 
     result
@@ -887,21 +876,26 @@ async fn force_fetch_usage(
         let _ = app.emit("usage:data", payload);
 
         // Auto backup if scheduled
-        let store = app.state::<StoreManager>();
-        if store.should_auto_backup() {
-            match store.create_backup() {
-                Ok(backup_id) => {
-                    log::info!("Auto backup created: {}", backup_id);
-                    let _ = store.record_auto_backup_time();
-                }
-                Err(e) => {
-                    log::warn!("Auto backup failed (non-fatal): {}", e);
-                }
-            }
-        }
+        handle_auto_backup(&app);
     }
 
     result
+}
+
+/// Helper function to handle auto-backup after successful usage fetch
+fn handle_auto_backup(app: &AppHandle) {
+    let store = app.state::<StoreManager>();
+    if store.should_auto_backup() {
+        match store.create_backup() {
+            Ok(backup_id) => {
+                log::info!("Auto backup created: {}", backup_id);
+                let _ = store.record_auto_backup_time();
+            }
+            Err(e) => {
+                log::warn!("Auto backup failed (non-fatal): {}", e);
+            }
+        }
+    }
 }
 
 #[tauri::command]
@@ -1096,7 +1090,49 @@ fn create_backup(app: AppHandle) -> Result<String, String> {
 fn restore_backup(app: AppHandle, backup_id: String) -> Result<(), String> {
     log::info!("Restoring backup: {}", backup_id);
     let store = app.state::<StoreManager>();
-    store.restore_backup(&backup_id)
+    store.restore_backup(&backup_id)?;
+
+    // Emit events to refresh frontend with restored data
+    log::info!("Emitting events after restore");
+
+    // Emit usage:data with restored history and cache
+    let history = UsageManager::get_cached_history(&app);
+    let (used, limit) = store.get_usage();
+    let settings = store.get_settings();
+    let prediction =
+        UsageManager::predict_usage_from_history(&history, used, limit, settings.prediction_period);
+
+    let summary = copilot_tracker::UsageSummary {
+        used,
+        limit,
+        remaining: (limit as f64 - used).max(0.0),
+        percentage: if limit > 0 {
+            (used / limit as f64 * 100.0) as f32
+        } else {
+            0.0
+        },
+        timestamp: chrono::Utc::now().timestamp(),
+    };
+
+    let payload = copilot_tracker::UsagePayload {
+        summary: summary.clone(),
+        history,
+        prediction,
+    };
+    let _ = app.emit("usage:data", payload);
+    log::info!("Emitted usage:data after restore");
+
+    // Emit usage:updated to update tray icon
+    let _ = app.emit("usage:updated", &summary);
+    log::info!("Emitted usage:updated after restore");
+
+    // Emit settings:changed in case settings were restored
+    let current_settings = store.get_settings();
+    let _ = app.emit("settings:changed", current_settings);
+    log::info!("Emitted settings:changed after restore");
+
+    log::info!("Backup restore complete and events emitted");
+    Ok(())
 }
 
 #[tauri::command]

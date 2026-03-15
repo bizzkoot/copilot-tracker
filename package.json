@@ -6,7 +6,9 @@
   "author": "",
   "homepage": "",
   "scripts": {
-    "test": "node --test tests/regression/*.test.mjs",
+    "test": "npm run test:js && npm run test:rust",
+    "test:js": "node --test tests/regression/*.test.mjs",
+    "test:rust": "cd src-tauri && cargo test --quiet",
     "validate:assets": "ts-node scripts/validate-assets.ts",
     "format": "prettier --write .",
     "lint:js": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",

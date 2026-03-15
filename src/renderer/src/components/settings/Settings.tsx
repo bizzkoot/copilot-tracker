@@ -219,8 +219,9 @@ export function Settings({ onClose }: SettingsProps) {
       await window.electron.restoreBackup(backupId);
       setBackupStatus({
         type: "success",
-        message: "Backup restored! Refresh the app to see the restored data.",
+        message: "Backup restored successfully! All data has been updated.",
       });
+      // Events are emitted automatically by the backend, so no manual refresh needed
     } catch (e) {
       setBackupStatus({ type: "error", message: `Failed to restore: ${e}` });
     } finally {

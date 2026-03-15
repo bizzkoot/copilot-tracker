@@ -813,26 +813,35 @@ impl StoreManager {
         std::fs::create_dir_all(&backups_dir)
             .map_err(|e| format!("Failed to create backups directory: {}", e))?;
 
-        // Generate timestamp-based backup ID
-        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+        // Generate timestamp-based backup ID with subsecond precision to avoid collisions
+        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S_%3f");
         let backup_id = format!("backup_{}", timestamp);
-        let backup_dir = backups_dir.join(&backup_id);
 
-        std::fs::create_dir_all(&backup_dir)
-            .map_err(|e| format!("Failed to create backup directory: {}", e))?;
+        // Create temporary directory for atomic backup
+        let temp_backup_id = format!(".temp_{}", backup_id);
+        let temp_dir = backups_dir.join(&temp_backup_id);
+
+        // Clean up any existing temp directory from failed attempts
+        if temp_dir.exists() {
+            std::fs::remove_dir_all(&temp_dir)
+                .map_err(|e| format!("Failed to clean up temp directory: {}", e))?;
+        }
+
+        std::fs::create_dir_all(&temp_dir)
+            .map_err(|e| format!("Failed to create temp backup directory: {}", e))?;
 
         // Copy usage_history.json if exists
         if self.history_path.exists() {
-            let dest = backup_dir.join("usage_history.json");
+            let dest = temp_dir.join("usage_history.json");
             std::fs::copy(&self.history_path, &dest)
-                .map_err(|e| format!("Failed to backup history: {}", e))?;
+                .map_err(|e| format!("Failed to backup history file to temp: {}", e))?;
         }
 
         // Copy usage_cache.json if exists
         if self.usage_cache_path.exists() {
-            let dest = backup_dir.join("usage_cache.json");
+            let dest = temp_dir.join("usage_cache.json");
             std::fs::copy(&self.usage_cache_path, &dest)
-                .map_err(|e| format!("Failed to backup cache: {}", e))?;
+                .map_err(|e| format!("Failed to backup cache file to temp: {}", e))?;
         }
 
         // Write metadata
@@ -850,12 +859,24 @@ impl StoreManager {
             "files": files
         });
 
-        let metadata_path = backup_dir.join("metadata.json");
+        let metadata_path = temp_dir.join("metadata.json");
         std::fs::write(
             &metadata_path,
             serde_json::to_string_pretty(&metadata).unwrap(),
         )
-        .map_err(|e| format!("Failed to write metadata: {}", e))?;
+        .map_err(|e| format!("Failed to write metadata to temp: {}", e))?;
+
+        // Atomic rename from temp to final destination
+        let final_dir = backups_dir.join(&backup_id);
+
+        // Remove existing directory if it exists (timestamp collision or failed previous attempt)
+        if final_dir.exists() {
+            std::fs::remove_dir_all(&final_dir)
+                .map_err(|e| format!("Failed to remove existing backup directory: {}", e))?;
+        }
+
+        std::fs::rename(&temp_dir, &final_dir)
+            .map_err(|e| format!("Failed to finalize backup directory: {}", e))?;
 
         log::info!("Backup created: {}", backup_id);
 
@@ -946,6 +967,11 @@ impl StoreManager {
                     .and_then(|n| n.to_str())
                     .unwrap_or("")
                     .to_string();
+
+                // Skip temporary directories
+                if backup_id.starts_with(".temp_") {
+                    continue;
+                }
 
                 // Read metadata if exists
                 let metadata_path = path.join("metadata.json");

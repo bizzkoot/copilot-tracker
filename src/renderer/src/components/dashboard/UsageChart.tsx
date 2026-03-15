@@ -6,7 +6,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Skeleton } from "../ui/skeleton";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { UsageHistory, CopilotUsage } from "@renderer/types/usage";
+import type {
+  UsageHistory,
+  CopilotUsage,
+  DailyUsage,
+} from "@renderer/types/usage";
 import {
   getTotalRequests,
   isWeekend,
@@ -91,6 +95,7 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
       usage: number;
       included: number;
       billed: number;
+      limit?: number;
       isWeekend: boolean;
     }[] = [];
 
@@ -128,6 +133,7 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
         usage: existingDay ? getTotalRequests(existingDay) : 0,
         included: existingDay ? existingDay.includedRequests : 0,
         billed: existingDay ? existingDay.billedRequests : 0,
+        limit: existingDay ? (existingDay as DailyUsage).limit : undefined,
         isWeekend: isWeekend(current),
       });
 
@@ -185,7 +191,7 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
         };
       });
     } else if (timeframe === "monthly") {
-      // Group by YYYY-MM
+      // Group by YYYY-MM and track quota information
       const monthlyMap = new Map<string, ChartDataPoint>();
 
       for (const d of rawData) {
@@ -219,18 +225,41 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
         current.billed = (current.billed || 0) + d.billed;
       }
 
-      // Use current monthly quota for all months
-      const monthlyQuota = usage?.userPremiumRequestEntitlement || 1200;
-
       const result = Array.from(monthlyMap.values()).sort(
         (a, b) => a.rawDate.getTime() - b.rawDate.getTime(),
       );
 
-      // Calculate utilization percentage
+      // Calculate quota and utilization per month
+      // If historical quota data is available (limit > 0), use it; otherwise fall back to current quota
+      const currentQuota = usage?.userPremiumRequestEntitlement || 1200;
+
       for (const r of result) {
-        r.quota = monthlyQuota;
-        if (monthlyQuota > 0) {
-          r.utilization = (r.usage / monthlyQuota) * 100;
+        // Find all data points for this month
+        const monthData = rawData.filter((d) => {
+          const year = d.rawDate.getUTCFullYear();
+          const month = d.rawDate.getUTCMonth();
+          const key = `${year}-${String(month + 1).padStart(2, "0")}`;
+          return (
+            key === r.date ||
+            d.rawDate.getUTCMonth() === r.rawDate.getUTCMonth()
+          );
+        });
+
+        // Calculate quota based on historical data if available
+        const historicalLimits = monthData
+          .map((d) => d.limit)
+          .filter((limit): limit is number => limit !== undefined && limit > 0);
+
+        if (historicalLimits.length > 0) {
+          // Use the maximum limit found in historical data for this month
+          r.quota = Math.max(...historicalLimits);
+        } else {
+          // Fall back to current quota for months without historical limit data
+          r.quota = currentQuota;
+        }
+
+        if (r.quota > 0) {
+          r.utilization = (r.usage / r.quota) * 100;
         }
       }
 
@@ -264,19 +293,36 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
         current.billed = (current.billed || 0) + d.billed;
       }
 
-      // Use current monthly quota * 12 for yearly view
-      const monthlyQuota = usage?.userPremiumRequestEntitlement || 1200;
-      const yearlyQuota = monthlyQuota * 12;
-
       const result = Array.from(yearlyMap.values()).sort(
         (a, b) => a.rawDate.getTime() - b.rawDate.getTime(),
       );
 
-      // Calculate utilization percentage
+      // Calculate quota and utilization per year
+      // If historical quota data is available (limit > 0), use it; otherwise fall back to current quota
+      const currentMonthlyQuota = usage?.userPremiumRequestEntitlement || 1200;
+      const currentYearlyQuota = currentMonthlyQuota * 12;
+
       for (const r of result) {
-        r.quota = yearlyQuota;
-        if (yearlyQuota > 0) {
-          r.utilization = (r.usage / yearlyQuota) * 100;
+        // Find all data points for this year
+        const yearData = rawData.filter(
+          (d) => d.rawDate.getUTCFullYear() === r.rawDate.getUTCFullYear(),
+        );
+
+        // Calculate quota based on historical data if available
+        const historicalLimits = yearData
+          .map((d) => d.limit)
+          .filter((limit): limit is number => limit !== undefined && limit > 0);
+
+        if (historicalLimits.length > 0) {
+          // For yearly, sum up the monthly quotas found in historical data
+          r.quota = historicalLimits.reduce((sum, limit) => sum + limit, 0);
+        } else {
+          // Fall back to current yearly quota
+          r.quota = currentYearlyQuota;
+        }
+
+        if (r.quota > 0) {
+          r.utilization = (r.usage / r.quota) * 100;
         }
       }
 

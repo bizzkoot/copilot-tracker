@@ -163,11 +163,13 @@ test("setSettings merge preserves all backup fields from current settings", () =
   const fieldPatterns = [
     {
       key: "autoBackupEnabled",
-      pattern: /autoBackupEnabled:[\s\S]*?newSettings\.autoBackupEnabled \?\? current\.autoBackupEnabled/,
+      pattern:
+        /autoBackupEnabled:[\s\S]*?newSettings\.autoBackupEnabled \?\? current\.autoBackupEnabled/,
     },
     {
       key: "backupFrequency",
-      pattern: /backupFrequency:[\s\S]*?newSettings\.backupFrequency \?\? current\.backupFrequency/,
+      pattern:
+        /backupFrequency:[\s\S]*?newSettings\.backupFrequency \?\? current\.backupFrequency/,
     },
     {
       key: "backupRetentionCount",
@@ -176,7 +178,8 @@ test("setSettings merge preserves all backup fields from current settings", () =
     },
     {
       key: "backupDirectory",
-      pattern: /backupDirectory:[\s\S]*?newSettings\.backupDirectory \?\? current\.backupDirectory/,
+      pattern:
+        /backupDirectory:[\s\S]*?newSettings\.backupDirectory \?\? current\.backupDirectory/,
     },
   ];
   for (const { key, pattern } of fieldPatterns) {

@@ -25,6 +25,7 @@ export interface DailyUsage {
   billedRequests: number; // Add-on billed requests
   grossAmount: number; // Gross amount
   billedAmount: number; // Add-on cost
+  limit?: number; // Quota limit for this period (if available)
   models?: ModelUsage[]; // Breakdown by model
 }
 

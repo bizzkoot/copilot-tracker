@@ -133,7 +133,7 @@ impl UsageManager {
 
                         // Save history if available
                         if let Some(rows) = result.usage_history {
-                            let mut entries = Self::map_history_rows(&rows);
+                            let mut entries = Self::map_history_rows_with_quota(&rows, limit);
                             Self::reconcile_history_with_usage_total(&mut entries, used, limit);
                             store.set_usage_history(entries);
                         }
@@ -261,7 +261,18 @@ impl UsageManager {
         Self::map_history_rows(rows)
     }
 
+    /// Map history rows with current quota (for backward compatibility)
     pub fn map_history_rows(rows: &[UsageHistoryRow]) -> Vec<UsageEntry> {
+        Self::map_history_rows_with_quota(rows, 0)
+    }
+
+    /// Map history rows with specified quota limit for historical accuracy
+    /// Note: GitHub doesn't provide historical quota data, so we use the current quota
+    /// as a fallback. Future improvements could track quota changes over time.
+    pub fn map_history_rows_with_quota(
+        rows: &[UsageHistoryRow],
+        quota_limit: u32,
+    ) -> Vec<UsageEntry> {
         let mut entries: Vec<UsageEntry> = rows
             .iter()
             .map(|row| {
@@ -300,7 +311,7 @@ impl UsageManager {
                 UsageEntry {
                     timestamp,
                     used: round_request_count(row.included_requests + row.billed_requests),
-                    limit: 0,
+                    limit: quota_limit,
                     included_requests: row.included_requests,
                     billed_requests: row.billed_requests,
                     gross_amount: row.gross_amount,
