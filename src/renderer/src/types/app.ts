@@ -4,7 +4,7 @@
  */
 
 import type { CopilotUsage, UsageHistory, UsagePrediction } from "./usage";
-import type { Settings } from "./settings";
+import type { BackupInfo, Settings } from "./settings";
 
 // Auth state
 export type AuthState =
@@ -106,6 +106,12 @@ export interface AppAPI {
   setSettings: (settings: Partial<Settings>) => Promise<void>;
   resetSettings: () => Promise<void>;
   onSettingsChanged: (callback: (settings: Settings) => void) => () => void;
+
+  // Backup
+  createBackup: () => Promise<string>;
+  restoreBackup: (backupId: string) => Promise<void>;
+  listBackups: () => Promise<BackupInfo[]>;
+  deleteBackup: (backupId: string) => Promise<void>;
 
   // App
   quit: () => void;

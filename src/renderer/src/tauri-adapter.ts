@@ -13,6 +13,8 @@ import {
   UpdateCheckStatus,
   AppAPI,
   DEFAULT_TRAY_FORMAT,
+  BackupInfo,
+  BackupFrequency,
 } from "./types";
 
 // Rust payload types
@@ -48,6 +50,11 @@ interface RustAppSettings {
   };
   widgetPinned: boolean;
   widgetVisible: boolean;
+  autoBackupEnabled: boolean;
+  backupFrequency: string;
+  backupRetentionCount: number;
+  lastAutoBackupAt?: string;
+  backupDirectory: string | null;
 }
 
 // Rust AuthState result
@@ -536,6 +543,11 @@ export async function initTauriAdapter() {
             },
             trayIconFormat: (rustSettings.trayIconFormat ||
               DEFAULT_TRAY_FORMAT) as Settings["trayIconFormat"],
+            autoBackupEnabled: rustSettings.autoBackupEnabled,
+            backupFrequency: (rustSettings.backupFrequency ||
+              "daily") as BackupFrequency,
+            backupRetentionCount: rustSettings.backupRetentionCount ?? 10,
+            backupDirectory: rustSettings.backupDirectory,
           };
         } catch (e) {
           if (import.meta.env.DEV) {
@@ -586,6 +598,14 @@ export async function initTauriAdapter() {
             widgetPosition: current.widgetPosition,
             widgetPinned: current.widgetPinned,
             widgetVisible: current.widgetVisible,
+            autoBackupEnabled:
+              newSettings.autoBackupEnabled ?? current.autoBackupEnabled,
+            backupFrequency:
+              newSettings.backupFrequency ?? current.backupFrequency,
+            backupRetentionCount:
+              newSettings.backupRetentionCount ?? current.backupRetentionCount,
+            backupDirectory:
+              newSettings.backupDirectory ?? current.backupDirectory,
             // Backend-managed fields (always include from current)
             customerId: current.customerId,
             usageLimit: current.usageLimit,
@@ -638,6 +658,11 @@ export async function initTauriAdapter() {
           },
           trayIconFormat: (rustSettings.trayIconFormat ||
             DEFAULT_TRAY_FORMAT) as Settings["trayIconFormat"],
+          autoBackupEnabled: rustSettings.autoBackupEnabled,
+          backupFrequency: (rustSettings.backupFrequency ||
+            "daily") as BackupFrequency,
+          backupRetentionCount: rustSettings.backupRetentionCount ?? 10,
+          backupDirectory: rustSettings.backupDirectory,
         };
         notifySettingsListeners(settings);
 
@@ -663,6 +688,44 @@ export async function initTauriAdapter() {
           notifyAuthListeners("error");
         }
       },
+      createBackup: async () => {
+        if (import.meta.env.DEV) {
+          console.log("[TauriAdapter] Creating backup...");
+        }
+        const backupId = await invoke<string>("create_backup");
+        if (import.meta.env.DEV) {
+          console.log("[TauriAdapter] Backup created:", backupId);
+        }
+        return backupId;
+      },
+      restoreBackup: async (backupId: string) => {
+        if (import.meta.env.DEV) {
+          console.log("[TauriAdapter] Restoring backup:", backupId);
+        }
+        await invoke("restore_backup", { backupId });
+        if (import.meta.env.DEV) {
+          console.log("[TauriAdapter] Backup restored successfully");
+        }
+      },
+      listBackups: async () => {
+        if (import.meta.env.DEV) {
+          console.log("[TauriAdapter] Listing backups...");
+        }
+        const backups = await invoke<BackupInfo[]>("list_backups");
+        if (import.meta.env.DEV) {
+          console.log("[TauriAdapter] Found backups:", backups.length);
+        }
+        return backups;
+      },
+      deleteBackup: async (backupId: string) => {
+        if (import.meta.env.DEV) {
+          console.log("[TauriAdapter] Deleting backup:", backupId);
+        }
+        await invoke("delete_backup", { backupId });
+        if (import.meta.env.DEV) {
+          console.log("[TauriAdapter] Backup deleted:", backupId);
+        }
+      },
       onSettingsChanged: (callback: (settings: Settings) => void) => {
         settingsListeners.push(callback);
         let unlisten: (() => void) | null = null;
@@ -683,6 +746,11 @@ export async function initTauriAdapter() {
             },
             trayIconFormat: (rustSettings.trayIconFormat ||
               DEFAULT_TRAY_FORMAT) as Settings["trayIconFormat"],
+            autoBackupEnabled: rustSettings.autoBackupEnabled,
+            backupFrequency: (rustSettings.backupFrequency ||
+              "daily") as BackupFrequency,
+            backupRetentionCount: rustSettings.backupRetentionCount ?? 10,
+            backupDirectory: rustSettings.backupDirectory,
           };
           callback(settings);
         })
@@ -865,6 +933,10 @@ function setupMockAdapter() {
     isWidgetEnabled: async () => false,
     setWidgetEnabled: async () => {},
     onWidgetEnabledChanged: () => () => {},
+    createBackup: async () => "mock-backup-id",
+    restoreBackup: async () => {},
+    listBackups: async () => [],
+    deleteBackup: async () => {},
   };
   (window as any).electron = mockAPI;
 }

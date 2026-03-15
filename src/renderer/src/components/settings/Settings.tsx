@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from "../ui/card";
 import { Button } from "../ui/button";
+import { Skeleton } from "../ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { useSettingsStore } from "@renderer/stores/settingsStore";
 import {
@@ -18,7 +19,10 @@ import {
   PREDICTION_PERIOD_OPTIONS,
   THEME_OPTIONS,
   TRAY_ICON_FORMAT_OPTIONS,
+  BACKUP_FREQUENCY_OPTIONS,
+  BACKUP_RETENTION_OPTIONS,
 } from "@renderer/types/settings";
+import type { BackupInfo } from "@renderer/types/settings";
 import {
   ArrowLeft,
   RefreshCw,
@@ -30,6 +34,12 @@ import {
   Info,
   ChevronDown,
   ChevronRight,
+  Database,
+  Upload,
+  Download,
+  Trash2,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 import { GitHubIcon } from "@renderer/components/icons/GitHubIcon";
 import { useEffect, useState } from "react";
@@ -54,6 +64,17 @@ export function Settings({ onClose }: SettingsProps) {
     string | null
   >(null);
 
+  // Backup state
+  const [backups, setBackups] = useState<BackupInfo[]>([]);
+  const [backupListLoading, setBackupListLoading] = useState(true);
+  const [backupCreating, setBackupCreating] = useState(false);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [backupStatus, setBackupStatus] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
+
   const {
     refreshInterval,
     predictionPeriod,
@@ -63,6 +84,9 @@ export function Settings({ onClose }: SettingsProps) {
     debugToolsEnabled,
     notifications,
     trayIconFormat,
+    autoBackupEnabled,
+    backupFrequency,
+    backupRetentionCount,
     setRefreshInterval,
     setPredictionPeriod,
     setTheme,
@@ -72,12 +96,25 @@ export function Settings({ onClose }: SettingsProps) {
     setNotificationsEnabled,
     setNotificationThresholds,
     setTrayIconFormat,
+    updateSettings,
   } = useSettingsStore();
 
   // Fetch app version
   useEffect(() => {
     window.electron.getVersion().then(setAppVersion);
   }, []);
+
+  // Load backup list on mount
+  useEffect(() => {
+    loadBackups();
+  }, []);
+
+  // Auto-dismiss status banner after 5 seconds
+  useEffect(() => {
+    if (!backupStatus) return;
+    const timer = setTimeout(() => setBackupStatus(null), 5000);
+    return () => clearTimeout(timer);
+  }, [backupStatus]);
 
   // Reflect any previously-detected update (in case update event was missed)
   useEffect(() => {
@@ -142,6 +179,68 @@ export function Settings({ onClose }: SettingsProps) {
     return cleanup;
   }, []);
 
+  const loadBackups = async () => {
+    setBackupListLoading(true);
+    try {
+      const list = await window.electron.listBackups();
+      setBackups(list);
+    } catch (e) {
+      setBackupStatus({
+        type: "error",
+        message: `Failed to load backups: ${e}`,
+      });
+    } finally {
+      setBackupListLoading(false);
+    }
+  };
+
+  const handleCreateBackup = async () => {
+    setBackupCreating(true);
+    try {
+      const backupId = await window.electron.createBackup();
+      setBackupStatus({
+        type: "success",
+        message: `Backup created: ${backupId}`,
+      });
+      await loadBackups();
+    } catch (e) {
+      setBackupStatus({
+        type: "error",
+        message: `Failed to create backup: ${e}`,
+      });
+    } finally {
+      setBackupCreating(false);
+    }
+  };
+
+  const handleRestoreBackup = async (backupId: string) => {
+    setRestoringId(backupId);
+    try {
+      await window.electron.restoreBackup(backupId);
+      setBackupStatus({
+        type: "success",
+        message: "Backup restored! Refresh the app to see the restored data.",
+      });
+    } catch (e) {
+      setBackupStatus({ type: "error", message: `Failed to restore: ${e}` });
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
+  const handleDeleteBackup = async (backupId: string) => {
+    setDeletingId(backupId);
+    try {
+      await window.electron.deleteBackup(backupId);
+      setBackupStatus({ type: "success", message: "Backup deleted." });
+      await loadBackups();
+    } catch (e) {
+      setBackupStatus({ type: "error", message: `Failed to delete: ${e}` });
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const handleLaunchAtLoginToggle = async () => {
     const newValue = !launchAtLogin;
     setLaunchAtLogin(newValue);
@@ -204,7 +303,7 @@ export function Settings({ onClose }: SettingsProps) {
 
       {/* Tabbed Settings */}
       <Tabs defaultValue="general" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="general" className="gap-2">
             <Settings2 className="h-4 w-4" />
             <span className="hidden sm:inline">General</span>
@@ -216,6 +315,10 @@ export function Settings({ onClose }: SettingsProps) {
           <TabsTrigger value="behavior" className="gap-2">
             <Monitor className="h-4 w-4" />
             <span className="hidden sm:inline">Behavior</span>
+          </TabsTrigger>
+          <TabsTrigger value="data" className="gap-2">
+            <Database className="h-4 w-4" />
+            <span className="hidden sm:inline">Data</span>
           </TabsTrigger>
           <TabsTrigger value="about" className="gap-2">
             <Info className="h-4 w-4" />
@@ -552,6 +655,237 @@ export function Settings({ onClose }: SettingsProps) {
                   <span className="font-medium text-foreground">Force:</span>{" "}
                   clear cache and force fresh extraction from GitHub.
                 </p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Data Tab */}
+        <TabsContent value="data" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Backup & Restore</CardTitle>
+              <CardDescription>
+                Manage your usage data backups to prevent data loss
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Auto Backup Toggle */}
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <span className="text-sm">Auto backup</span>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Automatically backup usage data after each refresh
+                  </p>
+                </div>
+                <Button
+                  variant={autoBackupEnabled ? "default" : "outline"}
+                  size="sm"
+                  onClick={async () => {
+                    const newValue = !autoBackupEnabled;
+                    updateSettings({ autoBackupEnabled: newValue });
+                    await window.electron.setSettings({
+                      autoBackupEnabled: newValue,
+                    });
+                    markLocalSettingsUpdate();
+                  }}
+                >
+                  {autoBackupEnabled ? "Enabled" : "Disabled"}
+                </Button>
+              </div>
+
+              {/* Backup Frequency (only when auto backup is enabled) */}
+              {autoBackupEnabled && (
+                <div className="border-t pt-4">
+                  <span className="text-sm font-medium">Backup Frequency</span>
+                  <p className="text-xs text-muted-foreground mt-1 mb-3">
+                    How often to automatically backup your data
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {BACKUP_FREQUENCY_OPTIONS.map((option) => (
+                      <Button
+                        key={option.value}
+                        variant={
+                          backupFrequency === option.value
+                            ? "default"
+                            : "outline"
+                        }
+                        size="sm"
+                        onClick={() => {
+                          updateSettings({ backupFrequency: option.value });
+                          window.electron.setSettings({
+                            backupFrequency: option.value,
+                          });
+                          markLocalSettingsUpdate();
+                        }}
+                      >
+                        {option.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Backup Retention (only when auto backup is enabled) */}
+              {autoBackupEnabled && (
+                <div className="border-t pt-4">
+                  <span className="text-sm font-medium">Keep Backups</span>
+                  <p className="text-xs text-muted-foreground mt-1 mb-3">
+                    Maximum number of backups to retain; oldest are pruned
+                    automatically
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {BACKUP_RETENTION_OPTIONS.map((option) => (
+                      <Button
+                        key={option.value}
+                        variant={
+                          backupRetentionCount === option.value
+                            ? "default"
+                            : "outline"
+                        }
+                        size="sm"
+                        onClick={() => {
+                          updateSettings({
+                            backupRetentionCount: option.value,
+                          });
+                          window.electron.setSettings({
+                            backupRetentionCount: option.value,
+                          });
+                          markLocalSettingsUpdate();
+                        }}
+                      >
+                        {option.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Manual Backup Action */}
+              <div className="border-t pt-4 flex items-center justify-between">
+                <div>
+                  <span className="text-sm font-medium">Manual Backup</span>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Snapshot your current usage history and cache
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={backupCreating}
+                  onClick={handleCreateBackup}
+                >
+                  {backupCreating ? (
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4 mr-2" />
+                  )}
+                  Backup Now
+                </Button>
+              </div>
+
+              {/* Status Banner */}
+              {backupStatus && (
+                <div
+                  className={`flex items-center gap-2 rounded-md p-2 text-sm ${
+                    backupStatus.type === "success"
+                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                      : "bg-red-500/10 text-red-600 dark:text-red-400"
+                  }`}
+                >
+                  {backupStatus.type === "success" ? (
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                  )}
+                  <span>{backupStatus.message}</span>
+                </div>
+              )}
+
+              {/* Backups List */}
+              <div className="border-t pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm font-medium">
+                    Saved Backups
+                    {!backupListLoading && ` (${backups.length})`}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={loadBackups}
+                    disabled={backupListLoading}
+                    title="Refresh backup list"
+                  >
+                    <RefreshCw
+                      className={`h-3.5 w-3.5 ${
+                        backupListLoading ? "animate-spin" : ""
+                      }`}
+                    />
+                  </Button>
+                </div>
+
+                {backupListLoading ? (
+                  <div className="space-y-2">
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                ) : backups.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-4">
+                    No backups yet. Click &ldquo;Backup Now&rdquo; to create
+                    one.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {backups.map((backup) => (
+                      <div
+                        key={backup.backupId}
+                        className="flex items-center justify-between rounded-md border px-3 py-2"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-mono text-xs truncate text-muted-foreground">
+                            {backup.backupId}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(backup.createdAt).toLocaleString()}{" "}
+                            &middot; {(backup.sizeBytes / 1024).toFixed(1)} KB
+                          </p>
+                        </div>
+                        <div className="flex gap-1.5 ml-3 shrink-0">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={
+                              restoringId === backup.backupId || !!deletingId
+                            }
+                            onClick={() => handleRestoreBackup(backup.backupId)}
+                          >
+                            {restoringId === backup.backupId ? (
+                              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Upload className="h-3.5 w-3.5" />
+                            )}
+                            <span className="ml-1">Restore</span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            disabled={
+                              deletingId === backup.backupId || !!restoringId
+                            }
+                            onClick={() => handleDeleteBackup(backup.backupId)}
+                          >
+                            {deletingId === backup.backupId ? (
+                              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
