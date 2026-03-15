@@ -121,6 +121,7 @@ jobs:
           manifest-file: .release-please-manifest.json
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           release-as: ${{ steps.parse-version.outputs.version }}
+          bootstrap-sha: ${{ github.sha }}
 
   # ============================================================================
   # Format Release PR - Build, format, and commit to PR
