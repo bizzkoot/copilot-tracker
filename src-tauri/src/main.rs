@@ -1005,6 +1005,18 @@ fn update_settings(app: AppHandle, settings: copilot_tracker::AppSettings) -> Re
         }
     }
 
+    // Restart background polling if refresh_interval changed
+    if previous.refresh_interval != settings.refresh_interval {
+        let polling_state = app.state::<PollingState>();
+        let interval_seconds = settings.refresh_interval.max(10) as u64;
+        polling_state.restart_polling(app.clone(), interval_seconds);
+        log::info!(
+            "[Settings] Refresh interval changed: {}s → {}s, polling restarted",
+            previous.refresh_interval,
+            settings.refresh_interval
+        );
+    }
+
     let _ = app.emit("settings:changed", settings.clone());
     let update_state = app.state::<UpdateState>();
     let latest = update_state.latest.lock().unwrap();
