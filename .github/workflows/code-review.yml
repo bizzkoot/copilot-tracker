@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Code Review
-        uses: tarmojussila/zai-code-review@v0.3.0
+        uses: tarmojussila/zai-code-review@b7d251e52a2e1e36060f045d83da85b7c831c9f9 # v0.3.0
         with:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
           # Optional: Override default model (glm-4.7)

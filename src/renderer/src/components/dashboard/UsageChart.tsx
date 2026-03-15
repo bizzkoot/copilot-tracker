@@ -314,8 +314,10 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
           .filter((limit): limit is number => limit !== undefined && limit > 0);
 
         if (historicalLimits.length > 0) {
-          // For yearly, sum up the monthly quotas found in historical data
-          r.quota = historicalLimits.reduce((sum, limit) => sum + limit, 0);
+          // For yearly, use the maximum monthly limit × 12 months
+          // Note: GitHub Copilot operates on monthly resets, not yearly caps
+          const monthlyQuota = Math.max(...historicalLimits);
+          r.quota = monthlyQuota * 12;
         } else {
           // Fall back to current yearly quota
           r.quota = currentYearlyQuota;
