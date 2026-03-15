@@ -1,0 +1,30 @@
+name: AI Code Review with Z.ai
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review (optional, will use current PR context if available)'
+        required: false
+        type: number
+
+permissions:
+  pull-requests: write
+
+jobs:
+  review:
+    name: Review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code Review
+        uses: tarmojussila/zai-code-review@v0.3.0
+        with:
+          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+          # Optional: Override default model (glm-4.7)
+          # ZAI_MODEL: ${{ vars.ZAI_MODEL }}
+          # Optional: Custom system prompt for the AI reviewer
+          # ZAI_SYSTEM_PROMPT: ${{ vars.ZAI_SYSTEM_PROMPT }}
+          # Optional: Reviewer display name
+          # ZAI_REVIEWER_NAME: ${{ vars.ZAI_REVIEWER_NAME }}
