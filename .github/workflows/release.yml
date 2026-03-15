@@ -4,19 +4,32 @@ permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      version:
+        description: |
+          Version bump (smart detection):
+          - Full: 1.6.0, 2.0.0-beta.1
+          - Keyword: major, minor, patch
+          - Increment: 0.1.0, 0.0.1
+          - Hybrid: minor-beta.1, patch-rc.2
+        required: true
+        type: string
+      dry_run:
+        description: 'Validate only, dont create release'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
-    # Only run on manual dispatch OR if 'release' is in the commit message
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      contains(github.event.head_commit.message, 'release')
+    if: github.event_name == 'workflow_dispatch'
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
@@ -27,15 +40,87 @@ jobs:
       - name: Check out Git repository
         uses: actions/checkout@v4
         with:
-          # Fetch all history for proper version calculation
           fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
-      - uses: googleapis/release-please-action@v4
+      - name: Get current version
+        id: current-version
+        run: |
+          CURRENT_VERSION=$(jq -r '.version' package.json)
+          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "📌 Current version: $CURRENT_VERSION"
+
+      - name: Parse version input
+        id: parse-version
+        run: |
+          chmod +x .github/scripts/parse_version.sh
+          .github/scripts/parse_version.sh \
+            "${{ inputs.version }}" \
+            "${{ steps.current-version.outputs.version }}"
+
+      - name: Validate version bump
+        run: |
+          NEW_VERSION="${{ steps.parse-version.outputs.version }}"
+          CURRENT_VERSION="${{ steps.current-version.outputs.version }}"
+          
+          # Strip pre-release suffix for comparison
+          NEW_VERSION_STABLE="${NEW_VERSION%-*}"
+          CURRENT_VERSION_STABLE="${CURRENT_VERSION%-*}"
+          
+          # Verify new version > current version
+          if ! dpkg --compare-versions "$NEW_VERSION_STABLE" "gt" "$CURRENT_VERSION_STABLE"; then
+            echo "❌ Error: New version ($NEW_VERSION) must be greater than current ($CURRENT_VERSION)"
+            exit 1
+          fi
+          
+          echo "✅ Version bump validated: $CURRENT_VERSION → $NEW_VERSION"
+
+      - name: Update package.json
+        run: |
+          NEW_VERSION="${{ steps.parse-version.outputs.version }}"
+          jq ".version = \"$NEW_VERSION\"" package.json > package.json.tmp
+          mv package.json.tmp package.json
+
+      - name: Update Cargo.toml
+        run: |
+          NEW_VERSION="${{ steps.parse-version.outputs.version }}"
+          sed -i 's/^version = .*/version = "'"$NEW_VERSION"'"/' src-tauri/Cargo.toml
+
+      - name: Update tauri.conf.json
+        run: |
+          NEW_VERSION="${{ steps.parse-version.outputs.version }}"
+          jq ".version = \"$NEW_VERSION\"" src-tauri/tauri.conf.json > tauri.tmp
+          mv tauri.tmp src-tauri/tauri.conf.json
+
+      - name: Update Cargo.lock
+        run: |
+          cd src-tauri
+          cargo update -p copilot-tracker
+
+      - name: Commit version bump
+        run: |
+          VERSION="${{ steps.parse-version.outputs.version }}"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add package.json src-tauri/Cargo.toml src-tauri/tauri.conf.json src-tauri/Cargo.lock
+          git commit -m "chore: bump version to $VERSION"
+          git push
+
+      - name: Dry run check
+        if: inputs.dry_run == true
+        run: |
+          echo "🧪 Dry run mode - stopping before release creation"
+          echo "Version would be: ${{ steps.parse-version.outputs.version }}"
+
+      - name: Run release-please
+        if: inputs.dry_run != true
+        uses: googleapis/release-please-action@v4
         id: release
         with:
           config-file: .release-please.json
           manifest-file: .release-please-manifest.json
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          release-as: ${{ steps.parse-version.outputs.version }}
 
   # ============================================================================
   # Format Release PR - Build, format, and commit to PR
