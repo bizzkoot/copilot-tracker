@@ -97,12 +97,51 @@ jobs:
           cd src-tauri
           cargo update -p copilot-tracker
 
-      - name: Commit version bump
+      - name: Update .release-please-manifest.json
+        run: |
+          VERSION="${{ steps.parse-version.outputs.version }}"
+          echo "Updating manifest to version: $VERSION"
+          echo "{\".\": \"$VERSION\"}" > .release-please-manifest.json
+
+      - name: Generate release-please config with bootstrap-sha
+        run: |
+          LAST_RELEASE_SHA=$(git rev-parse v2.4.7)
+          cat > .release-please-generated.json << 'EOF'
+          {
+            "packages": {
+              ".": {
+                "release-type": "node",
+                "include-component-in-tag": false,
+                "bump-patch-for-minor-pre-major": ["fix", "refactor"],
+                "bootstrap-sha": "$LAST_RELEASE_SHA",
+                "extra-files": [
+                  {
+                    "type": "json",
+                    "path": "src-tauri/tauri.conf.json",
+                    "jsonpath": "$.version"
+                  },
+                  "src-tauri/Cargo.toml",
+                  ".all-contributorsrc"
+                ]
+              }
+            },
+            "changelog-sections": [
+              { "type": "feat", "section": "Features", "hidden": false },
+              { "type": "fix", "section": "Bug Fixes", "hidden": false },
+              { "type": "refactor", "section": "Refactoring", "hidden": false },
+              { "type": "chore", "section": "Other", "hidden": false },
+              { "type": "docs", "section": "Documentation", "hidden": false }
+            ]
+          }
+          EOF
+          echo "Generated config with bootstrap-sha: $LAST_RELEASE_SHA"
+
+      - name: Commit version bump and config files
         run: |
           VERSION="${{ steps.parse-version.outputs.version }}"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
-          git add package.json src-tauri/Cargo.toml src-tauri/tauri.conf.json src-tauri/Cargo.lock
+          git add package.json src-tauri/Cargo.toml src-tauri/tauri.conf.json src-tauri/Cargo.lock .release-please-manifest.json .release-please-generated.json
           git commit -m "chore: bump version to $VERSION"
           git push
 
@@ -117,7 +156,7 @@ jobs:
         uses: googleapis/release-please-action@v4
         id: release
         with:
-          config-file: .release-please.json
+          config-file: .release-please-generated.json
           manifest-file: .release-please-manifest.json
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           release-as: ${{ steps.parse-version.outputs.version }}
