@@ -23,6 +23,17 @@ pub const TRAY_ICON_FORMATS: &[&str] = &[
 /// Default tray icon format - must be one of TRAY_ICON_FORMATS
 pub const DEFAULT_TRAY_ICON_FORMAT: &str = "currentTotal";
 
+/// Backup frequency for auto-backup
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum BackupFrequency {
+    EveryRefresh,
+    #[default]
+    Daily,
+    Every3Days,
+    Weekly,
+}
+
 /// AppSettings - PASSIVE data (user preferences + auth)
 /// Stored in settings.json
 /// Changes infrequently: only when user changes settings or logs in/out
@@ -91,6 +102,21 @@ pub struct AppSettings {
     /// Widget visible
     #[serde(default = "default_widget_visible")]
     pub widget_visible: bool,
+    /// Auto backup usage data after each fetch
+    #[serde(default = "default_auto_backup_enabled")]
+    pub auto_backup_enabled: bool,
+    /// Backup frequency for auto-backup
+    #[serde(default = "default_backup_frequency")]
+    pub backup_frequency: BackupFrequency,
+    /// Maximum number of backups to keep (0 = unlimited)
+    #[serde(default = "default_backup_retention_count")]
+    pub backup_retention_count: u32,
+    /// Timestamp of last auto-backup (ISO 8601)
+    #[serde(default)]
+    pub last_auto_backup_at: Option<String>,
+    /// Custom backup directory (None = default ./backups/)
+    #[serde(default)]
+    pub backup_directory: Option<String>,
 }
 
 /// UsageCacheData - ACTIVE data (volatile usage information)
@@ -168,6 +194,18 @@ fn default_widget_position() -> WidgetPosition {
     WidgetPosition::default()
 }
 
+fn default_auto_backup_enabled() -> bool {
+    false
+}
+
+fn default_backup_frequency() -> BackupFrequency {
+    BackupFrequency::Daily
+}
+
+fn default_backup_retention_count() -> u32 {
+    10
+}
+
 fn legacy_default_usage_limit() -> u32 {
     1200
 }
@@ -196,6 +234,11 @@ impl Default for AppSettings {
             widget_position: default_widget_position(),
             widget_pinned: default_widget_pinned(),
             widget_visible: default_widget_visible(),
+            auto_backup_enabled: default_auto_backup_enabled(),
+            backup_frequency: default_backup_frequency(),
+            backup_retention_count: default_backup_retention_count(),
+            last_auto_backup_at: None,
+            backup_directory: None,
         }
     }
 }
@@ -691,6 +734,324 @@ impl StoreManager {
             s.widget_visible = visible;
         })
     }
+
+    /// Get auto backup enabled state
+    pub fn get_auto_backup_enabled(&self) -> bool {
+        self.settings.lock().unwrap().auto_backup_enabled
+    }
+
+    /// Set auto backup enabled state
+    pub fn set_auto_backup_enabled(&self, enabled: bool) -> Result<(), String> {
+        self.update_settings(|s| {
+            s.auto_backup_enabled = enabled;
+        })
+    }
+
+    /// Check if an auto-backup should run now based on frequency settings
+    pub fn should_auto_backup(&self) -> bool {
+        let settings = self.settings.lock().unwrap();
+        if !settings.auto_backup_enabled {
+            return false;
+        }
+
+        let threshold_hours: i64 = match settings.backup_frequency {
+            BackupFrequency::EveryRefresh => 0,
+            BackupFrequency::Daily => 24,
+            BackupFrequency::Every3Days => 72,
+            BackupFrequency::Weekly => 168,
+        };
+
+        if threshold_hours == 0 {
+            return true; // always backup
+        }
+
+        if let Some(ref ts) = settings.last_auto_backup_at {
+            if let Ok(last) = chrono::DateTime::parse_from_rfc3339(ts) {
+                let now = chrono::Utc::now();
+                let elapsed = now.signed_duration_since(last.with_timezone(&chrono::Utc));
+                return elapsed.num_hours() >= threshold_hours;
+            }
+        }
+
+        true // no previous backup recorded, should backup
+    }
+
+    /// Record the current time as the last auto-backup timestamp
+    pub fn record_auto_backup_time(&self) -> Result<(), String> {
+        let timestamp = chrono::Utc::now().to_rfc3339();
+        self.update_settings(|s| {
+            s.last_auto_backup_at = Some(timestamp.clone());
+        })
+    }
+
+    /// Get backup directory
+    pub fn get_backup_directory(&self) -> Option<String> {
+        self.settings.lock().unwrap().backup_directory.clone()
+    }
+
+    /// Set backup directory
+    pub fn set_backup_directory(&self, directory: Option<String>) -> Result<(), String> {
+        self.update_settings(|s| {
+            s.backup_directory = directory;
+        })
+    }
+
+    /// Get the backups directory path
+    pub fn get_backups_path(&self) -> PathBuf {
+        if let Some(ref custom) = self.get_backup_directory() {
+            PathBuf::from(custom)
+        } else {
+            self.settings_path.parent().unwrap().join("backups")
+        }
+    }
+
+    /// Create a backup of usage data (history + cache)
+    pub fn create_backup(&self) -> Result<String, String> {
+        let backups_dir = self.get_backups_path();
+
+        // Ensure backups directory exists
+        std::fs::create_dir_all(&backups_dir)
+            .map_err(|e| format!("Failed to create backups directory: {}", e))?;
+
+        // Generate timestamp-based backup ID
+        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+        let backup_id = format!("backup_{}", timestamp);
+        let backup_dir = backups_dir.join(&backup_id);
+
+        std::fs::create_dir_all(&backup_dir)
+            .map_err(|e| format!("Failed to create backup directory: {}", e))?;
+
+        // Copy usage_history.json if exists
+        if self.history_path.exists() {
+            let dest = backup_dir.join("usage_history.json");
+            std::fs::copy(&self.history_path, &dest)
+                .map_err(|e| format!("Failed to backup history: {}", e))?;
+        }
+
+        // Copy usage_cache.json if exists
+        if self.usage_cache_path.exists() {
+            let dest = backup_dir.join("usage_cache.json");
+            std::fs::copy(&self.usage_cache_path, &dest)
+                .map_err(|e| format!("Failed to backup cache: {}", e))?;
+        }
+
+        // Write metadata
+        let mut files = Vec::new();
+        if self.history_path.exists() {
+            files.push("usage_history.json");
+        }
+        if self.usage_cache_path.exists() {
+            files.push("usage_cache.json");
+        }
+
+        let metadata = serde_json::json!({
+            "backup_id": backup_id,
+            "created_at": chrono::Utc::now().to_rfc3339(),
+            "files": files
+        });
+
+        let metadata_path = backup_dir.join("metadata.json");
+        std::fs::write(
+            &metadata_path,
+            serde_json::to_string_pretty(&metadata).unwrap(),
+        )
+        .map_err(|e| format!("Failed to write metadata: {}", e))?;
+
+        log::info!("Backup created: {}", backup_id);
+
+        // Prune old backups if retention limit is set
+        let retention = self.settings.lock().unwrap().backup_retention_count;
+        if retention > 0 {
+            if let Err(e) = self.prune_backups(retention) {
+                log::warn!("Backup pruning failed (non-fatal): {}", e);
+            }
+        }
+
+        Ok(backup_id)
+    }
+
+    /// Restore usage data from a backup
+    pub fn restore_backup(&self, backup_id: &str) -> Result<(), String> {
+        let backups_dir = self.get_backups_path();
+        let backup_dir = backups_dir.join(backup_id);
+
+        if !backup_dir.exists() {
+            return Err(format!("Backup not found: {}", backup_id));
+        }
+
+        // Read metadata to verify
+        let metadata_path = backup_dir.join("metadata.json");
+        if metadata_path.exists() {
+            let _metadata: serde_json::Value = serde_json::from_str(
+                &std::fs::read_to_string(&metadata_path)
+                    .map_err(|e| format!("Failed to read metadata: {}", e))?,
+            )
+            .map_err(|e| format!("Invalid metadata: {}", e))?;
+        }
+
+        // Restore usage_history.json if exists in backup
+        let history_backup = backup_dir.join("usage_history.json");
+        if history_backup.exists() {
+            // Load and validate
+            let history: Vec<crate::usage::UsageEntry> = serde_json::from_str(
+                &std::fs::read_to_string(&history_backup)
+                    .map_err(|e| format!("Failed to read history backup: {}", e))?,
+            )
+            .map_err(|e| format!("Invalid history backup: {}", e))?;
+
+            // Restore to current history
+            self.set_usage_history(history);
+        }
+
+        // Restore usage_cache.json if exists in backup
+        let cache_backup = backup_dir.join("usage_cache.json");
+        if cache_backup.exists() {
+            let cache: UsageCacheData = serde_json::from_str(
+                &std::fs::read_to_string(&cache_backup)
+                    .map_err(|e| format!("Failed to read cache backup: {}", e))?,
+            )
+            .map_err(|e| format!("Invalid cache backup: {}", e))?;
+
+            // Restore to current cache
+            {
+                let mut current_cache = self.usage_cache.lock().unwrap();
+                *current_cache = cache.clone();
+            }
+            Self::save_usage_cache_to_disk(&self.usage_cache_path, &cache)?;
+        }
+
+        log::info!("Backup restored: {}", backup_id);
+        Ok(())
+    }
+
+    /// List all available backups
+    pub fn list_backups(&self) -> Result<Vec<BackupInfo>, String> {
+        let backups_dir = self.get_backups_path();
+
+        if !backups_dir.exists() {
+            return Ok(Vec::new());
+        }
+
+        let mut backups = Vec::new();
+
+        for entry in std::fs::read_dir(&backups_dir)
+            .map_err(|e| format!("Failed to read backups directory: {}", e))?
+        {
+            let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+            let path = entry.path();
+
+            if path.is_dir() {
+                let backup_id = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("")
+                    .to_string();
+
+                // Read metadata if exists
+                let metadata_path = path.join("metadata.json");
+                let (created_at, files) = if metadata_path.exists() {
+                    if let Ok(content) = std::fs::read_to_string(&metadata_path) {
+                        if let Ok(meta) = serde_json::from_str::<serde_json::Value>(&content) {
+                            let created = meta
+                                .get("created_at")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("unknown")
+                                .to_string();
+                            let files: Vec<String> = meta
+                                .get("files")
+                                .and_then(|v| v.as_array())
+                                .map(|arr| {
+                                    arr.iter()
+                                        .filter_map(|v| v.as_str().map(String::from))
+                                        .collect()
+                                })
+                                .unwrap_or_default();
+                            (created, files)
+                        } else {
+                            (String::new(), Vec::new())
+                        }
+                    } else {
+                        (String::new(), Vec::new())
+                    }
+                } else {
+                    (String::new(), Vec::new())
+                };
+
+                // Calculate size
+                let size = std::fs::read_dir(&path)
+                    .map(|entries| {
+                        entries
+                            .filter_map(|e| e.ok())
+                            .filter_map(|e| e.metadata().ok())
+                            .map(|m| m.len())
+                            .sum()
+                    })
+                    .unwrap_or(0);
+
+                backups.push(BackupInfo {
+                    backup_id,
+                    created_at,
+                    files,
+                    size_bytes: size,
+                });
+            }
+        }
+
+        // Sort by creation date (newest first)
+        backups.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
+        Ok(backups)
+    }
+
+    /// Delete a backup
+    pub fn delete_backup(&self, backup_id: &str) -> Result<(), String> {
+        let backups_dir = self.get_backups_path();
+        let backup_dir = backups_dir.join(backup_id);
+
+        if !backup_dir.exists() {
+            return Err(format!("Backup not found: {}", backup_id));
+        }
+
+        std::fs::remove_dir_all(&backup_dir)
+            .map_err(|e| format!("Failed to delete backup: {}", e))?;
+
+        log::info!("Backup deleted: {}", backup_id);
+        Ok(())
+    }
+
+    /// Prune old backups, keeping only the most recent `keep` backups.
+    /// Deletes the oldest backups (sorted by creation date) until count <= keep.
+    pub fn prune_backups(&self, keep: u32) -> Result<(), String> {
+        let mut backups = self.list_backups()?;
+        if backups.len() <= keep as usize {
+            return Ok(());
+        }
+
+        // list_backups returns newest-first; trim from the tail (oldest)
+        let to_delete = backups.split_off(keep as usize);
+
+        for backup in to_delete {
+            let backups_dir = self.get_backups_path();
+            let backup_dir = backups_dir.join(&backup.backup_id);
+            if backup_dir.exists() {
+                std::fs::remove_dir_all(&backup_dir)
+                    .map_err(|e| format!("Failed to prune backup {}: {}", backup.backup_id, e))?;
+                log::info!("Pruned old backup: {}", backup.backup_id);
+            }
+        }
+
+        Ok(())
+    }
+}
+
+/// Backup information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupInfo {
+    pub backup_id: String,
+    pub created_at: String,
+    pub files: Vec<String>,
+    pub size_bytes: u64,
 }
 
 // ============================================================================
@@ -749,5 +1110,460 @@ fn backup_corrupted_file(path: &PathBuf) {
         Err(e) => {
             log::error!("Failed to backup corrupted file {:?}: {}", path, e);
         }
+    }
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    // ─── BackupFrequency enum ───────────────────────────────────────────────
+
+    #[test]
+    fn backup_frequency_default_is_daily() {
+        assert_eq!(BackupFrequency::default(), BackupFrequency::Daily);
+    }
+
+    #[test]
+    fn backup_frequency_variants_serialize_to_camel_case() {
+        assert_eq!(
+            serde_json::to_string(&BackupFrequency::EveryRefresh).unwrap(),
+            r#""everyRefresh""#
+        );
+        assert_eq!(
+            serde_json::to_string(&BackupFrequency::Daily).unwrap(),
+            r#""daily""#
+        );
+        assert_eq!(
+            serde_json::to_string(&BackupFrequency::Every3Days).unwrap(),
+            r#""every3Days""#
+        );
+        assert_eq!(
+            serde_json::to_string(&BackupFrequency::Weekly).unwrap(),
+            r#""weekly""#
+        );
+    }
+
+    #[test]
+    fn backup_frequency_deserializes_from_camel_case() {
+        let freq: BackupFrequency = serde_json::from_str(r#""everyRefresh""#).unwrap();
+        assert_eq!(freq, BackupFrequency::EveryRefresh);
+
+        let freq: BackupFrequency = serde_json::from_str(r#""daily""#).unwrap();
+        assert_eq!(freq, BackupFrequency::Daily);
+
+        let freq: BackupFrequency = serde_json::from_str(r#""every3Days""#).unwrap();
+        assert_eq!(freq, BackupFrequency::Every3Days);
+
+        let freq: BackupFrequency = serde_json::from_str(r#""weekly""#).unwrap();
+        assert_eq!(freq, BackupFrequency::Weekly);
+    }
+
+    // ─── AppSettings backup defaults ───────────────────────────────────────
+
+    #[test]
+    fn app_settings_default_auto_backup_enabled_is_false() {
+        let settings = AppSettings::default();
+        assert!(!settings.auto_backup_enabled);
+    }
+
+    #[test]
+    fn app_settings_default_backup_frequency_is_daily() {
+        let settings = AppSettings::default();
+        assert_eq!(settings.backup_frequency, BackupFrequency::Daily);
+    }
+
+    #[test]
+    fn app_settings_default_backup_retention_count_is_ten() {
+        let settings = AppSettings::default();
+        assert_eq!(settings.backup_retention_count, 10);
+    }
+
+    #[test]
+    fn app_settings_default_last_auto_backup_at_is_none() {
+        let settings = AppSettings::default();
+        assert!(settings.last_auto_backup_at.is_none());
+    }
+
+    #[test]
+    fn app_settings_default_backup_directory_is_none() {
+        let settings = AppSettings::default();
+        assert!(settings.backup_directory.is_none());
+    }
+
+    // ─── should_auto_backup logic ───────────────────────────────────────────
+
+    fn make_store(tmp: &TempDir) -> StoreManager {
+        StoreManager::new(tmp.path().to_path_buf()).unwrap()
+    }
+
+    #[test]
+    fn should_auto_backup_returns_false_when_disabled() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        // auto_backup_enabled defaults to false
+        assert!(!store.should_auto_backup());
+    }
+
+    #[test]
+    fn should_auto_backup_returns_true_when_enabled_and_no_previous_backup() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        store.set_auto_backup_enabled(true).unwrap();
+        // No last_auto_backup_at set, so it should backup
+        assert!(store.should_auto_backup());
+    }
+
+    #[test]
+    fn should_auto_backup_every_refresh_always_returns_true_when_enabled() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        store.set_auto_backup_enabled(true).unwrap();
+        store
+            .update_settings(|s| {
+                s.backup_frequency = BackupFrequency::EveryRefresh;
+                // Even with a very recent timestamp, EveryRefresh should backup
+                s.last_auto_backup_at = Some(chrono::Utc::now().to_rfc3339());
+            })
+            .unwrap();
+        assert!(store.should_auto_backup());
+    }
+
+    #[test]
+    fn should_auto_backup_daily_returns_false_when_backup_was_recent() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        store.set_auto_backup_enabled(true).unwrap();
+        // Set last backup to 1 hour ago (within 24h threshold)
+        let recent = chrono::Utc::now() - chrono::Duration::hours(1);
+        store
+            .update_settings(|s| {
+                s.backup_frequency = BackupFrequency::Daily;
+                s.last_auto_backup_at = Some(recent.to_rfc3339());
+            })
+            .unwrap();
+        assert!(!store.should_auto_backup());
+    }
+
+    #[test]
+    fn should_auto_backup_daily_returns_true_when_backup_was_over_24h_ago() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        store.set_auto_backup_enabled(true).unwrap();
+        // Set last backup to 25 hours ago (past 24h threshold)
+        let old = chrono::Utc::now() - chrono::Duration::hours(25);
+        store
+            .update_settings(|s| {
+                s.backup_frequency = BackupFrequency::Daily;
+                s.last_auto_backup_at = Some(old.to_rfc3339());
+            })
+            .unwrap();
+        assert!(store.should_auto_backup());
+    }
+
+    #[test]
+    fn should_auto_backup_every3days_returns_false_when_backup_was_recent() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        store.set_auto_backup_enabled(true).unwrap();
+        let recent = chrono::Utc::now() - chrono::Duration::hours(48);
+        store
+            .update_settings(|s| {
+                s.backup_frequency = BackupFrequency::Every3Days;
+                s.last_auto_backup_at = Some(recent.to_rfc3339());
+            })
+            .unwrap();
+        // 48h < 72h threshold
+        assert!(!store.should_auto_backup());
+    }
+
+    #[test]
+    fn should_auto_backup_every3days_returns_true_when_backup_was_over_72h_ago() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        store.set_auto_backup_enabled(true).unwrap();
+        let old = chrono::Utc::now() - chrono::Duration::hours(73);
+        store
+            .update_settings(|s| {
+                s.backup_frequency = BackupFrequency::Every3Days;
+                s.last_auto_backup_at = Some(old.to_rfc3339());
+            })
+            .unwrap();
+        assert!(store.should_auto_backup());
+    }
+
+    #[test]
+    fn should_auto_backup_weekly_returns_false_when_backup_was_recent() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        store.set_auto_backup_enabled(true).unwrap();
+        let recent = chrono::Utc::now() - chrono::Duration::hours(100);
+        store
+            .update_settings(|s| {
+                s.backup_frequency = BackupFrequency::Weekly;
+                s.last_auto_backup_at = Some(recent.to_rfc3339());
+            })
+            .unwrap();
+        // 100h < 168h threshold
+        assert!(!store.should_auto_backup());
+    }
+
+    #[test]
+    fn should_auto_backup_weekly_returns_true_when_backup_was_over_168h_ago() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        store.set_auto_backup_enabled(true).unwrap();
+        let old = chrono::Utc::now() - chrono::Duration::hours(169);
+        store
+            .update_settings(|s| {
+                s.backup_frequency = BackupFrequency::Weekly;
+                s.last_auto_backup_at = Some(old.to_rfc3339());
+            })
+            .unwrap();
+        assert!(store.should_auto_backup());
+    }
+
+    #[test]
+    fn should_auto_backup_ignores_invalid_timestamp() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        store.set_auto_backup_enabled(true).unwrap();
+        store
+            .update_settings(|s| {
+                s.backup_frequency = BackupFrequency::Daily;
+                s.last_auto_backup_at = Some("not-a-valid-timestamp".to_string());
+            })
+            .unwrap();
+        // Invalid timestamp → treat as no backup → should backup
+        assert!(store.should_auto_backup());
+    }
+
+    // ─── record_auto_backup_time ────────────────────────────────────────────
+
+    #[test]
+    fn record_auto_backup_time_sets_last_auto_backup_at() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        assert!(store.settings.lock().unwrap().last_auto_backup_at.is_none());
+        store.record_auto_backup_time().unwrap();
+        let ts = store
+            .settings
+            .lock()
+            .unwrap()
+            .last_auto_backup_at
+            .clone()
+            .unwrap();
+        // Should be a valid RFC3339 timestamp
+        assert!(chrono::DateTime::parse_from_rfc3339(&ts).is_ok());
+    }
+
+    // ─── backup directory ───────────────────────────────────────────────────
+
+    #[test]
+    fn get_backups_path_returns_default_when_no_custom_directory() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        let backups_path = store.get_backups_path();
+        assert!(backups_path.ends_with("backups"));
+    }
+
+    #[test]
+    fn get_backups_path_returns_custom_directory_when_set() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        let custom = "/tmp/my-custom-backups".to_string();
+        store.set_backup_directory(Some(custom.clone())).unwrap();
+        let backups_path = store.get_backups_path();
+        assert_eq!(backups_path.to_string_lossy(), custom);
+    }
+
+    #[test]
+    fn set_backup_directory_to_none_resets_to_default() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        store
+            .set_backup_directory(Some("/custom".to_string()))
+            .unwrap();
+        store.set_backup_directory(None).unwrap();
+        assert!(store.get_backup_directory().is_none());
+        // Path should revert to default backups/
+        let backups_path = store.get_backups_path();
+        assert!(backups_path.ends_with("backups"));
+    }
+
+    // ─── create_backup and list_backups ────────────────────────────────────
+
+    #[test]
+    fn create_backup_returns_backup_id_with_prefix() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        let backup_id = store.create_backup().unwrap();
+        assert!(
+            backup_id.starts_with("backup_"),
+            "backup_id must start with 'backup_', got: {}",
+            backup_id
+        );
+    }
+
+    #[test]
+    fn create_backup_creates_directory_with_metadata() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        let backup_id = store.create_backup().unwrap();
+        let backup_dir = store.get_backups_path().join(&backup_id);
+        assert!(backup_dir.exists(), "backup directory must be created");
+        let metadata_path = backup_dir.join("metadata.json");
+        assert!(metadata_path.exists(), "metadata.json must be created");
+
+        // Verify metadata contains backup_id and created_at
+        let content = std::fs::read_to_string(&metadata_path).unwrap();
+        let meta: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(meta["backup_id"].as_str().unwrap(), backup_id);
+        assert!(meta["created_at"].as_str().is_some());
+    }
+
+    #[test]
+    fn list_backups_returns_empty_when_no_backups() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        let backups = store.list_backups().unwrap();
+        assert!(backups.is_empty());
+    }
+
+    #[test]
+    fn list_backups_returns_created_backup() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        let backup_id = store.create_backup().unwrap();
+        let backups = store.list_backups().unwrap();
+        assert_eq!(backups.len(), 1);
+        assert_eq!(backups[0].backup_id, backup_id);
+    }
+
+    #[test]
+    fn list_backups_sorted_newest_first() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        // Create multiple backups with slight delay would be needed for timestamp ordering.
+        // Instead verify the sort direction (newest first) by checking list_backups uses
+        // reverse alphabetical sort (which works for backup_YYYYMMDD_HHMMSS format).
+        let id1 = store.create_backup().unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let id2 = store.create_backup().unwrap();
+        let backups = store.list_backups().unwrap();
+        assert_eq!(backups.len(), 2);
+        // Newest (id2) should be first since list is sorted newest-first
+        assert_eq!(backups[0].backup_id, id2);
+        assert_eq!(backups[1].backup_id, id1);
+    }
+
+    // ─── delete_backup ──────────────────────────────────────────────────────
+
+    #[test]
+    fn delete_backup_removes_backup_directory() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        let backup_id = store.create_backup().unwrap();
+        let backup_dir = store.get_backups_path().join(&backup_id);
+        assert!(backup_dir.exists());
+        store.delete_backup(&backup_id).unwrap();
+        assert!(!backup_dir.exists(), "backup directory must be removed after deletion");
+    }
+
+    #[test]
+    fn delete_backup_returns_error_for_nonexistent_backup() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        let result = store.delete_backup("backup_nonexistent");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Backup not found"));
+    }
+
+    // ─── prune_backups ──────────────────────────────────────────────────────
+
+    #[test]
+    fn prune_backups_keeps_n_most_recent_backups() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        let id1 = store.create_backup().unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let _id2 = store.create_backup().unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let id3 = store.create_backup().unwrap();
+
+        // Keep only 2 most recent
+        store.prune_backups(2).unwrap();
+
+        let remaining = store.list_backups().unwrap();
+        assert_eq!(remaining.len(), 2, "prune should keep exactly 2 backups");
+        // The oldest (id1) should have been pruned
+        assert!(
+            remaining.iter().all(|b| b.backup_id != id1),
+            "oldest backup must be pruned"
+        );
+        // The newest (id3) must be retained
+        assert!(
+            remaining.iter().any(|b| b.backup_id == id3),
+            "newest backup must be retained"
+        );
+    }
+
+    #[test]
+    fn prune_backups_does_nothing_when_count_within_limit() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        store.create_backup().unwrap();
+        store.create_backup().unwrap();
+        // Keep 5 but only 2 exist — should be a no-op
+        store.prune_backups(5).unwrap();
+        let remaining = store.list_backups().unwrap();
+        assert_eq!(remaining.len(), 2);
+    }
+
+    // ─── restore_backup ─────────────────────────────────────────────────────
+
+    #[test]
+    fn restore_backup_returns_error_for_nonexistent_backup() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        let result = store.restore_backup("backup_nonexistent");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Backup not found"));
+    }
+
+    // ─── BackupInfo serde ───────────────────────────────────────────────────
+
+    #[test]
+    fn backup_info_serializes_to_camel_case() {
+        let info = BackupInfo {
+            backup_id: "backup_20240101_120000".to_string(),
+            created_at: "2024-01-01T12:00:00Z".to_string(),
+            files: vec!["usage_history.json".to_string()],
+            size_bytes: 1024,
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(json.contains("\"backupId\""), "backup_id must serialize as backupId");
+        assert!(json.contains("\"createdAt\""), "created_at must serialize as createdAt");
+        assert!(json.contains("\"sizeBytes\""), "size_bytes must serialize as sizeBytes");
+    }
+
+    #[test]
+    fn backup_info_deserializes_from_camel_case() {
+        let json = r#"{
+            "backupId": "backup_20240101_120000",
+            "createdAt": "2024-01-01T12:00:00Z",
+            "files": ["usage_history.json"],
+            "sizeBytes": 2048
+        }"#;
+        let info: BackupInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(info.backup_id, "backup_20240101_120000");
+        assert_eq!(info.created_at, "2024-01-01T12:00:00Z");
+        assert_eq!(info.files, vec!["usage_history.json"]);
+        assert_eq!(info.size_bytes, 2048);
     }
 }
