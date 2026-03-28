@@ -45,6 +45,11 @@ import { GitHubIcon } from "@renderer/components/icons/GitHubIcon";
 import { useEffect, useState } from "react";
 import { markLocalSettingsUpdate } from "@renderer/hooks/useSettingsSync";
 
+/** Safely extract a message string from an unknown caught value. */
+function toErrorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 interface SettingsProps {
   onClose: () => void;
 }
@@ -190,7 +195,7 @@ export function Settings({ onClose }: SettingsProps) {
     } catch (e) {
       setBackupStatus({
         type: "error",
-        message: `Failed to load backups: ${e}`,
+        message: `Failed to load backups: ${toErrorMessage(e)}`,
       });
     } finally {
       setBackupListLoading(false);
@@ -209,7 +214,7 @@ export function Settings({ onClose }: SettingsProps) {
     } catch (e) {
       setBackupStatus({
         type: "error",
-        message: `Failed to create backup: ${e}`,
+        message: `Failed to create backup: ${toErrorMessage(e)}`,
       });
     } finally {
       setBackupCreating(false);
@@ -227,7 +232,7 @@ export function Settings({ onClose }: SettingsProps) {
       });
       // Events are emitted automatically by the backend, so no manual refresh needed
     } catch (e) {
-      setBackupStatus({ type: "error", message: `Failed to restore: ${e}` });
+      setBackupStatus({ type: "error", message: `Failed to restore: ${toErrorMessage(e)}` });
     } finally {
       setRestoringId(null);
     }
@@ -240,7 +245,7 @@ export function Settings({ onClose }: SettingsProps) {
       setBackupStatus({ type: "success", message: "Backup deleted." });
       await loadBackups();
     } catch (e) {
-      setBackupStatus({ type: "error", message: `Failed to delete: ${e}` });
+      setBackupStatus({ type: "error", message: `Failed to delete: ${toErrorMessage(e)}` });
     } finally {
       setDeletingId(null);
     }

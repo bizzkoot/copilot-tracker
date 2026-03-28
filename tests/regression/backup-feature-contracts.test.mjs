@@ -567,3 +567,38 @@ test("main.rs auto-backup logic runs after each usage fetch", () => {
     "main.rs must call store.record_auto_backup_time() after successful backup",
   );
 });
+
+// ─── store.rs: validate_backup_id requires backup_ prefix ──────────────────
+
+test("store.rs validate_backup_id requires backup_ prefix", () => {
+  assert.match(
+    storeRsSource,
+    /!backup_id\.starts_with\("backup_"\)/,
+    "validate_backup_id must enforce the 'backup_' prefix to reject Windows reserved names and path tricks",
+  );
+  assert.match(
+    storeRsSource,
+    /backup_id\.contains\('\\0'\)/,
+    "validate_backup_id must reject null bytes to prevent path truncation on some platforms",
+  );
+});
+
+// ─── store.rs: get_backups_path resolves relative paths against app dir ──────
+
+test("store.rs get_backups_path resolves relative custom paths against app directory", () => {
+  assert.match(
+    storeRsSource,
+    /path\.is_absolute\(\)/,
+    "get_backups_path must check if the custom path is absolute before using it directly",
+  );
+});
+
+// ─── main.rs: restore_backup restarts polling with restored interval ──────────
+
+test("main.rs restore_backup restarts polling with the restored refresh_interval", () => {
+  assert.match(
+    mainRsSource,
+    /restart_polling/,
+    "restore_backup must call restart_polling so the polling timer uses the restored interval",
+  );
+});

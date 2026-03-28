@@ -1128,8 +1128,18 @@ fn restore_backup(app: AppHandle, backup_id: String) -> Result<(), String> {
 
     // Emit settings:changed in case settings were restored
     let current_settings = store.get_settings();
-    let _ = app.emit("settings:changed", current_settings);
+    let _ = app.emit("settings:changed", current_settings.clone());
     log::info!("Emitted settings:changed after restore");
+
+    // Restart background polling with the restored refresh interval so that
+    // any change in refresh_interval from the backup takes effect immediately.
+    let polling_state = app.state::<PollingState>();
+    let interval_seconds = current_settings.refresh_interval.max(10) as u64;
+    polling_state.restart_polling(app.clone(), interval_seconds);
+    log::info!(
+        "Restarted polling after restore with interval: {}s",
+        interval_seconds
+    );
 
     log::info!("Backup restore complete and events emitted");
     Ok(())

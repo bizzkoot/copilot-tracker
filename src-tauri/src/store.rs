@@ -860,7 +860,14 @@ impl StoreManager {
     /// Get the backups directory path
     pub fn get_backups_path(&self) -> PathBuf {
         if let Some(ref custom) = self.get_backup_directory() {
-            PathBuf::from(custom)
+            let path = PathBuf::from(custom);
+            if path.is_absolute() {
+                path
+            } else {
+                // Resolve relative paths against the app directory to ensure
+                // consistent behaviour regardless of the process working directory.
+                self.settings_path.parent().unwrap().join(&path)
+            }
         } else {
             self.settings_path.parent().unwrap().join("backups")
         }
@@ -1183,8 +1190,17 @@ impl StoreManager {
 /// Reject backup IDs that contain path separators or traversal sequences.
 /// This prevents directory traversal attacks where a crafted backup_id could
 /// escape the backups directory (e.g., "../../settings.json").
+/// Also enforces the "backup_" prefix to filter out Windows reserved device
+/// names (COM1, NUL, CON, etc.) that could cause filesystem errors.
+/// Null bytes are rejected because some OS path APIs terminate at `\0`, which
+/// can split a path unexpectedly on certain platforms.
 fn validate_backup_id(backup_id: &str) -> Result<(), String> {
-    if backup_id.contains('/') || backup_id.contains('\\') || backup_id.contains("..") {
+    if !backup_id.starts_with("backup_")
+        || backup_id.contains('/')
+        || backup_id.contains('\\')
+        || backup_id.contains("..")
+        || backup_id.contains('\0')
+    {
         return Err(format!("Invalid backup ID: {}", backup_id));
     }
     Ok(())
@@ -1529,6 +1545,24 @@ mod tests {
     }
 
     #[test]
+    fn get_backups_path_resolves_relative_custom_path_against_app_dir() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        store
+            .set_backup_directory(Some("my-backups".to_string()))
+            .unwrap();
+        let backups_path = store.get_backups_path();
+        // A relative path must be resolved against the app data directory,
+        // not the process CWD, so the result must start with the tmp dir.
+        assert!(
+            backups_path.starts_with(tmp.path()),
+            "relative custom path must be resolved under the app directory, got: {:?}",
+            backups_path
+        );
+        assert!(backups_path.ends_with("my-backups"));
+    }
+
+    #[test]
     fn set_backup_directory_to_none_resets_to_default() {
         let tmp = TempDir::new().unwrap();
         let store = make_store(&tmp);
@@ -1685,7 +1719,37 @@ mod tests {
         assert!(result.unwrap_err().contains("Backup not found"));
     }
 
-    // ─── BackupInfo serde ───────────────────────────────────────────────────
+    // ─── validate_backup_id ─────────────────────────────────────────────────
+
+    #[test]
+    fn validate_backup_id_accepts_valid_ids() {
+        assert!(validate_backup_id("backup_20240101_120000_000").is_ok());
+        assert!(validate_backup_id("backup_20240101_120000").is_ok());
+        assert!(validate_backup_id("backup_anything_valid").is_ok());
+    }
+
+    #[test]
+    fn validate_backup_id_rejects_missing_prefix() {
+        assert!(validate_backup_id("").is_err(), "id without 'backup_' prefix must be rejected");
+        assert!(validate_backup_id("20240101_120000").is_err(), "no prefix must be rejected");
+        assert!(validate_backup_id("COM1").is_err(), "Windows reserved name COM1 must be rejected");
+        assert!(validate_backup_id("NUL").is_err(), "Windows reserved name NUL must be rejected");
+        assert!(validate_backup_id("CON").is_err(), "Windows reserved name CON must be rejected");
+        assert!(validate_backup_id(".").is_err(), "single dot must be rejected");
+        assert!(validate_backup_id("randomname").is_err(), "arbitrary name without prefix must be rejected");
+    }
+
+    #[test]
+    fn validate_backup_id_rejects_path_traversal() {
+        assert!(validate_backup_id("backup_../../etc/passwd").is_err());
+        assert!(validate_backup_id("backup_foo/bar").is_err());
+        assert!(validate_backup_id("backup_foo\\bar").is_err());
+        assert!(validate_backup_id("..").is_err());
+        assert!(validate_backup_id("../backup_good").is_err());
+        // Null bytes can cause path truncation on some platforms
+        assert!(validate_backup_id("backup_foo\x00/etc").is_err());
+    }
+
 
     #[test]
     fn backup_info_serializes_to_camel_case() {

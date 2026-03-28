@@ -242,15 +242,24 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
       // If historical quota data is available (limit > 0), use it; otherwise fall back to current quota
       const currentQuota = usage?.userPremiumRequestEntitlement || 1200;
 
+      // Pre-group rawData by YYYY-MM for O(n) lookup (avoids O(n²) filter in the loop below)
+      const rawDataByMonth = new Map<string, typeof rawData>();
+      for (const d of rawData) {
+        const year = d.rawDate.getUTCFullYear();
+        const month = d.rawDate.getUTCMonth();
+        const key = `${year}-${String(month + 1).padStart(2, "0")}`;
+        if (!rawDataByMonth.has(key)) {
+          rawDataByMonth.set(key, []);
+        }
+        rawDataByMonth.get(key)!.push(d);
+      }
+
       let previousMonthQuota: number | undefined;
 
       for (const r of result) {
-        // Find all data points for this month (match by both year and month)
-        const monthData = rawData.filter(
-          (d) =>
-            d.rawDate.getUTCFullYear() === r.rawDate.getUTCFullYear() &&
-            d.rawDate.getUTCMonth() === r.rawDate.getUTCMonth(),
-        );
+        // O(1) lookup using the pre-grouped Map
+        const mKey = `${r.rawDate.getUTCFullYear()}-${String(r.rawDate.getUTCMonth() + 1).padStart(2, "0")}`;
+        const monthData = rawDataByMonth.get(mKey) || [];
 
         // Calculate quota based on historical data if available
         const historicalLimits = monthData
@@ -326,13 +335,21 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
       const currentMonthlyQuota = usage?.userPremiumRequestEntitlement || 1200;
       const currentYearlyQuota = currentMonthlyQuota * 12;
 
+      // Pre-group rawData by year for O(n) lookup (avoids O(n²) filter in the loop below)
+      const rawDataByYear = new Map<number, typeof rawData>();
+      for (const d of rawData) {
+        const year = d.rawDate.getUTCFullYear();
+        if (!rawDataByYear.has(year)) {
+          rawDataByYear.set(year, []);
+        }
+        rawDataByYear.get(year)!.push(d);
+      }
+
       let previousYearQuota: number | undefined;
 
       for (const r of result) {
-        // Find all data points for this year
-        const yearData = rawData.filter(
-          (d) => d.rawDate.getUTCFullYear() === r.rawDate.getUTCFullYear(),
-        );
+        // O(1) lookup using the pre-grouped Map
+        const yearData = rawDataByYear.get(r.rawDate.getUTCFullYear()) || [];
 
         // Calculate quota based on historical data if available
         const historicalLimits = yearData
@@ -340,15 +357,39 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
           .filter((limit): limit is number => limit !== undefined && limit > 0);
 
         if (historicalLimits.length > 0) {
-          // For yearly, use the maximum monthly limit × 12 months.
-          // Note: GitHub Copilot operates on monthly resets, not a hard yearly cap.
-          // If multiple quotas appear within a year (a plan change mid-year), we use
-          // the maximum recorded — this is conservative and noted as estimated.
-          const uniqueLimits = Array.from(new Set(historicalLimits));
-          const monthlyQuota = Math.max(...historicalLimits);
-          r.quota = monthlyQuota * 12;
-          // Mark as a plan-change year when different quotas appear within the year
-          if (uniqueLimits.length > 1) {
+          // Sum up the quota for each distinct calendar month in the year.
+          // This correctly handles mid-year plan changes: if the user had
+          // 1000 req/month for 6 months then upgraded to 2000/month, the
+          // yearly quota is 6×1000 + 6×2000 = 18 000, not max(1000,2000)×12 = 24 000.
+          const monthlyQuotaMap = new Map<number, number>();
+          for (const d of yearData) {
+            if (d.limit && d.limit > 0) {
+              const monthKey = d.rawDate.getUTCMonth();
+              if (!monthlyQuotaMap.has(monthKey)) {
+                monthlyQuotaMap.set(monthKey, d.limit);
+              }
+            }
+          }
+
+          let yearlyQuota = 0;
+          for (const quota of monthlyQuotaMap.values()) {
+            yearlyQuota += quota;
+          }
+
+          // For months without historical data, assume current monthly quota.
+          // Note: we use the current plan quota as the best available estimate —
+          // GitHub's API does not expose historical quotas for past months that
+          // were not recorded at fetch time, so this is an intentional approximation.
+          const monthsWithData = monthlyQuotaMap.size;
+          if (monthsWithData < 12) {
+            yearlyQuota += (12 - monthsWithData) * currentMonthlyQuota;
+          }
+
+          r.quota = yearlyQuota;
+
+          // Mark as a plan-change year when different monthly quotas appear
+          const uniqueMonthlyQuotas = new Set(monthlyQuotaMap.values());
+          if (uniqueMonthlyQuotas.size > 1) {
             r.quotaChanged = true;
           }
         } else {
@@ -471,7 +512,15 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
 
           <Tabs
             value={timeframe}
-            onValueChange={(v) => setTimeframe(v as Timeframe)}
+            onValueChange={(v) => {
+              if (
+                v === "current_month" ||
+                v === "monthly" ||
+                v === "yearly"
+              ) {
+                setTimeframe(v);
+              }
+            }}
             className="w-full sm:w-auto"
           >
             <TabsList className="grid w-full grid-cols-3 sm:w-[320px]">

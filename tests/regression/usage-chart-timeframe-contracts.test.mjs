@@ -26,7 +26,7 @@ test("UsageChart defines Timeframe type with all three values", () => {
 test("UsageChart initializes timeframe state to current_month", () => {
   assert.match(
     chartSource,
-    /useState<Timeframe>\("current_month"\)/,
+    /useState\s*<\s*Timeframe\s*>\s*\(\s*"current_month"\s*\)/,
     "UsageChart must initialize timeframe state to 'current_month'",
   );
 });
@@ -36,8 +36,8 @@ test("UsageChart initializes timeframe state to current_month", () => {
 test("UsageChart imports COST_PER_REQUEST from types/usage", () => {
   assert.match(
     chartSource,
-    /COST_PER_REQUEST/,
-    "UsageChart must import COST_PER_REQUEST from usage types",
+    /import\s*\{[^}]*COST_PER_REQUEST[^}]*\}\s*from\s*["'][^"']*types\/usage["']/,
+    "UsageChart must import COST_PER_REQUEST from an import statement in types/usage",
   );
 });
 
@@ -99,7 +99,7 @@ test("ChartDataPoint interface includes quota and utilization optional fields", 
 test("aggregatedData memoization includes timeframe in its dependency array", () => {
   assert.match(
     chartSource,
-    /\}, \[rawData, timeframe, usage\]\)/,
+    /\}\s*,\s*\[\s*rawData\s*,\s*timeframe\s*,\s*usage\s*\]\s*\)/,
     "aggregatedData useMemo must include timeframe in its dependency array",
   );
 });
@@ -109,12 +109,12 @@ test("aggregatedData memoization includes timeframe in its dependency array", ()
 test("UsageChart renders a Tabs component bound to timeframe state", () => {
   assert.match(
     chartSource,
-    /value=\{timeframe\}/,
+    /value\s*=\s*\{\s*timeframe\s*\}/,
     "Tabs component must be bound to timeframe state",
   );
   assert.match(
     chartSource,
-    /onValueChange=\{/,
+    /onValueChange\s*=\s*\{/,
     "Tabs must have onValueChange handler to update timeframe",
   );
 });
@@ -192,7 +192,7 @@ test("baselineBudget is restricted to current_month timeframe only", () => {
 test("useEffect for scroll-to-latest includes timeframe in dependency array", () => {
   assert.match(
     chartSource,
-    /\}, \[aggregatedData\.length, timeframe\]\)/,
+    /\}\s*,\s*\[\s*aggregatedData\.length\s*,\s*timeframe\s*\]\s*\)/,
     "scroll-to-latest effect must re-run when timeframe changes",
   );
 });
@@ -252,5 +252,56 @@ test("usage.rs no longer imports tokio::time::Duration directly", () => {
     usageRsSource,
     /use tokio::time::Duration/,
     "usage.rs must not have a bare tokio::time::Duration import (removed in this PR)",
+  );
+});
+
+// ─── UsageChart: yearly quota sums monthly quotas (not max×12) ──────────────
+
+test("yearly quota calculation sums distinct monthly quotas (not max×12)", () => {
+  // The correct approach builds a per-month quota map and sums it.
+  // The incorrect approach was Math.max(...historicalLimits) * 12.
+  assert.doesNotMatch(
+    chartSource,
+    /Math\.max\(\.\.\.historicalLimits\)\s*\*\s*12/,
+    "yearly quota must NOT use Math.max(historicalLimits) * 12 — that overstates on plan changes",
+  );
+  assert.match(
+    chartSource,
+    /monthlyQuotaMap/,
+    "yearly quota must use a per-month quota Map to correctly handle mid-year plan changes",
+  );
+});
+
+// ─── UsageChart: timeframe onValueChange uses a type guard ───────────────────
+
+test("timeframe onValueChange validates value before calling setTimeframe (no unsafe cast)", () => {
+  assert.doesNotMatch(
+    chartSource,
+    /setTimeframe\(v as Timeframe\)/,
+    "onValueChange must NOT use 'as Timeframe' unsafe cast — use a runtime type guard instead",
+  );
+  // Verify each valid value is guarded individually (resilient to formatting changes)
+  assert.match(chartSource, /v\s*===\s*"current_month"/, "type guard must check for current_month");
+  assert.match(chartSource, /v\s*===\s*"monthly"/, "type guard must check for monthly");
+  assert.match(chartSource, /v\s*===\s*"yearly"/, "type guard must check for yearly");
+});
+
+// ─── UsageChart: O(n) monthly aggregation uses pre-grouped Map ──────────────
+
+test("monthly aggregation pre-groups rawData by YYYY-MM for O(n) lookup", () => {
+  assert.match(
+    chartSource,
+    /rawDataByMonth/,
+    "monthly aggregation must use a pre-built rawDataByMonth Map to avoid O(n²) filter loops",
+  );
+});
+
+// ─── UsageChart: O(n) yearly aggregation uses pre-grouped Map ───────────────
+
+test("yearly aggregation pre-groups rawData by year for O(n) lookup", () => {
+  assert.match(
+    chartSource,
+    /rawDataByYear/,
+    "yearly aggregation must use a pre-built rawDataByYear Map to avoid O(n²) filter loops",
   );
 });
