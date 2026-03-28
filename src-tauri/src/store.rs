@@ -672,13 +672,22 @@ impl StoreManager {
         if limit == 0 {
             return;
         }
+        // Only write to disk when the value actually changes to reduce I/O.
         // Insert and capture snapshot under a single lock acquisition to avoid a
         // concurrent-write window between insert and clone.
-        let snapshot = {
+        let needs_write = {
             let mut h = self.quota_history.lock().unwrap();
-            h.insert(month.to_string(), limit);
-            h.clone()
+            if h.get(month) == Some(&limit) {
+                false
+            } else {
+                h.insert(month.to_string(), limit);
+                true
+            }
         };
+        if !needs_write {
+            return;
+        }
+        let snapshot = self.quota_history.lock().unwrap().clone();
         // Persist snapshot to disk (best-effort; called from a sync context).
         match serde_json::to_string_pretty(&snapshot) {
             Ok(json) => {

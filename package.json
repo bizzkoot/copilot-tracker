@@ -25,7 +25,6 @@
     "clean:cargo-lock": "lsof -t src-tauri/target/debug/.cargo-lock 2>/dev/null | xargs kill -9 2>/dev/null || true",
     "lint:rust": "cd src-tauri && cargo fmt --all -- --check && cargo clippy --workspace --all-targets --all-features -- -D warnings",
     "build:web": "npm run validate:assets && npm run typecheck && vite build",
-    "prebuild": "npm run format",
     "build": "npm run build:web && tauri build",
     "build:win": "npm run build:web && tauri build --target x86_64-pc-windows-msvc",
     "build:mac": "npm run build:web && tauri build --target universal-apple-darwin",

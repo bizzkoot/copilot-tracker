@@ -210,7 +210,13 @@ export function Settings({ onClose }: SettingsProps) {
         type: "success",
         message: `Backup created: ${backupId}`,
       });
-      await loadBackups();
+      // Refresh list separately — a list-refresh failure must not overwrite the
+      // success status above or make the user think the backup itself failed.
+      try {
+        await loadBackups();
+      } catch (listErr) {
+        console.error("Backup created but failed to refresh list:", listErr);
+      }
     } catch (e) {
       setBackupStatus({
         type: "error",
