@@ -338,9 +338,9 @@ impl UsageManager {
                     (stored, false)
                 } else {
                     // No quota recorded for this month yet; fall back to current_quota.
-                    // quota_estimated = true when current_quota > 0 (we have real data but
-                    // it may not match what the plan was at that time).
-                    (current_quota, current_quota > 0)
+                    // Always mark as estimated — we don't know what the plan quota was
+                    // at that time, even if current_quota is 0 (no data at all).
+                    (current_quota, true)
                 };
 
                 UsageEntry {
@@ -431,7 +431,7 @@ impl UsageManager {
     pub fn start_polling(app: AppHandle, interval_seconds: u64) -> tokio::sync::mpsc::Sender<()> {
         let (cancel_tx, mut cancel_rx) = tokio::sync::mpsc::channel::<()>(1);
 
-        let tick_secs = interval_seconds.min(30);
+        let tick_secs = interval_seconds.clamp(1, 30);
         log::info!(
             "[Background Polling] Starting polling task with interval: {}s (tick: {}s)",
             interval_seconds,
@@ -473,17 +473,50 @@ impl UsageManager {
                                                 summary.limit,
                                                 summary.percentage
                                             );
-                                            // Auto backup after successful poll
+                                            // Auto backup after successful poll.
+                                            // Use spawn_blocking to avoid blocking the async
+                                            // executor with file I/O (create_backup performs
+                                            // several fs::copy / fs::rename / fs::write calls).
+                                            // record_auto_backup_time is inside the blocking
+                                            // closure to prevent a race where the next poll
+                                            // could fire before the timestamp is persisted.
                                             if store.should_auto_backup() {
-                                                match store.create_backup() {
-                                                    Ok(backup_id) => {
-                                                        log::info!("[Background Polling] Auto backup created: {}", backup_id);
-                                                        let _ = store.record_auto_backup_time();
+                                                let app_for_backup = app.clone();
+                                                tauri::async_runtime::spawn(async move {
+                                                    match tokio::task::spawn_blocking(move || {
+                                                        let Some(s) = app_for_backup
+                                                            .try_state::<StoreManager>()
+                                                        else {
+                                                            return Err(
+                                                                "StoreManager not available"
+                                                                    .to_string(),
+                                                            );
+                                                        };
+                                                        match s.create_backup() {
+                                                            Ok(backup_id) => {
+                                                                log::info!(
+                                                                    "[Background Polling] Auto backup created: {}",
+                                                                    backup_id
+                                                                );
+                                                                let _ = s.record_auto_backup_time();
+                                                                Ok(())
+                                                            }
+                                                            Err(e) => Err(e),
+                                                        }
+                                                    })
+                                                    .await
+                                                    {
+                                                        Ok(Ok(())) => {}
+                                                        Ok(Err(e)) => log::warn!(
+                                                            "[Background Polling] Auto backup failed (non-fatal): {}",
+                                                            e
+                                                        ),
+                                                        Err(e) => log::warn!(
+                                                            "[Background Polling] Auto backup task panicked: {}",
+                                                            e
+                                                        ),
                                                     }
-                                                    Err(e) => {
-                                                        log::warn!("[Background Polling] Auto backup failed (non-fatal): {}", e);
-                                                    }
-                                                }
+                                                });
                                             }
                                         } else {
                                             log::warn!("[Background Polling] Failed to fetch usage");

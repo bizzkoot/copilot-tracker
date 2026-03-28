@@ -160,10 +160,33 @@ jobs:
           fi
 
   # ============================================================================
+  # Rust Security Audit — checks crates against RustSec advisory database
+  # Runs on Linux only (crate database is platform-agnostic)
+  # ============================================================================
+  rust-security-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Run cargo audit
+        working-directory: src-tauri
+        run: cargo audit
+        # Note: multi-version getrandom (0.1/0.2/0.3/0.4) is expected —
+        # each is a semver-incompatible major pulled by Tauri's own transitive
+        # deps and cannot be unified. It is NOT a security issue.
+
+  # ============================================================================
   # Post Validation Summary to PR
   # ============================================================================
   post-validation-summary:
-    needs: validate-pr
+    needs: [validate-pr, rust-security-audit]
     # Run after validation, regardless of result
     if: always()
     runs-on: ubuntu-latest
