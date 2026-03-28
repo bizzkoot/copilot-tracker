@@ -178,8 +178,11 @@ test("setSettings merge preserves all backup fields from current settings", () =
     },
     {
       key: "backupDirectory",
+      // backupDirectory is `string | null` — null means "clear custom path".
+      // Using `??` would swallow null, so the code intentionally uses an
+      // explicit `!== undefined` ternary to allow null as a valid update value.
       pattern:
-        /backupDirectory:[\s\S]*?newSettings\.backupDirectory \?\? current\.backupDirectory/,
+        /backupDirectory:[\s\S]*?newSettings\.backupDirectory !== undefined[\s\S]*?newSettings\.backupDirectory[\s\S]*?current\.backupDirectory/,
     },
   ];
   for (const { key, pattern } of fieldPatterns) {

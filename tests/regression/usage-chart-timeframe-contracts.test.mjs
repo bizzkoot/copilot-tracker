@@ -207,11 +207,11 @@ test("usage.rs start_polling uses wall-clock time with chrono::Utc::now()", () =
   );
 });
 
-test("usage.rs start_polling uses 1-second sleep loop for responsiveness", () => {
+test("usage.rs start_polling uses tick_secs sleep loop within tokio::select!", () => {
   assert.match(
     usageRsSource,
-    /tokio::time::sleep\(tokio::time::Duration::from_secs\(1\)\)/,
-    "start_polling must use 1-second sleep for responsive cancellation",
+    /tokio::time::sleep\(tokio::time::Duration::from_secs\(tick_secs\)\)/,
+    "start_polling must use tick_secs for adaptive sleep (cancellation is handled by tokio::select!)",
   );
 });
 
