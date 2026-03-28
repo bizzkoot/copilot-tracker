@@ -1730,13 +1730,34 @@ mod tests {
 
     #[test]
     fn validate_backup_id_rejects_missing_prefix() {
-        assert!(validate_backup_id("").is_err(), "id without 'backup_' prefix must be rejected");
-        assert!(validate_backup_id("20240101_120000").is_err(), "no prefix must be rejected");
-        assert!(validate_backup_id("COM1").is_err(), "Windows reserved name COM1 must be rejected");
-        assert!(validate_backup_id("NUL").is_err(), "Windows reserved name NUL must be rejected");
-        assert!(validate_backup_id("CON").is_err(), "Windows reserved name CON must be rejected");
-        assert!(validate_backup_id(".").is_err(), "single dot must be rejected");
-        assert!(validate_backup_id("randomname").is_err(), "arbitrary name without prefix must be rejected");
+        assert!(
+            validate_backup_id("").is_err(),
+            "id without 'backup_' prefix must be rejected"
+        );
+        assert!(
+            validate_backup_id("20240101_120000").is_err(),
+            "no prefix must be rejected"
+        );
+        assert!(
+            validate_backup_id("COM1").is_err(),
+            "Windows reserved name COM1 must be rejected"
+        );
+        assert!(
+            validate_backup_id("NUL").is_err(),
+            "Windows reserved name NUL must be rejected"
+        );
+        assert!(
+            validate_backup_id("CON").is_err(),
+            "Windows reserved name CON must be rejected"
+        );
+        assert!(
+            validate_backup_id(".").is_err(),
+            "single dot must be rejected"
+        );
+        assert!(
+            validate_backup_id("randomname").is_err(),
+            "arbitrary name without prefix must be rejected"
+        );
     }
 
     #[test]
@@ -1749,7 +1770,6 @@ mod tests {
         // Null bytes can cause path truncation on some platforms
         assert!(validate_backup_id("backup_foo\x00/etc").is_err());
     }
-
 
     #[test]
     fn backup_info_serializes_to_camel_case() {
