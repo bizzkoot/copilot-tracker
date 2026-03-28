@@ -376,13 +376,21 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
             yearlyQuota += quota;
           }
 
-          // For months without historical data, assume current monthly quota.
-          // Note: we use the current plan quota as the best available estimate —
-          // GitHub's API does not expose historical quotas for past months that
-          // were not recorded at fetch time, so this is an intentional approximation.
+          // For months without historical data in the CURRENT year only,
+          // estimate using the current plan quota. For past years, we cannot
+          // know what the quota was at that time, so we do not inflate the
+          // yearly total with today's values — instead we mark it as estimated.
           const monthsWithData = monthlyQuotaMap.size;
+          const isCurrentYear =
+            r.rawDate.getUTCFullYear() === new Date().getUTCFullYear();
           if (monthsWithData < 12) {
-            yearlyQuota += (12 - monthsWithData) * currentMonthlyQuota;
+            if (isCurrentYear) {
+              yearlyQuota += (12 - monthsWithData) * currentMonthlyQuota;
+            } else {
+              // Past year with incomplete data — mark as estimated but don't
+              // inflate quota with current-plan values that weren't valid then.
+              r.quotaEstimated = true;
+            }
           }
 
           r.quota = yearlyQuota;

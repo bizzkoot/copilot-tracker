@@ -230,7 +230,7 @@ export function Settings({ onClose }: SettingsProps) {
         type: "success",
         message: "Backup restored successfully! All data has been updated.",
       });
-      // Events are emitted automatically by the backend, so no manual refresh needed
+      await loadBackups();
     } catch (e) {
       setBackupStatus({ type: "error", message: `Failed to restore: ${toErrorMessage(e)}` });
     } finally {
@@ -871,8 +871,16 @@ export function Settings({ onClose }: SettingsProps) {
                                   handleRestoreBackup(backup.backupId)
                                 }
                               >
-                                <Upload className="h-3.5 w-3.5" />
-                                <span className="ml-1">Confirm</span>
+                                {restoringId === backup.backupId ? (
+                                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Upload className="h-3.5 w-3.5" />
+                                )}
+                                <span className="ml-1">
+                                  {restoringId === backup.backupId
+                                    ? "Restoring..."
+                                    : "Confirm"}
+                                </span>
                               </Button>
                               <Button
                                 variant="ghost"
