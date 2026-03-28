@@ -3,15 +3,11 @@ name: AI Code Review with Z.ai
 on:
   pull_request:
     types: [opened, synchronize]
-  workflow_dispatch:
-    inputs:
-      pr_number:
-        description: "PR number to review (optional, will use current PR context if available)"
-        required: false
-        type: number
 
 permissions:
+  issues: write
   pull-requests: write
+  contents: write
 
 jobs:
   review:
@@ -19,12 +15,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Code Review
-        uses: tarmojussila/zai-code-review@b7d251e52a2e1e36060f045d83da85b7c831c9f9 # v0.3.0
+        uses: bizzkoot/zai-code-review@v0.0.8
         with:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
-          # Optional: Override default model (glm-4.7)
-          # ZAI_MODEL: ${{ vars.ZAI_MODEL }}
-          # Optional: Custom system prompt for the AI reviewer
-          # ZAI_SYSTEM_PROMPT: ${{ vars.ZAI_SYSTEM_PROMPT }}
-          # Optional: Reviewer display name
-          # ZAI_REVIEWER_NAME: ${{ vars.ZAI_REVIEWER_NAME }}
+          ZAI_MODEL: ${{ vars.ZAI_MODEL || 'glm-4.7' }}
+          ZAI_REVIEWER_NAME: ${{ vars.ZAI_REVIEWER_NAME || 'Z.ai Code Review' }}
+          ZAI_SYSTEM_PROMPT: ${{ vars.ZAI_SYSTEM_PROMPT || '' }}
+          ZAI_THREAD_SIMILARITY_THRESHOLD: ${{ vars.ZAI_THREAD_SIMILARITY_THRESHOLD || '0.6' }}
+          ZAI_COMMIT_FEEDBACK: ${{ vars.ZAI_COMMIT_FEEDBACK || 'false' }}

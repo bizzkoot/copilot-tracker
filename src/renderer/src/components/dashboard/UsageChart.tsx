@@ -49,6 +49,11 @@ interface ChartDataPoint {
   trend?: number;
   budget?: number;
   isWeekend: boolean;
+  /** True when the quota for this point is an estimate (using current plan as fallback). */
+  quotaEstimated?: boolean;
+  /** True when this month/year has a different quota than the previous period,
+   *  indicating a plan change occurred at or before this data point. */
+  quotaChanged?: boolean;
 }
 
 type Timeframe = "current_month" | "monthly" | "yearly";
@@ -96,6 +101,7 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
       included: number;
       billed: number;
       limit?: number;
+      quotaEstimated?: boolean;
       isWeekend: boolean;
     }[] = [];
 
@@ -134,6 +140,9 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
         included: existingDay ? existingDay.includedRequests : 0,
         billed: existingDay ? existingDay.billedRequests : 0,
         limit: existingDay ? (existingDay as DailyUsage).limit : undefined,
+        quotaEstimated: existingDay
+          ? (existingDay as DailyUsage).quotaEstimated
+          : undefined,
         isWeekend: isWeekend(current),
       });
 
@@ -233,17 +242,15 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
       // If historical quota data is available (limit > 0), use it; otherwise fall back to current quota
       const currentQuota = usage?.userPremiumRequestEntitlement || 1200;
 
+      let previousMonthQuota: number | undefined;
+
       for (const r of result) {
-        // Find all data points for this month
-        const monthData = rawData.filter((d) => {
-          const year = d.rawDate.getUTCFullYear();
-          const month = d.rawDate.getUTCMonth();
-          const key = `${year}-${String(month + 1).padStart(2, "0")}`;
-          return (
-            key === r.date ||
-            d.rawDate.getUTCMonth() === r.rawDate.getUTCMonth()
-          );
-        });
+        // Find all data points for this month (match by both year and month)
+        const monthData = rawData.filter(
+          (d) =>
+            d.rawDate.getUTCFullYear() === r.rawDate.getUTCFullYear() &&
+            d.rawDate.getUTCMonth() === r.rawDate.getUTCMonth(),
+        );
 
         // Calculate quota based on historical data if available
         const historicalLimits = monthData
@@ -257,6 +264,23 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
           // Fall back to current quota for months without historical limit data
           r.quota = currentQuota;
         }
+
+        // A month is "estimated" if all of its days use estimated quota
+        const nonEstimatedCount = monthData.filter(
+          (d) => d.quotaEstimated === false,
+        ).length;
+        r.quotaEstimated = nonEstimatedCount === 0 && monthData.length > 0;
+
+        // Detect a plan change: quota differs from the previous month's quota
+        if (
+          previousMonthQuota !== undefined &&
+          previousMonthQuota > 0 &&
+          r.quota > 0 &&
+          previousMonthQuota !== r.quota
+        ) {
+          r.quotaChanged = true;
+        }
+        previousMonthQuota = r.quota;
 
         if (r.quota > 0) {
           r.utilization = (r.usage / r.quota) * 100;
@@ -302,6 +326,8 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
       const currentMonthlyQuota = usage?.userPremiumRequestEntitlement || 1200;
       const currentYearlyQuota = currentMonthlyQuota * 12;
 
+      let previousYearQuota: number | undefined;
+
       for (const r of result) {
         // Find all data points for this year
         const yearData = rawData.filter(
@@ -314,14 +340,38 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
           .filter((limit): limit is number => limit !== undefined && limit > 0);
 
         if (historicalLimits.length > 0) {
-          // For yearly, use the maximum monthly limit × 12 months
-          // Note: GitHub Copilot operates on monthly resets, not yearly caps
+          // For yearly, use the maximum monthly limit × 12 months.
+          // Note: GitHub Copilot operates on monthly resets, not a hard yearly cap.
+          // If multiple quotas appear within a year (a plan change mid-year), we use
+          // the maximum recorded — this is conservative and noted as estimated.
+          const uniqueLimits = Array.from(new Set(historicalLimits));
           const monthlyQuota = Math.max(...historicalLimits);
           r.quota = monthlyQuota * 12;
+          // Mark as a plan-change year when different quotas appear within the year
+          if (uniqueLimits.length > 1) {
+            r.quotaChanged = true;
+          }
         } else {
           // Fall back to current yearly quota
           r.quota = currentYearlyQuota;
         }
+
+        // Estimated if no day in this year has a confirmed quota
+        const nonEstimatedCount = yearData.filter(
+          (d) => d.quotaEstimated === false,
+        ).length;
+        r.quotaEstimated = nonEstimatedCount === 0 && yearData.length > 0;
+
+        // Detect plan change across years
+        if (
+          previousYearQuota !== undefined &&
+          previousYearQuota > 0 &&
+          r.quota > 0 &&
+          previousYearQuota !== r.quota
+        ) {
+          r.quotaChanged = true;
+        }
+        previousYearQuota = r.quota;
 
         if (r.quota > 0) {
           r.utilization = (r.usage / r.quota) * 100;
@@ -719,7 +769,21 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
                                   }`}
                                 >
                                   {data.utilization.toFixed(1)}%
+                                  {data.quotaEstimated && (
+                                    <span
+                                      className="ml-1 text-xs text-muted-foreground font-normal"
+                                      title="Quota estimated using current plan — historical plan data not yet recorded for this period"
+                                    >
+                                      (~est.)
+                                    </span>
+                                  )}
                                 </span>
+                              </div>
+                            )}
+                            {data.quotaChanged && (
+                              <div className="pt-1 mt-1 border-t flex items-center gap-1.5 text-xs text-amber-500">
+                                <span>⚡</span>
+                                <span>Plan quota changed this period</span>
                               </div>
                             )}
                           </div>
@@ -767,6 +831,36 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
                 </BarChart>
               )}
             </div>
+
+            {/* Quota estimation footnote — shown in monthly/yearly view when any
+                period uses estimated quota or a plan change was detected */}
+            {timeframe !== "current_month" &&
+              (() => {
+                const hasEstimated = aggregatedData.some(
+                  (d) => d.quotaEstimated,
+                );
+                const hasPlanChange = aggregatedData.some(
+                  (d) => d.quotaChanged,
+                );
+                if (!hasEstimated && !hasPlanChange) return null;
+                return (
+                  <div className="mt-2 text-xs text-muted-foreground space-y-0.5 px-1">
+                    {hasEstimated && (
+                      <p>
+                        ~est. = utilization calculated using current plan quota.
+                        Accuracy improves as monthly data is recorded over time.
+                      </p>
+                    )}
+                    {hasPlanChange && (
+                      <p className="text-amber-500/80">
+                        ⚡ Plan quota change detected across periods.
+                        Utilization percentages reflect each period&apos;s
+                        recorded quota.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
           </div>
         </div>
       </CardContent>

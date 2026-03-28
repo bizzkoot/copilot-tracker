@@ -221,6 +221,7 @@ export async function initTauriAdapter() {
           timestamp: number;
           used: number;
           limit: number;
+          quota_estimated?: boolean;
           included_requests?: number;
           billed_requests?: number;
           gross_amount?: number;
@@ -254,6 +255,8 @@ export async function initTauriAdapter() {
             fetchedAt: new Date(payload.summary.timestamp * 1000),
             days: payload.history.map((entry) => ({
               date: new Date(entry.timestamp * 1000),
+              limit: entry.limit,
+              quotaEstimated: entry.quota_estimated ?? false,
               includedRequests:
                 entry.included_requests ??
                 (entry.used - (entry.billed_requests ?? 0) < 0
@@ -428,6 +431,7 @@ export async function initTauriAdapter() {
               billed_requests?: number;
               gross_amount?: number;
               billed_amount?: number;
+              quota_estimated?: boolean;
               models?: Array<{
                 name: string;
                 included_requests: number;
@@ -461,6 +465,8 @@ export async function initTauriAdapter() {
               fetchedAt: new Date(payload.summary.timestamp * 1000),
               days: payload.history.map((entry) => ({
                 date: new Date(entry.timestamp * 1000),
+                limit: entry.limit,
+                quotaEstimated: entry.quota_estimated ?? false,
                 includedRequests:
                   entry.included_requests ??
                   (entry.used - (entry.billed_requests ?? 0) < 0
@@ -605,7 +611,9 @@ export async function initTauriAdapter() {
             backupRetentionCount:
               newSettings.backupRetentionCount ?? current.backupRetentionCount,
             backupDirectory:
-              newSettings.backupDirectory ?? current.backupDirectory,
+              newSettings.backupDirectory !== undefined
+                ? newSettings.backupDirectory
+                : current.backupDirectory,
             // Backend-managed fields (always include from current)
             customerId: current.customerId,
             usageLimit: current.usageLimit,

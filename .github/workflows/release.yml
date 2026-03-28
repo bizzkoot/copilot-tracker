@@ -4,19 +4,32 @@ permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      version:
+        description: |
+          Version bump (smart detection):
+          - Full: 1.6.0, 2.0.0-beta.1
+          - Keyword: major, minor, patch
+          - Increment: 0.1.0, 0.0.1
+          - Hybrid: minor-beta.1, patch-rc.2
+        required: true
+        type: string
+      dry_run:
+        description: "Validate only, dont create release"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
-    # Only run on manual dispatch OR if 'release' is in the commit message
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      contains(github.event.head_commit.message, 'release')
+    if: github.event_name == 'workflow_dispatch'
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
@@ -27,15 +40,113 @@ jobs:
       - name: Check out Git repository
         uses: actions/checkout@v4
         with:
-          # Fetch all history for proper version calculation
           fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
-      - uses: googleapis/release-please-action@v4
+      - name: Get current version
+        id: current-version
+        run: |
+          CURRENT_VERSION=$(jq -r '.version' package.json)
+          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "📌 Current version: $CURRENT_VERSION"
+
+      - name: Parse version input
+        id: parse-version
+        run: |
+          chmod +x .github/scripts/parse_version.sh
+          .github/scripts/parse_version.sh \
+            "${{ inputs.version }}" \
+            "${{ steps.current-version.outputs.version }}"
+
+      - name: Validate version bump
+        run: |
+          NEW_VERSION="${{ steps.parse-version.outputs.version }}"
+          CURRENT_VERSION="${{ steps.current-version.outputs.version }}"
+
+          if [ -z "$NEW_VERSION" ]; then
+            echo "❌ Error: Failed to parse version input '${{ inputs.version }}'"
+            exit 1
+          fi
+
+          # Strip pre-release suffix for comparison
+          NEW_VERSION_STABLE="${NEW_VERSION%-*}"
+          CURRENT_VERSION_STABLE="${CURRENT_VERSION%-*}"
+
+          # Verify new version > current version
+          if ! dpkg --compare-versions "$NEW_VERSION_STABLE" "gt" "$CURRENT_VERSION_STABLE"; then
+            echo "❌ Error: New version ($NEW_VERSION) must be greater than current ($CURRENT_VERSION)"
+            exit 1
+          fi
+
+          echo "✅ Version bump validated: $CURRENT_VERSION → $NEW_VERSION"
+
+      - name: Resolve bootstrap SHA
+        id: bootstrap
+        run: |
+          # Use the latest release tag to determine bootstrap SHA
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$LATEST_TAG" ]; then
+            SHA=$(git rev-parse "$LATEST_TAG")
+            echo "sha=$SHA" >> $GITHUB_OUTPUT
+            echo "📌 Bootstrap SHA from tag $LATEST_TAG: $SHA"
+          else
+            echo "⚠️ No previous tag found, release-please will analyze full history"
+            echo "sha=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate release-please config
+        run: |
+          BOOTSTRAP_SHA="${{ steps.bootstrap.outputs.sha }}"
+          # Pre-compute the optional bootstrap-sha entry so the JSON template stays clean
+          if [ -n "$BOOTSTRAP_SHA" ]; then
+            bootstrap_sha_entry=",\"bootstrap-sha\": \"${BOOTSTRAP_SHA}\""
+          else
+            bootstrap_sha_entry=""
+          fi
+          cat > .release-please-generated.json << EOF
+          {
+            "packages": {
+              ".": {
+                "release-type": "node",
+                "include-component-in-tag": false,
+                "extra-files": [
+                  {
+                    "type": "json",
+                    "path": "src-tauri/tauri.conf.json",
+                    "jsonpath": "\$.version"
+                  },
+                  "src-tauri/Cargo.toml",
+                  ".all-contributorsrc"
+                ]${bootstrap_sha_entry}
+              }
+            },
+            "changelog-sections": [
+              { "type": "feat",     "section": "Features",     "hidden": false },
+              { "type": "fix",      "section": "Bug Fixes",    "hidden": false },
+              { "type": "refactor", "section": "Refactoring",  "hidden": false },
+              { "type": "chore",    "section": "Other",        "hidden": false },
+              { "type": "docs",     "section": "Documentation","hidden": false }
+            ]
+          }
+          EOF
+          echo "✅ Generated release-please config"
+          cat .release-please-generated.json
+
+      - name: Dry run check
+        if: inputs.dry_run == true
+        run: |
+          echo "🧪 Dry run mode - stopping before release creation"
+          echo "Version would be: ${{ steps.parse-version.outputs.version }}"
+
+      - name: Run release-please
+        if: inputs.dry_run != true
+        uses: googleapis/release-please-action@v4
         id: release
         with:
-          config-file: .release-please.json
+          config-file: .release-please-generated.json
           manifest-file: .release-please-manifest.json
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          release-as: ${{ steps.parse-version.outputs.version }}
 
   # ============================================================================
   # Format Release PR - Build, format, and commit to PR
@@ -48,6 +159,9 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    outputs:
+      pr_found: ${{ steps.release-pr.outputs.pr_found }}
+      pr_number: ${{ steps.release-pr.outputs.pr_number }}
     steps:
       - name: Resolve release PR branch
         id: release-pr
@@ -87,15 +201,18 @@ jobs:
             }
 
             if (!pr) {
-              core.setFailed('No open release-please PR found for base main.');
+              core.info('No open release-please PR found for base main. Skipping format step.');
+              core.setOutput('pr_found', 'false');
               return;
             }
 
             core.info(`Using release PR #${pr.number} (${pr.head.ref})`);
+            core.setOutput('pr_found', 'true');
             core.setOutput('pr_number', String(pr.number));
             core.setOutput('head_ref', pr.head.ref);
 
       - name: Check out Git repository
+        if: steps.release-pr.outputs.pr_found == 'true'
         uses: actions/checkout@v4
         with:
           # Checkout the actual PR head branch so commits/pushes are deterministic
@@ -104,18 +221,22 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
       - name: Install Node.js
+        if: steps.release-pr.outputs.pr_found == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: "npm"
 
       - name: Install Rust
+        if: steps.release-pr.outputs.pr_found == 'true'
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install dependencies
+        if: steps.release-pr.outputs.pr_found == 'true'
         run: npm ci
 
       - name: Update Cargo.lock (deterministic sync with Cargo.toml)
+        if: steps.release-pr.outputs.pr_found == 'true'
         working-directory: src-tauri
         run: |
           set -euo pipefail
@@ -166,12 +287,15 @@ jobs:
           cargo metadata --locked --format-version=1 > /dev/null
 
       - name: Build frontend assets
+        if: steps.release-pr.outputs.pr_found == 'true'
         run: npm run build:web
 
       - name: Run formatting (after build)
+        if: steps.release-pr.outputs.pr_found == 'true'
         run: npm run format
 
       - name: Update contributors
+        if: steps.release-pr.outputs.pr_found == 'true'
         id: contributors
         run: |
           # Get current tag (the one we're releasing FROM - previous release)
@@ -268,6 +392,7 @@ jobs:
           fi
 
       - name: Commit all changes (build + format + contributors)
+        if: steps.release-pr.outputs.pr_found == 'true'
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
@@ -280,8 +405,8 @@ jobs:
   # ============================================================================
   validate-release-pr:
     needs: [release-please, format-release-pr]
-    # Only run if formatting was successful
-    if: ${{ needs.format-release-pr.result == 'success' }}
+    # Only run if formatting was successful and a release PR was found
+    if: ${{ needs.format-release-pr.result == 'success' && needs.format-release-pr.outputs.pr_found == 'true' }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -294,8 +419,8 @@ jobs:
       - name: Check out Git repository
         uses: actions/checkout@v4
         with:
-          # Checkout the PR branch
-          ref: refs/pull/${{ needs.release-please.outputs.pr_number }}/head
+          # Checkout the PR branch (use pr_number resolved by format-release-pr)
+          ref: refs/pull/${{ needs.format-release-pr.outputs.pr_number }}/head
           fetch-depth: 0
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 

@@ -26,6 +26,9 @@ export interface DailyUsage {
   grossAmount: number; // Gross amount
   billedAmount: number; // Add-on cost
   limit?: number; // Quota limit for this period (if available)
+  /** True when `limit` is an estimate (current plan used as fallback).
+   *  False when the quota was recorded at the time of the original fetch. */
+  quotaEstimated?: boolean;
   models?: ModelUsage[]; // Breakdown by model
 }
 

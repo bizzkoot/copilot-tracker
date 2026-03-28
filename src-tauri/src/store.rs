@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -8,6 +9,7 @@ use crate::usage::UsageEntry;
 const STORE_FILENAME: &str = "settings.json";
 const USAGE_CACHE_FILENAME: &str = "usage_cache.json";
 const HISTORY_FILENAME: &str = "usage_history.json";
+const QUOTA_HISTORY_FILENAME: &str = "quota_history.json";
 
 /// Valid tray icon display formats
 pub const TRAY_ICON_FORMATS: &[&str] = &[
@@ -269,9 +271,14 @@ pub struct StoreManager {
     settings_path: PathBuf,
     usage_cache_path: PathBuf,
     history_path: PathBuf,
+    /// Path to quota_history.json — records the monthly quota (limit) observed each month.
+    /// Used to show accurate historical utilization even when the user's plan changes.
+    quota_history_path: PathBuf,
     settings: Mutex<AppSettings>,
     usage_cache: Mutex<UsageCacheData>,
     usage_history: Mutex<Vec<UsageEntry>>,
+    /// Maps "YYYY-MM" → monthly quota limit (u32) recorded at fetch time.
+    quota_history: Mutex<HashMap<String, u32>>,
 }
 
 impl StoreManager {
@@ -286,6 +293,7 @@ impl StoreManager {
         let settings_path = app_dir.join(STORE_FILENAME);
         let usage_cache_path = app_dir.join(USAGE_CACHE_FILENAME);
         let history_path = app_dir.join(HISTORY_FILENAME);
+        let quota_history_path = app_dir.join(QUOTA_HISTORY_FILENAME);
 
         // Load existing settings or create defaults
         // Note: load_settings_from_disk now handles corrupted files by backing them up
@@ -332,13 +340,31 @@ impl StoreManager {
             Vec::new()
         };
 
+        // Load per-month quota history (YYYY-MM → limit)
+        let quota_history: HashMap<String, u32> = if quota_history_path.exists() {
+            match std::fs::read_to_string(&quota_history_path)
+                .ok()
+                .and_then(|s| serde_json::from_str(&s).ok())
+            {
+                Some(map) => map,
+                None => {
+                    log::warn!("Failed to parse quota_history.json, starting fresh");
+                    HashMap::new()
+                }
+            }
+        } else {
+            HashMap::new()
+        };
+
         Ok(Self {
             settings_path,
             usage_cache_path,
             history_path,
+            quota_history_path,
             settings: Mutex::new(settings),
             usage_cache: Mutex::new(usage_cache),
             usage_history: Mutex::new(history),
+            quota_history: Mutex::new(quota_history),
         })
     }
 
@@ -634,6 +660,41 @@ impl StoreManager {
         self.usage_history.lock().unwrap().clone()
     }
 
+    // -------------------------------------------------------------------------
+    // Quota History — records the monthly quota (limit) observed at fetch time.
+    // Keyed by "YYYY-MM". Persisted to quota_history.json.
+    // This lets the chart show accurate utilization % even when the plan changes.
+    // -------------------------------------------------------------------------
+
+    /// Record (or update) the observed quota limit for a given month ("YYYY-MM").
+    /// Skips recording if `limit == 0` (unknown/unset).
+    pub fn record_quota_for_month(&self, month: &str, limit: u32) {
+        if limit == 0 {
+            return;
+        }
+        // Insert and capture snapshot under a single lock acquisition to avoid a
+        // concurrent-write window between insert and clone.
+        let snapshot = {
+            let mut h = self.quota_history.lock().unwrap();
+            h.insert(month.to_string(), limit);
+            h.clone()
+        };
+        // Persist snapshot to disk (best-effort; called from a sync context).
+        match serde_json::to_string_pretty(&snapshot) {
+            Ok(json) => {
+                if let Err(e) = std::fs::write(&self.quota_history_path, json) {
+                    log::warn!("Failed to persist quota_history.json: {}", e);
+                }
+            }
+            Err(e) => log::warn!("Failed to serialize quota history: {}", e),
+        }
+    }
+
+    /// Returns a snapshot of the full YYYY-MM → limit map.
+    pub fn get_quota_map(&self) -> HashMap<String, u32> {
+        self.quota_history.lock().unwrap().clone()
+    }
+
     pub fn reset_settings(&self) -> Result<AppSettings, String> {
         let defaults = AppSettings::default();
         self.update_settings(|s| {
@@ -844,6 +905,13 @@ impl StoreManager {
                 .map_err(|e| format!("Failed to backup cache file to temp: {}", e))?;
         }
 
+        // Copy quota_history.json if exists
+        if self.quota_history_path.exists() {
+            let dest = temp_dir.join("quota_history.json");
+            std::fs::copy(&self.quota_history_path, &dest)
+                .map_err(|e| format!("Failed to backup quota history file to temp: {}", e))?;
+        }
+
         // Write metadata
         let mut files = Vec::new();
         if self.history_path.exists() {
@@ -851,6 +919,9 @@ impl StoreManager {
         }
         if self.usage_cache_path.exists() {
             files.push("usage_cache.json");
+        }
+        if self.quota_history_path.exists() {
+            files.push("quota_history.json");
         }
 
         let metadata = serde_json::json!({
@@ -893,6 +964,7 @@ impl StoreManager {
 
     /// Restore usage data from a backup
     pub fn restore_backup(&self, backup_id: &str) -> Result<(), String> {
+        validate_backup_id(backup_id)?;
         let backups_dir = self.get_backups_path();
         let backup_dir = backups_dir.join(backup_id);
 
@@ -939,6 +1011,31 @@ impl StoreManager {
                 *current_cache = cache.clone();
             }
             Self::save_usage_cache_to_disk(&self.usage_cache_path, &cache)?;
+        }
+
+        // Restore quota_history.json if exists in backup
+        let quota_backup = backup_dir.join("quota_history.json");
+        if quota_backup.exists() {
+            let quota_map: HashMap<String, u32> = serde_json::from_str(
+                &std::fs::read_to_string(&quota_backup)
+                    .map_err(|e| format!("Failed to read quota history backup: {}", e))?,
+            )
+            .map_err(|e| format!("Invalid quota history backup: {}", e))?;
+
+            // Restore in-memory quota history
+            {
+                let mut current_quota = self.quota_history.lock().unwrap();
+                *current_quota = quota_map.clone();
+            }
+            // Persist to disk
+            match serde_json::to_string_pretty(&quota_map) {
+                Ok(json) => {
+                    if let Err(e) = std::fs::write(&self.quota_history_path, json) {
+                        log::warn!("Failed to persist restored quota_history.json: {}", e);
+                    }
+                }
+                Err(e) => log::warn!("Failed to serialize restored quota history: {}", e),
+            }
         }
 
         log::info!("Backup restored: {}", backup_id);
@@ -1031,6 +1128,7 @@ impl StoreManager {
 
     /// Delete a backup
     pub fn delete_backup(&self, backup_id: &str) -> Result<(), String> {
+        validate_backup_id(backup_id)?;
         let backups_dir = self.get_backups_path();
         let backup_dir = backups_dir.join(backup_id);
 
@@ -1056,18 +1154,40 @@ impl StoreManager {
         // list_backups returns newest-first; trim from the tail (oldest)
         let to_delete = backups.split_off(keep as usize);
 
+        let mut first_error: Option<String> = None;
         for backup in to_delete {
             let backups_dir = self.get_backups_path();
             let backup_dir = backups_dir.join(&backup.backup_id);
             if backup_dir.exists() {
-                std::fs::remove_dir_all(&backup_dir)
-                    .map_err(|e| format!("Failed to prune backup {}: {}", backup.backup_id, e))?;
-                log::info!("Pruned old backup: {}", backup.backup_id);
+                match std::fs::remove_dir_all(&backup_dir) {
+                    Ok(()) => log::info!("Pruned old backup: {}", backup.backup_id),
+                    Err(e) => {
+                        let msg = format!("Failed to prune backup {}: {}", backup.backup_id, e);
+                        log::warn!("{}", msg);
+                        if first_error.is_none() {
+                            first_error = Some(msg);
+                        }
+                    }
+                }
             }
+        }
+
+        if let Some(err) = first_error {
+            return Err(err);
         }
 
         Ok(())
     }
+}
+
+/// Reject backup IDs that contain path separators or traversal sequences.
+/// This prevents directory traversal attacks where a crafted backup_id could
+/// escape the backups directory (e.g., "../../settings.json").
+fn validate_backup_id(backup_id: &str) -> Result<(), String> {
+    if backup_id.contains('/') || backup_id.contains('\\') || backup_id.contains("..") {
+        return Err(format!("Invalid backup ID: {}", backup_id));
+    }
+    Ok(())
 }
 
 /// Backup information

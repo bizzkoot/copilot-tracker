@@ -69,6 +69,9 @@ export function Settings({ onClose }: SettingsProps) {
   const [backupListLoading, setBackupListLoading] = useState(true);
   const [backupCreating, setBackupCreating] = useState(false);
   const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [confirmingRestoreId, setConfirmingRestoreId] = useState<string | null>(
+    null,
+  );
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [backupStatus, setBackupStatus] = useState<{
     type: "success" | "error";
@@ -214,6 +217,7 @@ export function Settings({ onClose }: SettingsProps) {
   };
 
   const handleRestoreBackup = async (backupId: string) => {
+    setConfirmingRestoreId(null);
     setRestoringId(backupId);
     try {
       await window.electron.restoreBackup(backupId);
@@ -852,21 +856,47 @@ export function Settings({ onClose }: SettingsProps) {
                           </p>
                         </div>
                         <div className="flex gap-1.5 ml-3 shrink-0">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={
-                              restoringId === backup.backupId || !!deletingId
-                            }
-                            onClick={() => handleRestoreBackup(backup.backupId)}
-                          >
-                            {restoringId === backup.backupId ? (
-                              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Upload className="h-3.5 w-3.5" />
-                            )}
-                            <span className="ml-1">Restore</span>
-                          </Button>
+                          {confirmingRestoreId === backup.backupId ? (
+                            <>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                disabled={!!restoringId || !!deletingId}
+                                onClick={() =>
+                                  handleRestoreBackup(backup.backupId)
+                                }
+                              >
+                                <Upload className="h-3.5 w-3.5" />
+                                <span className="ml-1">Confirm</span>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={!!restoringId || !!deletingId}
+                                onClick={() => setConfirmingRestoreId(null)}
+                              >
+                                Cancel
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={
+                                restoringId === backup.backupId || !!deletingId
+                              }
+                              onClick={() =>
+                                setConfirmingRestoreId(backup.backupId)
+                              }
+                            >
+                              {restoringId === backup.backupId ? (
+                                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Upload className="h-3.5 w-3.5" />
+                              )}
+                              <span className="ml-1">Restore</span>
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"

@@ -2,6 +2,7 @@ use crate::auth::UsageHistoryRow;
 use crate::store::StoreManager;
 use chrono::Datelike;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use tauri::{AppHandle, Emitter, Manager};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,6 +30,10 @@ pub struct UsageEntry {
     pub billed_amount: f64,
     #[serde(default)]
     pub models: Vec<UsageModel>,
+    /// True when `limit` is an estimate (current quota used as fallback because
+    /// no historical quota was recorded for this month in quota_history.json).
+    #[serde(default)]
+    pub quota_estimated: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -133,10 +138,16 @@ impl UsageManager {
 
                         // Save history if available
                         if let Some(rows) = result.usage_history {
-                            let mut entries = Self::map_history_rows_with_quota(&rows, limit);
+                            let quota_map = store.get_quota_map();
+                            let mut entries =
+                                Self::map_history_rows_with_quota(&rows, &quota_map, limit);
                             Self::reconcile_history_with_usage_total(&mut entries, used, limit);
                             store.set_usage_history(entries);
                         }
+
+                        // Record current month's quota for future historical lookups
+                        let current_month = chrono::Utc::now().format("%Y-%m").to_string();
+                        store.record_quota_for_month(&current_month, limit);
 
                         let summary = UsageSummary {
                             used,
@@ -251,6 +262,7 @@ impl UsageManager {
                     gross_amount: cache.net_billed_amount,
                     billed_amount: cache.net_billed_amount,
                     models: vec![],
+                    quota_estimated: false,
                 }];
             }
         }
@@ -263,15 +275,23 @@ impl UsageManager {
 
     /// Map history rows with current quota (for backward compatibility)
     pub fn map_history_rows(rows: &[UsageHistoryRow]) -> Vec<UsageEntry> {
-        Self::map_history_rows_with_quota(rows, 0)
+        Self::map_history_rows_with_quota(rows, &HashMap::new(), 0)
     }
 
-    /// Map history rows with specified quota limit for historical accuracy
-    /// Note: GitHub doesn't provide historical quota data, so we use the current quota
-    /// as a fallback. Future improvements could track quota changes over time.
+    /// Map history rows with a per-month quota lookup table.
+    ///
+    /// For each row, the YYYY-MM of its timestamp is looked up in `quota_map`.
+    /// If a stored limit exists for that month, it is used and `quota_estimated = false`.
+    /// Otherwise, `current_quota` is used as a fallback and `quota_estimated = true`
+    /// (so the frontend can signal to users that the utilization % is approximate).
+    ///
+    /// Note: GitHub's API does not expose the quota that was active for past months,
+    /// so this tracking is done at record-time (each successful fetch records the
+    /// current quota for the current month into quota_history.json).
     pub fn map_history_rows_with_quota(
         rows: &[UsageHistoryRow],
-        quota_limit: u32,
+        quota_map: &HashMap<String, u32>,
+        current_quota: u32,
     ) -> Vec<UsageEntry> {
         let mut entries: Vec<UsageEntry> = rows
             .iter()
@@ -308,10 +328,26 @@ impl UsageManager {
                     })
                     .collect();
 
+                // Derive the "YYYY-MM" key for this row so we can look up the
+                // quota that was recorded for that specific month.
+                let month_key = chrono::DateTime::from_timestamp(timestamp, 0)
+                    .map(|dt| dt.format("%Y-%m").to_string())
+                    .unwrap_or_default();
+
+                let (limit, quota_estimated) = if let Some(&stored) = quota_map.get(&month_key) {
+                    (stored, false)
+                } else {
+                    // No quota recorded for this month yet; fall back to current_quota.
+                    // quota_estimated = true when current_quota > 0 (we have real data but
+                    // it may not match what the plan was at that time).
+                    (current_quota, current_quota > 0)
+                };
+
                 UsageEntry {
                     timestamp,
                     used: round_request_count(row.included_requests + row.billed_requests),
-                    limit: quota_limit,
+                    limit,
+                    quota_estimated,
                     included_requests: row.included_requests,
                     billed_requests: row.billed_requests,
                     gross_amount: row.gross_amount,
@@ -382,6 +418,7 @@ impl UsageManager {
                 gross_amount: 0.0,
                 billed_amount: 0.0,
                 models: vec![],
+                quota_estimated: false,
             });
         }
 
@@ -434,6 +471,18 @@ impl UsageManager {
                                                 summary.limit,
                                                 summary.percentage
                                             );
+                                            // Auto backup after successful poll
+                                            if store.should_auto_backup() {
+                                                match store.create_backup() {
+                                                    Ok(backup_id) => {
+                                                        log::info!("[Background Polling] Auto backup created: {}", backup_id);
+                                                        let _ = store.record_auto_backup_time();
+                                                    }
+                                                    Err(e) => {
+                                                        log::warn!("[Background Polling] Auto backup failed (non-fatal): {}", e);
+                                                    }
+                                                }
+                                            }
                                         } else {
                                             log::warn!("[Background Polling] Failed to fetch usage");
                                         }
