@@ -431,9 +431,11 @@ impl UsageManager {
     pub fn start_polling(app: AppHandle, interval_seconds: u64) -> tokio::sync::mpsc::Sender<()> {
         let (cancel_tx, mut cancel_rx) = tokio::sync::mpsc::channel::<()>(1);
 
+        let tick_secs = interval_seconds.min(30);
         log::info!(
-            "[Background Polling] Starting polling task with interval: {}s",
-            interval_seconds
+            "[Background Polling] Starting polling task with interval: {}s (tick: {}s)",
+            interval_seconds,
+            tick_secs
         );
 
         tauri::async_runtime::spawn(async move {
@@ -443,7 +445,7 @@ impl UsageManager {
 
             loop {
                 tokio::select! {
-                    _ = tokio::time::sleep(tokio::time::Duration::from_secs(1)) => {
+                    _ = tokio::time::sleep(tokio::time::Duration::from_secs(tick_secs)) => {
                         let now = chrono::Utc::now();
                         let elapsed = now.signed_duration_since(last_tick);
 
