@@ -431,11 +431,10 @@ impl UsageManager {
     pub fn start_polling(app: AppHandle, interval_seconds: u64) -> tokio::sync::mpsc::Sender<()> {
         let (cancel_tx, mut cancel_rx) = tokio::sync::mpsc::channel::<()>(1);
 
-        let tick_secs = interval_seconds.clamp(1, 30);
+        let max_tick_secs: u64 = interval_seconds.clamp(1, 30);
         log::info!(
-            "[Background Polling] Starting polling task with interval: {}s (tick: {}s)",
-            interval_seconds,
-            tick_secs
+            "[Background Polling] Starting polling task with interval: {}s",
+            interval_seconds
         );
 
         tauri::async_runtime::spawn(async move {
@@ -444,6 +443,27 @@ impl UsageManager {
             let interval_duration = chrono::Duration::seconds(interval_seconds as i64);
 
             loop {
+                // Dynamic tick: sleep for remaining interval time, capped at max_tick_secs
+                // so the task remains cancellable even for large intervals.
+                // Also resets last_tick if the system clock jumps backward (C3 fix).
+                let tick_secs = {
+                    let now = chrono::Utc::now();
+                    let elapsed = now.signed_duration_since(last_tick);
+                    if elapsed < chrono::Duration::zero() {
+                        log::warn!(
+                            "[Background Polling] System clock moved backward. Resetting timer."
+                        );
+                        last_tick = now;
+                    }
+                    let effective_elapsed = elapsed.max(chrono::Duration::zero());
+                    let remaining = if interval_duration > effective_elapsed {
+                        interval_duration - effective_elapsed
+                    } else {
+                        chrono::Duration::zero()
+                    };
+                    (remaining.num_seconds() as u64).clamp(1, max_tick_secs)
+                };
+
                 tokio::select! {
                     _ = tokio::time::sleep(tokio::time::Duration::from_secs(tick_secs)) => {
                         let now = chrono::Utc::now();

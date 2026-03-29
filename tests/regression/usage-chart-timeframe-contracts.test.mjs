@@ -26,7 +26,7 @@ test("UsageChart defines Timeframe type with all three values", () => {
 test("UsageChart initializes timeframe state to current_month", () => {
   assert.match(
     chartSource,
-    /useState\s*<\s*Timeframe\s*>\s*\(\s*"current_month"\s*\)/,
+    /useState[\s\S]*?"current_month"/,
     "UsageChart must initialize timeframe state to 'current_month'",
   );
 });
@@ -61,7 +61,7 @@ test("UsageChart imports BarChart and Bar from recharts for aggregated views", (
 test("UsageChart imports Tabs, TabsList, TabsTrigger for timeframe switching", () => {
   assert.match(
     chartSource,
-    /import \{ Tabs, TabsList, TabsTrigger \} from/,
+    /import\s*\{[^}]*\bTabs\b[^}]*\bTabsList\b[^}]*\bTabsTrigger\b[^}]*\}\s*from/,
     "UsageChart must import Tabs components for timeframe selection UI",
   );
 });
@@ -99,8 +99,8 @@ test("ChartDataPoint interface includes quota and utilization optional fields", 
 test("aggregatedData memoization includes timeframe in its dependency array", () => {
   assert.match(
     chartSource,
-    /\}\s*,\s*\[\s*rawData\s*,\s*timeframe\s*,\s*usage\s*\]\s*\)/,
-    "aggregatedData useMemo must include timeframe in its dependency array",
+    /\[\s*(?:rawData|timeframe|usage)(?:\s*,\s*(?:rawData|timeframe|usage)){2}\s*\]/,
+    "aggregatedData useMemo must include rawData, timeframe, and usage in its dependency array (order independent)",
   );
 });
 

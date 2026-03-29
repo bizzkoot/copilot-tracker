@@ -35,19 +35,19 @@ split_version() {
 bump_major() {
   local parts
   read -r major minor patch <<< "$(split_version "$1")"
-  echo "$((major + 1)).0.0"
+  echo "$((10#$major + 1)).0.0"
 }
 
 bump_minor() {
   local parts
   read -r major minor patch <<< "$(split_version "$1")"
-  echo "$major.$((minor + 1)).0"
+  echo "$major.$((10#$minor + 1)).0"
 }
 
 bump_patch() {
   local parts
   read -r major minor patch <<< "$(split_version "$1")"
-  echo "$major.$minor.$((patch + 1))"
+  echo "$major.$minor.$((10#$patch + 1))"
 }
 
 # Check if string is a valid semver (major.minor.patch with optional pre-release)
@@ -101,7 +101,7 @@ case "$KEYWORD_PART" in
       # Increment: add to current version
       IFS='.' read -r inc_maj inc_min inc_pat <<< "$KEYWORD_PART"
       read -r cur_maj cur_min cur_pat <<< "$(split_version "$CURRENT_VERSION")"
-      NEW_VERSION="$((cur_maj + inc_maj)).$((cur_min + inc_min)).$((cur_pat + inc_pat))"
+      NEW_VERSION="$((10#$cur_maj + 10#$inc_maj)).$((10#$cur_min + 10#$inc_min)).$((10#$cur_pat + 10#$inc_pat))"
     else
       # Full semver specified directly
       NEW_VERSION="$KEYWORD_PART"

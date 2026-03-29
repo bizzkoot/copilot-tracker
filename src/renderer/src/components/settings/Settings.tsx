@@ -42,7 +42,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { GitHubIcon } from "@renderer/components/icons/GitHubIcon";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { markLocalSettingsUpdate } from "@renderer/hooks/useSettingsSync";
 
 /** Safely extract a message string from an unknown caught value. */
@@ -107,6 +107,21 @@ export function Settings({ onClose }: SettingsProps) {
     updateSettings,
   } = useSettingsStore();
 
+  const loadBackups = useCallback(async () => {
+    setBackupListLoading(true);
+    try {
+      const list = await window.electron.listBackups();
+      setBackups(list);
+    } catch (e) {
+      setBackupStatus({
+        type: "error",
+        message: `Failed to load backups: ${toErrorMessage(e)}`,
+      });
+    } finally {
+      setBackupListLoading(false);
+    }
+  }, []); // stable: only depends on state setters
+
   // Fetch app version
   useEffect(() => {
     window.electron.getVersion().then(setAppVersion);
@@ -115,7 +130,7 @@ export function Settings({ onClose }: SettingsProps) {
   // Load backup list on mount
   useEffect(() => {
     loadBackups();
-  }, []);
+  }, [loadBackups]);
 
   // Auto-dismiss status banner after 5 seconds
   useEffect(() => {
@@ -186,21 +201,6 @@ export function Settings({ onClose }: SettingsProps) {
 
     return cleanup;
   }, []);
-
-  const loadBackups = async () => {
-    setBackupListLoading(true);
-    try {
-      const list = await window.electron.listBackups();
-      setBackups(list);
-    } catch (e) {
-      setBackupStatus({
-        type: "error",
-        message: `Failed to load backups: ${toErrorMessage(e)}`,
-      });
-    } finally {
-      setBackupListLoading(false);
-    }
-  };
 
   const handleCreateBackup = async () => {
     setBackupCreating(true);
@@ -700,10 +700,18 @@ export function Settings({ onClose }: SettingsProps) {
                   onClick={async () => {
                     const newValue = !autoBackupEnabled;
                     updateSettings({ autoBackupEnabled: newValue });
-                    await window.electron.setSettings({
-                      autoBackupEnabled: newValue,
-                    });
-                    markLocalSettingsUpdate();
+                    try {
+                      await window.electron.setSettings({
+                        autoBackupEnabled: newValue,
+                      });
+                      markLocalSettingsUpdate();
+                    } catch (e) {
+                      updateSettings({ autoBackupEnabled: !newValue }); // rollback
+                      setBackupStatus({
+                        type: "error",
+                        message: `Failed to save setting: ${toErrorMessage(e)}`,
+                      });
+                    }
                   }}
                 >
                   {autoBackupEnabled ? "Enabled" : "Disabled"}
@@ -727,12 +735,21 @@ export function Settings({ onClose }: SettingsProps) {
                             : "outline"
                         }
                         size="sm"
-                        onClick={() => {
+                        onClick={async () => {
+                          const prevValue = backupFrequency;
                           updateSettings({ backupFrequency: option.value });
-                          window.electron.setSettings({
-                            backupFrequency: option.value,
-                          });
-                          markLocalSettingsUpdate();
+                          try {
+                            await window.electron.setSettings({
+                              backupFrequency: option.value,
+                            });
+                            markLocalSettingsUpdate();
+                          } catch (e) {
+                            updateSettings({ backupFrequency: prevValue }); // rollback
+                            setBackupStatus({
+                              type: "error",
+                              message: `Failed to save setting: ${toErrorMessage(e)}`,
+                            });
+                          }
                         }}
                       >
                         {option.label}
@@ -760,14 +777,23 @@ export function Settings({ onClose }: SettingsProps) {
                             : "outline"
                         }
                         size="sm"
-                        onClick={() => {
+                        onClick={async () => {
+                          const prevValue = backupRetentionCount;
                           updateSettings({
                             backupRetentionCount: option.value,
                           });
-                          window.electron.setSettings({
-                            backupRetentionCount: option.value,
-                          });
-                          markLocalSettingsUpdate();
+                          try {
+                            await window.electron.setSettings({
+                              backupRetentionCount: option.value,
+                            });
+                            markLocalSettingsUpdate();
+                          } catch (e) {
+                            updateSettings({ backupRetentionCount: prevValue }); // rollback
+                            setBackupStatus({
+                              type: "error",
+                              message: `Failed to save setting: ${toErrorMessage(e)}`,
+                            });
+                          }
                         }}
                       >
                         {option.label}

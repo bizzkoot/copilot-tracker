@@ -365,9 +365,10 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
           for (const d of yearData) {
             if (d.limit && d.limit > 0) {
               const monthKey = d.rawDate.getUTCMonth();
-              if (!monthlyQuotaMap.has(monthKey)) {
-                monthlyQuotaMap.set(monthKey, d.limit);
-              }
+              // Use Math.max to handle mid-month plan upgrades consistently
+              // with the monthly view (e.g. plan changed from 1000→2000 mid-month).
+              const currentMax = monthlyQuotaMap.get(monthKey) ?? 0;
+              monthlyQuotaMap.set(monthKey, Math.max(currentMax, d.limit));
             }
           }
 

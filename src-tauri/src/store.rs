@@ -675,19 +675,14 @@ impl StoreManager {
         // Only write to disk when the value actually changes to reduce I/O.
         // Insert and capture snapshot under a single lock acquisition to avoid a
         // concurrent-write window between insert and clone.
-        let needs_write = {
+        let snapshot = {
             let mut h = self.quota_history.lock().unwrap();
             if h.get(month) == Some(&limit) {
-                false
-            } else {
-                h.insert(month.to_string(), limit);
-                true
+                return; // Value unchanged, exit early
             }
+            h.insert(month.to_string(), limit);
+            h.clone() // Capture snapshot while holding lock
         };
-        if !needs_write {
-            return;
-        }
-        let snapshot = self.quota_history.lock().unwrap().clone();
         // Persist snapshot to disk (best-effort; called from a sync context).
         match serde_json::to_string_pretty(&snapshot) {
             Ok(json) => {
@@ -998,30 +993,50 @@ impl StoreManager {
             .map_err(|e| format!("Invalid metadata: {}", e))?;
         }
 
-        // Restore usage_history.json if exists in backup
+        // Phase 1: Load and validate ALL backup files in memory before writing anything.
+        // This prevents partial restores if a later file fails to parse.
         let history_backup = backup_dir.join("usage_history.json");
-        if history_backup.exists() {
-            // Load and validate
+        let new_history: Option<Vec<crate::usage::UsageEntry>> = if history_backup.exists() {
             let history: Vec<crate::usage::UsageEntry> = serde_json::from_str(
                 &std::fs::read_to_string(&history_backup)
                     .map_err(|e| format!("Failed to read history backup: {}", e))?,
             )
             .map_err(|e| format!("Invalid history backup: {}", e))?;
+            Some(history)
+        } else {
+            None
+        };
 
-            // Restore to current history
-            self.set_usage_history(history);
-        }
-
-        // Restore usage_cache.json if exists in backup
         let cache_backup = backup_dir.join("usage_cache.json");
-        if cache_backup.exists() {
+        let new_cache: Option<UsageCacheData> = if cache_backup.exists() {
             let cache: UsageCacheData = serde_json::from_str(
                 &std::fs::read_to_string(&cache_backup)
                     .map_err(|e| format!("Failed to read cache backup: {}", e))?,
             )
             .map_err(|e| format!("Invalid cache backup: {}", e))?;
+            Some(cache)
+        } else {
+            None
+        };
 
-            // Restore to current cache
+        let quota_backup = backup_dir.join("quota_history.json");
+        let new_quota: Option<HashMap<String, u32>> = if quota_backup.exists() {
+            let quota_map: HashMap<String, u32> = serde_json::from_str(
+                &std::fs::read_to_string(&quota_backup)
+                    .map_err(|e| format!("Failed to read quota history backup: {}", e))?,
+            )
+            .map_err(|e| format!("Invalid quota history backup: {}", e))?;
+            Some(quota_map)
+        } else {
+            None
+        };
+
+        // Phase 2: All reads succeeded — safe to apply changes.
+        if let Some(history) = new_history {
+            self.set_usage_history(history);
+        }
+
+        if let Some(cache) = new_cache {
             {
                 let mut current_cache = self.usage_cache.lock().unwrap();
                 *current_cache = cache.clone();
@@ -1029,16 +1044,7 @@ impl StoreManager {
             Self::save_usage_cache_to_disk(&self.usage_cache_path, &cache)?;
         }
 
-        // Restore quota_history.json if exists in backup
-        let quota_backup = backup_dir.join("quota_history.json");
-        if quota_backup.exists() {
-            let quota_map: HashMap<String, u32> = serde_json::from_str(
-                &std::fs::read_to_string(&quota_backup)
-                    .map_err(|e| format!("Failed to read quota history backup: {}", e))?,
-            )
-            .map_err(|e| format!("Invalid quota history backup: {}", e))?;
-
-            // Restore in-memory quota history
+        if let Some(quota_map) = new_quota {
             {
                 let mut current_quota = self.quota_history.lock().unwrap();
                 *current_quota = quota_map.clone();
@@ -1136,8 +1142,22 @@ impl StoreManager {
             }
         }
 
-        // Sort by creation date (newest first)
-        backups.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        // Sort by creation date (newest first).
+        // Treat empty or "unknown" created_at values as epoch so corrupted/
+        // metadata-less backups sort as oldest and are pruned before valid ones.
+        backups.sort_by(|a, b| {
+            let a_date = if a.created_at.is_empty() || a.created_at == "unknown" {
+                "1970-01-01T00:00:00Z"
+            } else {
+                a.created_at.as_str()
+            };
+            let b_date = if b.created_at.is_empty() || b.created_at == "unknown" {
+                "1970-01-01T00:00:00Z"
+            } else {
+                b.created_at.as_str()
+            };
+            b_date.cmp(a_date)
+        });
 
         Ok(backups)
     }

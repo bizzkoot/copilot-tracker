@@ -1002,7 +1002,7 @@ fn update_settings(app: AppHandle, settings: copilot_tracker::AppSettings) -> Re
     // Restart background polling if refresh_interval changed
     if previous.refresh_interval != settings.refresh_interval {
         let polling_state = app.state::<PollingState>();
-        let interval_seconds = settings.refresh_interval.max(10) as u64;
+        let interval_seconds = settings.refresh_interval.clamp(10, 86400) as u64;
         polling_state.restart_polling(app.clone(), interval_seconds);
         log::info!(
             "[Settings] Refresh interval changed: {}s → {}s, polling restarted",
@@ -1134,7 +1134,7 @@ fn restore_backup(app: AppHandle, backup_id: String) -> Result<(), String> {
     // Restart background polling with the restored refresh interval so that
     // any change in refresh_interval from the backup takes effect immediately.
     let polling_state = app.state::<PollingState>();
-    let interval_seconds = current_settings.refresh_interval.max(10) as u64;
+    let interval_seconds = current_settings.refresh_interval.clamp(10, 86400) as u64;
     polling_state.restart_polling(app.clone(), interval_seconds);
     log::info!(
         "Restarted polling after restore with interval: {}s",
@@ -2495,7 +2495,7 @@ fn main() {
             // CRITICAL: Start background polling AFTER setup completes to prevent race condition
             // Spawn a delayed task to ensure polling starts after initialization is complete
             let app_for_polling = app_handle.clone();
-            let polling_interval = settings.refresh_interval.max(10) as u64;
+            let polling_interval = settings.refresh_interval.clamp(10, 86400) as u64;
             let is_authenticated = settings.is_authenticated;
             tauri::async_runtime::spawn(async move {
                 // Small delay to ensure setup() completes and all state is managed
