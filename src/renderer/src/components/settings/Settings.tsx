@@ -236,7 +236,11 @@ export function Settings({ onClose }: SettingsProps) {
         type: "success",
         message: "Backup restored successfully! All data has been updated.",
       });
-      await loadBackups();
+      try {
+        await loadBackups();
+      } catch (listErr) {
+        console.error("Restore succeeded but failed to refresh list:", listErr);
+      }
     } catch (e) {
       setBackupStatus({ type: "error", message: `Failed to restore: ${toErrorMessage(e)}` });
     } finally {
@@ -249,7 +253,11 @@ export function Settings({ onClose }: SettingsProps) {
     try {
       await window.electron.deleteBackup(backupId);
       setBackupStatus({ type: "success", message: "Backup deleted." });
-      await loadBackups();
+      try {
+        await loadBackups();
+      } catch (listErr) {
+        console.error("Deletion succeeded but failed to refresh list:", listErr);
+      }
     } catch (e) {
       setBackupStatus({ type: "error", message: `Failed to delete: ${toErrorMessage(e)}` });
     } finally {
@@ -319,6 +327,7 @@ export function Settings({ onClose }: SettingsProps) {
 
       {/* Tabbed Settings */}
       <Tabs defaultValue="general" className="w-full">
+        {/* Update grid-cols-N when adding or removing tabs */}
         <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="general" className="gap-2">
             <Settings2 className="h-4 w-4" />

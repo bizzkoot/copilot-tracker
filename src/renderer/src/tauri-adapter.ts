@@ -137,6 +137,16 @@ async function waitForTauri(maxAttempts = 50, delay = 20): Promise<boolean> {
   return false;
 }
 
+function calculateIncludedRequests(entry: {
+  used: number;
+  billed_requests?: number | null;
+  included_requests?: number | null;
+}): number {
+  if (entry.included_requests != null) return entry.included_requests;
+  const calculated = entry.used - (entry.billed_requests ?? 0);
+  return calculated < 0 ? 0 : calculated;
+}
+
 export async function initTauriAdapter() {
   if (import.meta.env.DEV) {
     console.log("Initializing Tauri Adapter...");
@@ -257,11 +267,7 @@ export async function initTauriAdapter() {
               date: new Date(entry.timestamp * 1000),
               limit: entry.limit,
               quotaEstimated: entry.quota_estimated ?? false,
-              includedRequests:
-                entry.included_requests ??
-                (entry.used - (entry.billed_requests ?? 0) < 0
-                  ? 0
-                  : entry.used - (entry.billed_requests ?? 0)),
+              includedRequests: calculateIncludedRequests(entry),
               billedRequests: entry.billed_requests ?? 0,
               grossAmount: entry.gross_amount ?? 0,
               billedAmount: entry.billed_amount ?? 0,
@@ -467,11 +473,7 @@ export async function initTauriAdapter() {
                 date: new Date(entry.timestamp * 1000),
                 limit: entry.limit,
                 quotaEstimated: entry.quota_estimated ?? false,
-                includedRequests:
-                  entry.included_requests ??
-                  (entry.used - (entry.billed_requests ?? 0) < 0
-                    ? 0
-                    : entry.used - (entry.billed_requests ?? 0)),
+                includedRequests: calculateIncludedRequests(entry),
                 billedRequests: entry.billed_requests ?? 0,
                 grossAmount: entry.gross_amount ?? 0,
                 billedAmount: entry.billed_amount ?? 0,

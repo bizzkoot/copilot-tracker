@@ -19,6 +19,10 @@ pub struct UsageHistory {
     pub entries: Vec<UsageEntry>,
 }
 
+fn default_quota_estimated() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageEntry {
     pub timestamp: i64,
@@ -32,7 +36,7 @@ pub struct UsageEntry {
     pub models: Vec<UsageModel>,
     /// True when `limit` is an estimate (current quota used as fallback because
     /// no historical quota was recorded for this month in quota_history.json).
-    #[serde(default)]
+    #[serde(default = "default_quota_estimated")]
     pub quota_estimated: bool,
 }
 
@@ -332,7 +336,10 @@ impl UsageManager {
                 // quota that was recorded for that specific month.
                 let month_key = chrono::DateTime::from_timestamp(timestamp, 0)
                     .map(|dt| dt.format("%Y-%m").to_string())
-                    .unwrap_or_default();
+                    .unwrap_or_else(|| {
+                        log::warn!("[Usage] Invalid timestamp {} in usage history entry; quota lookup for this entry will use current quota", timestamp);
+                        String::new()
+                    });
 
                 let (limit, quota_estimated) = if let Some(&stored) = quota_map.get(&month_key) {
                     (stored, false)
@@ -518,7 +525,9 @@ impl UsageManager {
                                                                     "[Background Polling] Auto backup created: {}",
                                                                     backup_id
                                                                 );
-                                                                let _ = s.record_auto_backup_time();
+                                                                if let Err(e) = s.record_auto_backup_time() {
+                                                                    log::warn!("[Background Polling] Failed to record auto backup time (next backup timing may be affected): {}", e);
+                                                                }
                                                                 Ok(())
                                                             }
                                                             Err(e) => Err(e),

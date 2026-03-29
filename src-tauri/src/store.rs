@@ -870,10 +870,18 @@ impl StoreManager {
             } else {
                 // Resolve relative paths against the app directory to ensure
                 // consistent behaviour regardless of the process working directory.
-                self.settings_path.parent().unwrap().join(&path)
+                self.settings_path
+                    .parent()
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_else(|| std::path::PathBuf::from("."))
+                    .join(&path)
             }
         } else {
-            self.settings_path.parent().unwrap().join("backups")
+            self.settings_path
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                .join("backups")
         }
     }
 

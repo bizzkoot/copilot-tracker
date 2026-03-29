@@ -978,13 +978,17 @@ fn get_app_version(app: AppHandle) -> Result<String, String> {
 fn update_settings(app: AppHandle, settings: copilot_tracker::AppSettings) -> Result<(), String> {
     let store = app.state::<StoreManager>();
     let previous = store.get_settings();
+
+    let mut sanitized_settings = settings.clone();
+    sanitized_settings.refresh_interval = sanitized_settings.refresh_interval.clamp(10, 86400);
+
     store.update_settings(|s| {
-        *s = settings.clone();
+        *s = sanitized_settings.clone();
     })?;
 
-    if previous.launch_at_login != settings.launch_at_login {
+    if previous.launch_at_login != sanitized_settings.launch_at_login {
         use tauri_plugin_autostart::ManagerExt;
-        let result = if settings.launch_at_login {
+        let result = if sanitized_settings.launch_at_login {
             app.autolaunch().enable()
         } else {
             app.autolaunch().disable()
@@ -1000,18 +1004,18 @@ fn update_settings(app: AppHandle, settings: copilot_tracker::AppSettings) -> Re
     }
 
     // Restart background polling if refresh_interval changed
-    if previous.refresh_interval != settings.refresh_interval {
+    if previous.refresh_interval != sanitized_settings.refresh_interval {
         let polling_state = app.state::<PollingState>();
-        let interval_seconds = settings.refresh_interval.clamp(10, 86400) as u64;
+        let interval_seconds = sanitized_settings.refresh_interval as u64;
         polling_state.restart_polling(app.clone(), interval_seconds);
         log::info!(
             "[Settings] Refresh interval changed: {}s → {}s, polling restarted",
             previous.refresh_interval,
-            settings.refresh_interval
+            sanitized_settings.refresh_interval
         );
     }
 
-    let _ = app.emit("settings:changed", settings.clone());
+    let _ = app.emit("settings:changed", sanitized_settings.clone());
     let update_state = app.state::<UpdateState>();
     let latest = update_state.latest.lock().unwrap();
     let _ = rebuild_tray_menu(&app, latest.as_ref());
@@ -1127,14 +1131,15 @@ fn restore_backup(app: AppHandle, backup_id: String) -> Result<(), String> {
     log::info!("Emitted usage:updated after restore");
 
     // Emit settings:changed in case settings were restored
-    let current_settings = store.get_settings();
+    let mut current_settings = store.get_settings();
+    current_settings.refresh_interval = current_settings.refresh_interval.clamp(10, 86400);
     let _ = app.emit("settings:changed", current_settings.clone());
     log::info!("Emitted settings:changed after restore");
 
     // Restart background polling with the restored refresh interval so that
     // any change in refresh_interval from the backup takes effect immediately.
     let polling_state = app.state::<PollingState>();
-    let interval_seconds = current_settings.refresh_interval.clamp(10, 86400) as u64;
+    let interval_seconds = current_settings.refresh_interval as u64;
     polling_state.restart_polling(app.clone(), interval_seconds);
     log::info!(
         "Restarted polling after restore with interval: {}s",

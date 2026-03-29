@@ -82,9 +82,24 @@ function calculateSMA(data: number[], period: number = 7): number[] {
   return sma;
 }
 
+/** Returns true when every day in the period has an estimated quota */
+function computeQuotaEstimated(
+  periodData: Array<{ quotaEstimated?: boolean }>,
+): boolean {
+  if (periodData.length === 0) return false;
+  return periodData.filter((d) => d.quotaEstimated === false).length === 0;
+}
+
+/** Returns utilization percentage, or 0 if quota is 0 */
+function computeUtilization(used: number, quota: number): number {
+  return quota > 0 ? (used / quota) * 100 : 0;
+}
+
 export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [timeframe, setTimeframe] = useState<Timeframe>("current_month");
+
+  const chartHeight = 300;
 
   const historyDays = history?.days ?? [];
 
@@ -108,14 +123,21 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
     const firstDay = sortedDays[0];
     const lastDay = sortedDays[sortedDays.length - 1];
 
+    const today = new Date();
     const startDate =
       typeof firstDay.date === "string"
         ? new Date(firstDay.date)
         : new Date(firstDay.date);
-    const endDate =
-      typeof lastDay.date === "string"
-        ? new Date(lastDay.date)
-        : new Date(lastDay.date);
+    const endDate = lastDay
+      ? new Date(
+          Math.max(
+            today.getTime(),
+            new Date(
+              typeof lastDay.date === "string" ? lastDay.date : lastDay.date,
+            ).getTime(),
+          ),
+        )
+      : today;
 
     // Normalize to start of UTC day to avoid timezone shifts during loop
     startDate.setUTCHours(0, 0, 0, 0);
@@ -228,10 +250,10 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
           });
         }
 
-        const current = monthlyMap.get(key)!;
-        current.usage += d.usage;
-        current.included = (current.included || 0) + d.included;
-        current.billed = (current.billed || 0) + d.billed;
+        const aggregatedMonth = monthlyMap.get(key)!;
+        aggregatedMonth.usage += d.usage;
+        aggregatedMonth.included = (aggregatedMonth.included || 0) + d.included;
+        aggregatedMonth.billed = (aggregatedMonth.billed || 0) + d.billed;
       }
 
       const result = Array.from(monthlyMap.values()).sort(
@@ -275,10 +297,7 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
         }
 
         // A month is "estimated" if all of its days use estimated quota
-        const nonEstimatedCount = monthData.filter(
-          (d) => d.quotaEstimated === false,
-        ).length;
-        r.quotaEstimated = nonEstimatedCount === 0 && monthData.length > 0;
+        r.quotaEstimated = computeQuotaEstimated(monthData);
 
         // Detect a plan change: quota differs from the previous month's quota
         if (
@@ -291,9 +310,7 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
         }
         previousMonthQuota = r.quota;
 
-        if (r.quota > 0) {
-          r.utilization = (r.usage / r.quota) * 100;
-        }
+        r.utilization = computeUtilization(r.usage, r.quota);
       }
 
       return result;
@@ -407,10 +424,7 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
         }
 
         // Estimated if no day in this year has a confirmed quota
-        const nonEstimatedCount = yearData.filter(
-          (d) => d.quotaEstimated === false,
-        ).length;
-        r.quotaEstimated = nonEstimatedCount === 0 && yearData.length > 0;
+        r.quotaEstimated = computeQuotaEstimated(yearData);
 
         // Detect plan change across years
         if (
@@ -423,9 +437,7 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
         }
         previousYearQuota = r.quota;
 
-        if (r.quota > 0) {
-          r.utilization = (r.usage / r.quota) * 100;
-        }
+        r.utilization = computeUtilization(r.usage, r.quota);
       }
 
       return result;
@@ -546,7 +558,7 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
             {timeframe === "current_month" ? (
               <LineChart
                 width={48}
-                height={300}
+                height={chartHeight}
                 data={aggregatedData}
                 margin={{ top: 46, right: 0, left: 0, bottom: 20 }}
               >
@@ -563,7 +575,7 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
             ) : (
               <BarChart
                 width={48}
-                height={300}
+                height={chartHeight}
                 data={aggregatedData}
                 margin={{ top: 46, right: 0, left: 0, bottom: 20 }}
               >
@@ -589,7 +601,7 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
               {timeframe === "current_month" && (
                 <LineChart
                   width={chartWidth}
-                  height={300}
+                  height={chartHeight}
                   data={aggregatedData}
                   margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
                 >
@@ -741,7 +753,7 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
               {timeframe !== "current_month" && (
                 <BarChart
                   width={chartWidth}
-                  height={300}
+                  height={chartHeight}
                   data={aggregatedData}
                   margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
                   barSize={40}

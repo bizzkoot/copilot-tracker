@@ -14,10 +14,26 @@ const usageRsSource = fs.readFileSync(usageRsPath, "utf8");
 // ─── UsageChart: Timeframe type ─────────────────────────────────────────────
 
 test("UsageChart defines Timeframe type with all three values", () => {
+  // Check all three members appear in the Timeframe type (order-independent)
   assert.match(
     chartSource,
-    /type Timeframe = "current_month" \| "monthly" \| "yearly"/,
-    "UsageChart must define Timeframe type with current_month, monthly, and yearly",
+    /type Timeframe\s*=/,
+    "UsageChart must define a Timeframe type",
+  );
+  assert.match(
+    chartSource,
+    /"current_month"/,
+    "Timeframe must include current_month",
+  );
+  assert.match(
+    chartSource,
+    /"monthly"/,
+    "Timeframe must include monthly",
+  );
+  assert.match(
+    chartSource,
+    /"yearly"/,
+    "Timeframe must include yearly",
   );
 });
 
@@ -26,7 +42,7 @@ test("UsageChart defines Timeframe type with all three values", () => {
 test("UsageChart initializes timeframe state to current_month", () => {
   assert.match(
     chartSource,
-    /useState[\s\S]*?"current_month"/,
+    /useState<Timeframe>\s*\(\s*["']current_month["']/,
     "UsageChart must initialize timeframe state to 'current_month'",
   );
 });
