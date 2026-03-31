@@ -33,19 +33,16 @@ split_version() {
 }
 
 bump_major() {
-  local parts
   read -r major minor patch <<< "$(split_version "$1")"
   echo "$((10#$major + 1)).0.0"
 }
 
 bump_minor() {
-  local parts
   read -r major minor patch <<< "$(split_version "$1")"
   echo "$major.$((10#$minor + 1)).0"
 }
 
 bump_patch() {
-  local parts
   read -r major minor patch <<< "$(split_version "$1")"
   echo "$major.$minor.$((10#$patch + 1))"
 }

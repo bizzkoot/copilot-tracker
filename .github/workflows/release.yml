@@ -68,12 +68,12 @@ jobs:
             exit 1
           fi
 
-          # Strip pre-release suffix for comparison
-          NEW_VERSION_STABLE="${NEW_VERSION%-*}"
-          CURRENT_VERSION_STABLE="${CURRENT_VERSION%-*}"
-
-          # Verify new version > current version
-          if ! dpkg --compare-versions "$NEW_VERSION_STABLE" "gt" "$CURRENT_VERSION_STABLE"; then
+          # Verify new version > current version (sort -V handles pre-release correctly)
+          if [ "$NEW_VERSION" = "$CURRENT_VERSION" ]; then
+            echo "❌ Error: New version ($NEW_VERSION) is identical to current version"
+            exit 1
+          fi
+          if [ "$(printf '%s\n' "$CURRENT_VERSION" "$NEW_VERSION" | sort -V | head -n1)" != "$CURRENT_VERSION" ]; then
             echo "❌ Error: New version ($NEW_VERSION) must be greater than current ($CURRENT_VERSION)"
             exit 1
           fi

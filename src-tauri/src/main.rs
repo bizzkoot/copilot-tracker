@@ -831,8 +831,11 @@ async fn fetch_usage(
         };
         let _ = app.emit("usage:data", payload);
 
-        // Auto backup if scheduled
-        handle_auto_backup(&app);
+        // Auto backup if scheduled (offload sync I/O)
+        let app_handle = app.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            handle_auto_backup(&app_handle);
+        });
     }
 
     result
@@ -875,8 +878,11 @@ async fn force_fetch_usage(
         };
         let _ = app.emit("usage:data", payload);
 
-        // Auto backup if scheduled
-        handle_auto_backup(&app);
+        // Auto backup if scheduled (offload sync I/O)
+        let app_handle = app.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            handle_auto_backup(&app_handle);
+        });
     }
 
     result
@@ -979,7 +985,7 @@ fn update_settings(app: AppHandle, settings: copilot_tracker::AppSettings) -> Re
     let store = app.state::<StoreManager>();
     let previous = store.get_settings();
 
-    let mut sanitized_settings = settings.clone();
+    let mut sanitized_settings = settings;
     sanitized_settings.refresh_interval = sanitized_settings.refresh_interval.clamp(10, 86400);
 
     store.update_settings(|s| {

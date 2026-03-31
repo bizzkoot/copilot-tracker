@@ -991,15 +991,16 @@ impl StoreManager {
             return Err(format!("Backup not found: {}", backup_id));
         }
 
-        // Read metadata to verify
+        // Read metadata to verify — metadata must exist for a valid backup
         let metadata_path = backup_dir.join("metadata.json");
-        if metadata_path.exists() {
-            let _metadata: serde_json::Value = serde_json::from_str(
-                &std::fs::read_to_string(&metadata_path)
-                    .map_err(|e| format!("Failed to read metadata: {}", e))?,
-            )
-            .map_err(|e| format!("Invalid metadata: {}", e))?;
+        if !metadata_path.exists() {
+            return Err(format!("Backup metadata.json missing: {}", backup_id));
         }
+        let _metadata: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(&metadata_path)
+                .map_err(|e| format!("Failed to read metadata: {}", e))?,
+        )
+        .map_err(|e| format!("Invalid metadata: {}", e))?;
 
         // Phase 1: Load and validate ALL backup files in memory before writing anything.
         // This prevents partial restores if a later file fails to parse.
@@ -1057,15 +1058,11 @@ impl StoreManager {
                 let mut current_quota = self.quota_history.lock().unwrap();
                 *current_quota = quota_map.clone();
             }
-            // Persist to disk
-            match serde_json::to_string_pretty(&quota_map) {
-                Ok(json) => {
-                    if let Err(e) = std::fs::write(&self.quota_history_path, json) {
-                        log::warn!("Failed to persist restored quota_history.json: {}", e);
-                    }
-                }
-                Err(e) => log::warn!("Failed to serialize restored quota history: {}", e),
-            }
+            // Persist to disk — failure here should abort the restore
+            let json = serde_json::to_string_pretty(&quota_map)
+                .map_err(|e| format!("Failed to serialize restored quota history: {}", e))?;
+            std::fs::write(&self.quota_history_path, json)
+                .map_err(|e| format!("Failed to persist restored quota_history.json: {}", e))?;
         }
 
         log::info!("Backup restored: {}", backup_id);

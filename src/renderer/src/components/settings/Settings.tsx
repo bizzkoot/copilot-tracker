@@ -78,6 +78,7 @@ export function Settings({ onClose }: SettingsProps) {
     null,
   );
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [backupStatus, setBackupStatus] = useState<{
     type: "success" | "error";
     message: string;
@@ -250,6 +251,7 @@ export function Settings({ onClose }: SettingsProps) {
 
   const handleDeleteBackup = async (backupId: string) => {
     setDeletingId(backupId);
+    setConfirmingDeleteId(null);
     try {
       await window.electron.deleteBackup(backupId);
       setBackupStatus({ type: "success", message: "Backup deleted." });
@@ -951,6 +953,31 @@ export function Settings({ onClose }: SettingsProps) {
                               <span className="ml-1">Restore</span>
                             </Button>
                           )}
+                          {confirmingDeleteId === backup.backupId ? (
+                            <>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                disabled={!!deletingId || !!restoringId}
+                                onClick={() => handleDeleteBackup(backup.backupId)}
+                              >
+                                {deletingId === backup.backupId ? (
+                                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                )}
+                                <span className="ml-1">Confirm</span>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={!!deletingId || !!restoringId}
+                                onClick={() => setConfirmingDeleteId(null)}
+                              >
+                                Cancel
+                              </Button>
+                            </>
+                          ) : (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -958,7 +985,7 @@ export function Settings({ onClose }: SettingsProps) {
                             disabled={
                               deletingId === backup.backupId || !!restoringId
                             }
-                            onClick={() => handleDeleteBackup(backup.backupId)}
+                            onClick={() => setConfirmingDeleteId(backup.backupId)}
                           >
                             {deletingId === backup.backupId ? (
                               <RefreshCw className="h-3.5 w-3.5 animate-spin" />
@@ -966,6 +993,7 @@ export function Settings({ onClose }: SettingsProps) {
                               <Trash2 className="h-3.5 w-3.5" />
                             )}
                           </Button>
+                          )}
                         </div>
                       </div>
                     ))}
