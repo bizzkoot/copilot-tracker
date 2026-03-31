@@ -10,6 +10,9 @@ use crate::StoreManager;
 static HIDDEN_WEBVIEW_EVENTS: TokioMutex<Option<mpsc::Sender<HiddenWebviewEvent>>> =
     TokioMutex::const_new(None);
 
+/// Serializes concurrent extraction attempts so only one runs at a time.
+static EXTRACTION_LOCK: TokioMutex<()> = TokioMutex::const_new(());
+
 #[derive(Debug, Clone)]
 pub struct HiddenWebviewEvent {
     pub event: String,
@@ -1218,6 +1221,9 @@ impl AuthManager {
         &mut self,
         app: &AppHandle,
     ) -> Result<ExtractionResult, String> {
+        // Serialize concurrent extractions — second caller waits until first finishes
+        let _extraction_guard = EXTRACTION_LOCK.lock().await;
+
         // Create event channel
         let (tx, mut rx) = mpsc::channel::<HiddenWebviewEvent>(10);
 

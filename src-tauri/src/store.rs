@@ -451,7 +451,10 @@ impl StoreManager {
 
     /// Get a copy of current settings
     pub fn get_settings(&self) -> AppSettings {
-        self.settings.lock().unwrap().clone()
+        self.settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Update settings and persist to disk
@@ -459,7 +462,10 @@ impl StoreManager {
     where
         F: FnOnce(&mut AppSettings),
     {
-        let mut settings = self.settings.lock().unwrap();
+        let mut settings = self
+            .settings
+            .lock()
+            .map_err(|_| "Internal state error".to_string())?;
         updater(&mut settings);
 
         // Persist to disk
@@ -478,12 +484,18 @@ impl StoreManager {
 
     /// Get customer ID
     pub fn get_customer_id(&self) -> Option<u64> {
-        self.settings.lock().unwrap().customer_id
+        self.settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .customer_id
     }
 
     /// Set usage data (active data - written to usage_cache.json)
     pub fn set_usage(&self, used: f64, limit: u32) -> Result<(), String> {
-        let mut cache = self.usage_cache.lock().unwrap();
+        let mut cache = self
+            .usage_cache
+            .lock()
+            .map_err(|_| "Internal state error".to_string())?;
         cache.last_usage = used;
         cache.usage_limit = limit;
         cache.last_fetch_timestamp = chrono::Utc::now().timestamp();
@@ -497,18 +509,24 @@ impl StoreManager {
 
     /// Get usage data (from usage_cache.json)
     pub fn get_usage(&self) -> (f64, u32) {
-        let cache = self.usage_cache.lock().unwrap();
+        let cache = self.usage_cache.lock().unwrap_or_else(|e| e.into_inner());
         (cache.last_usage, cache.usage_limit)
     }
 
     /// Get last fetch timestamp (from usage_cache.json)
     pub fn get_last_fetch_timestamp(&self) -> i64 {
-        self.usage_cache.lock().unwrap().last_fetch_timestamp
+        self.usage_cache
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .last_fetch_timestamp
     }
 
     /// Set last update check timestamp (active data - written to usage_cache.json)
     pub fn set_last_update_check_timestamp(&self, timestamp: i64) -> Result<(), String> {
-        let mut cache = self.usage_cache.lock().unwrap();
+        let mut cache = self
+            .usage_cache
+            .lock()
+            .map_err(|_| "Internal state error".to_string())?;
         cache.last_update_check_timestamp = timestamp;
 
         // Persist to usage_cache.json
@@ -520,7 +538,10 @@ impl StoreManager {
 
     /// Get last update check timestamp (from usage_cache.json)
     pub fn get_last_update_check_timestamp(&self) -> i64 {
-        self.usage_cache.lock().unwrap().last_update_check_timestamp
+        self.usage_cache
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .last_update_check_timestamp
     }
 
     /// Set launch at login preference
@@ -532,7 +553,10 @@ impl StoreManager {
 
     /// Get launch at login preference
     pub fn get_launch_at_login(&self) -> bool {
-        self.settings.lock().unwrap().launch_at_login
+        self.settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .launch_at_login
     }
 
     /// Set show notifications preference
@@ -544,12 +568,18 @@ impl StoreManager {
 
     /// Get show notifications preference
     pub fn get_show_notifications(&self) -> bool {
-        self.settings.lock().unwrap().show_notifications
+        self.settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .show_notifications
     }
 
     /// Check if authenticated
     pub fn is_authenticated(&self) -> bool {
-        self.settings.lock().unwrap().is_authenticated
+        self.settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_authenticated
     }
 
     /// Clear authentication (logout)
@@ -562,8 +592,14 @@ impl StoreManager {
 
     /// Export usage cache for API responses (legacy compatibility)
     pub fn export_usage_cache(&self) -> Result<UsageCache, String> {
-        let settings = self.settings.lock().unwrap();
-        let cache = self.usage_cache.lock().unwrap();
+        let settings = self
+            .settings
+            .lock()
+            .map_err(|_| "Internal state error".to_string())?;
+        let cache = self
+            .usage_cache
+            .lock()
+            .map_err(|_| "Internal state error".to_string())?;
 
         let customer_id = settings.customer_id.ok_or("No customer ID available")?;
 
@@ -598,8 +634,8 @@ impl StoreManager {
     }
 
     pub fn get_usage_cache(&self) -> Option<UsageCache> {
-        let settings = self.settings.lock().unwrap();
-        let cache = self.usage_cache.lock().unwrap();
+        let settings = self.settings.lock().unwrap_or_else(|e| e.into_inner());
+        let cache = self.usage_cache.lock().unwrap_or_else(|e| e.into_inner());
 
         settings.customer_id.map(|customer_id| UsageCache {
             customer_id,
@@ -617,7 +653,7 @@ impl StoreManager {
     pub fn clear_usage_cache(&self) {
         let defaults = UsageCacheData::default();
         {
-            let mut cache = self.usage_cache.lock().unwrap();
+            let mut cache = self.usage_cache.lock().unwrap_or_else(|e| e.into_inner());
             *cache = defaults.clone();
         }
         // Persist the cleared state so next startup doesn't load stale data
@@ -631,7 +667,7 @@ impl StoreManager {
     }
 
     pub fn clear_usage_history(&self) {
-        let mut guard = self.usage_history.lock().unwrap();
+        let mut guard = self.usage_history.lock().unwrap_or_else(|e| e.into_inner());
         guard.clear();
         // Also delete the history file
         if self.history_path.exists() {
@@ -641,7 +677,7 @@ impl StoreManager {
     }
 
     pub fn set_usage_history(&self, history: Vec<UsageEntry>) {
-        let mut guard = self.usage_history.lock().unwrap();
+        let mut guard = self.usage_history.lock().unwrap_or_else(|e| e.into_inner());
         *guard = history.clone();
         drop(guard); // Release lock before disk I/O
 
@@ -657,7 +693,10 @@ impl StoreManager {
     }
 
     pub fn get_usage_history(&self) -> Vec<UsageEntry> {
-        self.usage_history.lock().unwrap().clone()
+        self.usage_history
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     // -------------------------------------------------------------------------
@@ -676,7 +715,7 @@ impl StoreManager {
         // Insert and capture snapshot under a single lock acquisition to avoid a
         // concurrent-write window between insert and clone.
         let snapshot = {
-            let mut h = self.quota_history.lock().unwrap();
+            let mut h = self.quota_history.lock().unwrap_or_else(|e| e.into_inner());
             if h.get(month) == Some(&limit) {
                 return; // Value unchanged, exit early
             }
@@ -686,7 +725,7 @@ impl StoreManager {
         // Persist snapshot to disk (best-effort; called from a sync context).
         match serde_json::to_string_pretty(&snapshot) {
             Ok(json) => {
-                if let Err(e) = std::fs::write(&self.quota_history_path, json) {
+                if let Err(e) = write_file_atomic(&self.quota_history_path, &json) {
                     log::warn!("Failed to persist quota_history.json: {}", e);
                 }
             }
@@ -696,7 +735,10 @@ impl StoreManager {
 
     /// Returns a snapshot of the full YYYY-MM → limit map.
     pub fn get_quota_map(&self) -> HashMap<String, u32> {
-        self.quota_history.lock().unwrap().clone()
+        self.quota_history
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     pub fn reset_settings(&self) -> Result<AppSettings, String> {
@@ -709,7 +751,10 @@ impl StoreManager {
         {
             let cleared_cache = UsageCacheData::default();
             {
-                let mut cache = self.usage_cache.lock().unwrap();
+                let mut cache = self
+                    .usage_cache
+                    .lock()
+                    .map_err(|_| "Internal state error".to_string())?;
                 *cache = cleared_cache.clone();
             }
             // Must persist — otherwise next restart loads stale cache from disk
@@ -723,7 +768,10 @@ impl StoreManager {
 
         // Clear usage history
         {
-            let mut history = self.usage_history.lock().unwrap();
+            let mut history = self
+                .usage_history
+                .lock()
+                .map_err(|_| "Internal state error".to_string())?;
             history.clear();
         }
 
@@ -738,7 +786,11 @@ impl StoreManager {
 
     /// Get the tray icon display format
     pub fn get_tray_icon_format(&self) -> String {
-        self.settings.lock().unwrap().tray_icon_format.clone()
+        self.settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .tray_icon_format
+            .clone()
     }
 
     /// Set the tray icon display format with validation
@@ -754,7 +806,10 @@ impl StoreManager {
 
     /// Get widget enabled state
     pub fn get_widget_enabled(&self) -> bool {
-        self.settings.lock().unwrap().widget_enabled
+        self.settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .widget_enabled
     }
 
     /// Set widget enabled state
@@ -766,7 +821,11 @@ impl StoreManager {
 
     /// Get widget position
     pub fn get_widget_position(&self) -> WidgetPosition {
-        self.settings.lock().unwrap().widget_position.clone()
+        self.settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .widget_position
+            .clone()
     }
 
     /// Set widget position
@@ -778,7 +837,10 @@ impl StoreManager {
 
     /// Get widget pinned state
     pub fn get_widget_pinned(&self) -> bool {
-        self.settings.lock().unwrap().widget_pinned
+        self.settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .widget_pinned
     }
 
     /// Set widget pinned state
@@ -790,7 +852,10 @@ impl StoreManager {
 
     /// Get widget visible state
     pub fn get_widget_visible(&self) -> bool {
-        self.settings.lock().unwrap().widget_visible
+        self.settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .widget_visible
     }
 
     /// Set widget visible state
@@ -802,7 +867,10 @@ impl StoreManager {
 
     /// Get auto backup enabled state
     pub fn get_auto_backup_enabled(&self) -> bool {
-        self.settings.lock().unwrap().auto_backup_enabled
+        self.settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .auto_backup_enabled
     }
 
     /// Set auto backup enabled state
@@ -814,7 +882,7 @@ impl StoreManager {
 
     /// Check if an auto-backup should run now based on frequency settings
     pub fn should_auto_backup(&self) -> bool {
-        let settings = self.settings.lock().unwrap();
+        let settings = self.settings.lock().unwrap_or_else(|e| e.into_inner());
         if !settings.auto_backup_enabled {
             return false;
         }
@@ -851,7 +919,11 @@ impl StoreManager {
 
     /// Get backup directory
     pub fn get_backup_directory(&self) -> Option<String> {
-        self.settings.lock().unwrap().backup_directory.clone()
+        self.settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .backup_directory
+            .clone()
     }
 
     /// Set backup directory
@@ -864,6 +936,16 @@ impl StoreManager {
     /// Get the backups directory path
     pub fn get_backups_path(&self) -> PathBuf {
         if let Some(ref custom) = self.get_backup_directory() {
+            // Reject paths with traversal components
+            if custom.contains("..") {
+                log::warn!("Path traversal detected in backup_directory, falling back to default.");
+                return self
+                    .settings_path
+                    .parent()
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_else(|| std::path::PathBuf::from("."))
+                    .join("backups");
+            }
             let path = PathBuf::from(custom);
             if path.is_absolute() {
                 path
@@ -971,7 +1053,11 @@ impl StoreManager {
         log::info!("Backup created: {}", backup_id);
 
         // Prune old backups if retention limit is set
-        let retention = self.settings.lock().unwrap().backup_retention_count;
+        let retention = self
+            .settings
+            .lock()
+            .map_err(|_| "Internal state error".to_string())?
+            .backup_retention_count;
         if retention > 0 {
             if let Err(e) = self.prune_backups(retention) {
                 log::warn!("Backup pruning failed (non-fatal): {}", e);
@@ -1047,7 +1133,10 @@ impl StoreManager {
 
         if let Some(cache) = new_cache {
             {
-                let mut current_cache = self.usage_cache.lock().unwrap();
+                let mut current_cache = self
+                    .usage_cache
+                    .lock()
+                    .map_err(|_| "Internal state error".to_string())?;
                 *current_cache = cache.clone();
             }
             Self::save_usage_cache_to_disk(&self.usage_cache_path, &cache)?;
@@ -1055,13 +1144,16 @@ impl StoreManager {
 
         if let Some(quota_map) = new_quota {
             {
-                let mut current_quota = self.quota_history.lock().unwrap();
+                let mut current_quota = self
+                    .quota_history
+                    .lock()
+                    .map_err(|_| "Internal state error".to_string())?;
                 *current_quota = quota_map.clone();
             }
             // Persist to disk — failure here should abort the restore
             let json = serde_json::to_string_pretty(&quota_map)
                 .map_err(|e| format!("Failed to serialize restored quota history: {}", e))?;
-            std::fs::write(&self.quota_history_path, json)
+            write_file_atomic(&self.quota_history_path, &json)
                 .map_err(|e| format!("Failed to persist restored quota_history.json: {}", e))?;
         }
 
@@ -1594,6 +1686,22 @@ mod tests {
             backups_path
         );
         assert!(backups_path.ends_with("my-backups"));
+    }
+
+    #[test]
+    fn get_backups_path_rejects_path_traversal() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        store
+            .set_backup_directory(Some("../../etc/evil".to_string()))
+            .unwrap();
+        let backups_path = store.get_backups_path();
+        // Path traversal should fall back to default "backups" directory
+        assert!(
+            backups_path.ends_with("backups"),
+            "path traversal must fall back to default, got: {:?}",
+            backups_path
+        );
     }
 
     #[test]

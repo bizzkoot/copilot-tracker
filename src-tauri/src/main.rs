@@ -92,7 +92,10 @@ impl PollingState {
     fn restart_polling(&self, app: AppHandle, interval_seconds: u64) {
         // Check if we're shutting down - don't start new polling tasks
         {
-            let shutting_down = self.is_shutting_down.lock().unwrap();
+            let shutting_down = self
+                .is_shutting_down
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
             if *shutting_down {
                 log::warn!("[PollingState] Ignoring restart request during shutdown");
                 return;
@@ -102,8 +105,8 @@ impl PollingState {
         // Debounce: Skip if called with same interval within debounce window
         {
             let now = std::time::Instant::now();
-            let mut last_restart = self.last_restart.lock().unwrap();
-            let mut last_interval = self.last_interval.lock().unwrap();
+            let mut last_restart = self.last_restart.lock().unwrap_or_else(|e| e.into_inner());
+            let mut last_interval = self.last_interval.lock().unwrap_or_else(|e| e.into_inner());
 
             if *last_interval == interval_seconds
                 && now.duration_since(*last_restart)
@@ -152,7 +155,10 @@ impl PollingState {
     fn stop_polling(&self) {
         // Set shutdown flag FIRST to prevent restart attempts
         {
-            let mut shutting_down = self.is_shutting_down.lock().unwrap();
+            let mut shutting_down = self
+                .is_shutting_down
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
             *shutting_down = true;
             log::info!("[PollingState] Shutdown flag set");
         }
@@ -774,7 +780,9 @@ async fn perform_auth_extraction(
     }
 
     {
-        let mut manager = auth_manager_state.lock().unwrap();
+        let mut manager = auth_manager_state
+            .lock()
+            .map_err(|_| "Internal state error".to_string())?;
         manager.finish_extraction();
     }
 
@@ -1023,7 +1031,10 @@ fn update_settings(app: AppHandle, settings: copilot_tracker::AppSettings) -> Re
 
     let _ = app.emit("settings:changed", sanitized_settings.clone());
     let update_state = app.state::<UpdateState>();
-    let latest = update_state.latest.lock().unwrap();
+    let latest = update_state
+        .latest
+        .lock()
+        .map_err(|_| "Internal state error".to_string())?;
     let _ = rebuild_tray_menu(&app, latest.as_ref());
 
     // Update tray icon with new format
@@ -1083,7 +1094,10 @@ fn reset_settings(app: AppHandle) -> Result<copilot_tracker::AppSettings, String
 
     // Rebuild tray menu
     let update_state = app.state::<UpdateState>();
-    let latest = update_state.latest.lock().unwrap();
+    let latest = update_state
+        .latest
+        .lock()
+        .map_err(|_| "Internal state error".to_string())?;
     let _ = rebuild_tray_menu(&app, latest.as_ref());
 
     Ok(defaults)
@@ -1205,7 +1219,10 @@ fn set_launch_at_login(app: AppHandle, enabled: bool) -> Result<(), String> {
     }
 
     let update_state = app.state::<UpdateState>();
-    let latest = update_state.latest.lock().unwrap();
+    let latest = update_state
+        .latest
+        .lock()
+        .map_err(|_| "Internal state error".to_string())?;
     let _ = rebuild_tray_menu(&app, latest.as_ref());
 
     Ok(())
@@ -1221,6 +1238,10 @@ fn hide_main_window(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 fn open_external_url(app: AppHandle, url: String) -> Result<(), String> {
+    // Only allow http/https URLs to prevent file://, smb://, javascript:// etc.
+    if !url.starts_with("https://") && !url.starts_with("http://") {
+        return Err(format!("Blocked URL with disallowed scheme: {}", url));
+    }
     app.opener()
         .open_url(url, None::<&str>)
         .map_err(|e| e.to_string())
@@ -1523,7 +1544,10 @@ fn process_release_data(
     // Store the last check time at the start (regardless of outcome)
     let update_state = app.state::<UpdateState>();
     let now = chrono::Local::now();
-    *update_state.last_check_time.lock().unwrap() = Some(now);
+    *update_state
+        .last_check_time
+        .lock()
+        .map_err(|_| "Internal state error".to_string())? = Some(now);
 
     // Persist to store
     let store = app.state::<StoreManager>();
@@ -1585,7 +1609,10 @@ fn process_release_data(
                 .map(|s| s.to_string()),
         };
 
-        *update_state.latest.lock().unwrap() = Some(info.clone());
+        *update_state
+            .latest
+            .lock()
+            .map_err(|_| "Internal state error".to_string())? = Some(info.clone());
 
         let _ = app.emit("update:available", info.clone());
         send_status("available", None);
@@ -1602,7 +1629,10 @@ fn process_release_data(
 
         let _ = rebuild_tray_menu(app, Some(&info));
     } else {
-        *update_state.latest.lock().unwrap() = None;
+        *update_state
+            .latest
+            .lock()
+            .map_err(|_| "Internal state error".to_string())? = None;
         send_status("none", None);
 
         // Show notification that app is up to date
@@ -1753,7 +1783,10 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
 
         let update_state = app.state::<UpdateState>();
         let now = chrono::Local::now();
-        *update_state.last_check_time.lock().unwrap() = Some(now);
+        *update_state
+            .last_check_time
+            .lock()
+            .map_err(|_| "Internal state error".to_string())? = Some(now);
 
         let store = app.state::<StoreManager>();
         let _ = store.set_last_update_check_timestamp(now.timestamp());
@@ -1802,7 +1835,10 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
                     // Store last check time even on error
                     let update_state = app.state::<UpdateState>();
                     let now = chrono::Local::now();
-                    *update_state.last_check_time.lock().unwrap() = Some(now);
+                    *update_state
+                        .last_check_time
+                        .lock()
+                        .map_err(|_| "Internal state error".to_string())? = Some(now);
 
                     // Persist to store
                     let store = app.state::<StoreManager>();
@@ -1853,7 +1889,10 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
                             // Store last check time even on error
                             let update_state = app.state::<UpdateState>();
                             let now = chrono::Local::now();
-                            *update_state.last_check_time.lock().unwrap() = Some(now);
+                            *update_state
+                                .last_check_time
+                                .lock()
+                                .map_err(|_| "Internal state error".to_string())? = Some(now);
 
                             // Persist to store
                             let store = app.state::<StoreManager>();
@@ -1891,7 +1930,10 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
                                 // Store last check time even on error
                                 let update_state = app.state::<UpdateState>();
                                 let now = chrono::Local::now();
-                                *update_state.last_check_time.lock().unwrap() = Some(now);
+                                *update_state
+                                    .last_check_time
+                                    .lock()
+                                    .map_err(|_| "Internal state error".to_string())? = Some(now);
 
                                 // Persist to store
                                 let store = app.state::<StoreManager>();
@@ -1932,7 +1974,10 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
                         // Store last check time even on error
                         let update_state = app.state::<UpdateState>();
                         let now = chrono::Local::now();
-                        *update_state.last_check_time.lock().unwrap() = Some(now);
+                        *update_state
+                            .last_check_time
+                            .lock()
+                            .map_err(|_| "Internal state error".to_string())? = Some(now);
 
                         // Persist to store
                         let store = app.state::<StoreManager>();
@@ -1978,7 +2023,11 @@ fn get_update_info(app: AppHandle) -> Result<Option<UpdateInfo>, String> {
     // This prevents missed "update:available" events by allowing the renderer
     // to pull current state on startup.
     let update_state = app.state::<UpdateState>();
-    let latest = update_state.latest.lock().unwrap().clone();
+    let latest = update_state
+        .latest
+        .lock()
+        .map_err(|_| "Internal state error".to_string())?
+        .clone();
     Ok(latest)
 }
 
@@ -2226,7 +2275,7 @@ fn main() {
 
                                     // Rebuild tray menu to show updated timestamp
                                     let update_state = app_handle.state::<UpdateState>();
-                                    let latest = update_state.latest.lock().unwrap();
+                                    let latest = update_state.latest.lock().unwrap_or_else(|e| e.into_inner());
                                     let _ = rebuild_tray_menu(&app_handle, latest.as_ref());
 
                                     // Show notification on success (if enabled)
@@ -2270,11 +2319,11 @@ fn main() {
                         let _ = toggle_widget(app.clone());
                         // Rebuild tray menu to update widget label
                         let update_state = app.state::<UpdateState>();
-                        let latest = update_state.latest.lock().unwrap();
+                        let latest = update_state.latest.lock().unwrap_or_else(|e| e.into_inner());
                         let _ = rebuild_tray_menu(app, latest.as_ref());
                     }
                     "update_check" => {
-                        let info = app.state::<UpdateState>().latest.lock().unwrap().clone();
+                        let info = app.state::<UpdateState>().latest.lock().unwrap_or_else(|e| e.into_inner()).clone();
                         if let Some(info) = info {
                             let _ = app.opener().open_url(info.release_url, None::<&str>);
                         } else {
@@ -2340,7 +2389,7 @@ fn main() {
                         let _ = toggle_widget(app.clone());
                         // Rebuild tray menu to update widget label
                         let update_state = app.state::<UpdateState>();
-                        let latest = update_state.latest.lock().unwrap();
+                        let latest = update_state.latest.lock().unwrap_or_else(|e| e.into_inner());
                         let _ = rebuild_tray_menu(app, latest.as_ref());
                     }
                 })
@@ -2376,7 +2425,7 @@ fn main() {
                 let _ = update_tray_icon_from_store(&listener_handle);
                 // Rebuild menu with fresh data from store (not using update state)
                 let update_state = listener_handle.state::<UpdateState>();
-                let latest = update_state.latest.lock().unwrap();
+                let latest = update_state.latest.lock().unwrap_or_else(|e| e.into_inner());
                 let _ = rebuild_tray_menu(&listener_handle, latest.as_ref());
                 log::info!("[TrayListener] Tray icon and menu updated successfully");
             });
@@ -2593,7 +2642,7 @@ fn main() {
 
                         // Rebuild tray menu immediately after showing widget to avoid stale label
                         let update_state = app.state::<UpdateState>();
-                        let latest = update_state.latest.lock().unwrap();
+                        let latest = update_state.latest.lock().unwrap_or_else(|e| e.into_inner());
                         let _ = rebuild_tray_menu(app.handle(), latest.as_ref());
                         drop(latest);
                     } else {
@@ -2610,7 +2659,7 @@ fn main() {
 
             // Update tray menu after widget restoration to keep label in sync
             let update_state = app.state::<UpdateState>();
-            let latest = update_state.latest.lock().unwrap();
+            let latest = update_state.latest.lock().unwrap_or_else(|e| e.into_inner());
             let _ = rebuild_tray_menu(app.handle(), latest.as_ref());
             // Explicitly drop the lock before moving on
             drop(latest);
