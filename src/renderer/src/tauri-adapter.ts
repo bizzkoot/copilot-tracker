@@ -249,7 +249,7 @@ export async function initTauriAdapter() {
           predicted_billed_amount: number;
           confidence_level: string;
           days_used_for_prediction: number;
-        };
+        } | null;
       }>("usage:data", (event) => {
         const payload = event.payload;
         const result: UsageFetchResult = {
@@ -293,7 +293,7 @@ export async function initTauriAdapter() {
                 daysUsedForPrediction:
                   payload.prediction.days_used_for_prediction,
               }
-            : undefined,
+            : null,
         };
         notifyUsageListeners(result);
       }).catch((err) =>
@@ -451,7 +451,7 @@ export async function initTauriAdapter() {
               predicted_billed_amount: number;
               confidence_level: string;
               days_used_for_prediction: number;
-            };
+            } | null;
           } | null>("get_cached_usage_data");
 
           if (!payload) {
@@ -499,7 +499,7 @@ export async function initTauriAdapter() {
                   daysUsedForPrediction:
                     payload.prediction.days_used_for_prediction,
                 }
-              : undefined,
+              : null,
           };
           return result;
         } catch (err) {

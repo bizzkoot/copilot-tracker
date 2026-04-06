@@ -26,7 +26,7 @@ export interface UsageFetchResult {
   success: boolean;
   usage?: CopilotUsage;
   history?: UsageHistory;
-  prediction?: UsagePrediction;
+  prediction?: UsagePrediction | null;
   error?: string;
   debugRawRows?: unknown[];
 }

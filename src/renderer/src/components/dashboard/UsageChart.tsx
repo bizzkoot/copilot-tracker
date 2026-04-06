@@ -534,11 +534,7 @@ export function UsageChart({ history, usage, isLoading }: UsageChartProps) {
           <Tabs
             value={timeframe}
             onValueChange={(v) => {
-              if (
-                v === "current_month" ||
-                v === "monthly" ||
-                v === "yearly"
-              ) {
+              if (v === "current_month" || v === "monthly" || v === "yearly") {
                 setTimeframe(v);
               }
             }}

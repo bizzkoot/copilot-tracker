@@ -25,16 +25,8 @@ test("UsageChart defines Timeframe type with all three values", () => {
     /"current_month"/,
     "Timeframe must include current_month",
   );
-  assert.match(
-    chartSource,
-    /"monthly"/,
-    "Timeframe must include monthly",
-  );
-  assert.match(
-    chartSource,
-    /"yearly"/,
-    "Timeframe must include yearly",
-  );
+  assert.match(chartSource, /"monthly"/, "Timeframe must include monthly");
+  assert.match(chartSource, /"yearly"/, "Timeframe must include yearly");
 });
 
 // ─── UsageChart: Default timeframe is current_month ─────────────────────────
@@ -297,9 +289,21 @@ test("timeframe onValueChange validates value before calling setTimeframe (no un
     "onValueChange must NOT use 'as Timeframe' unsafe cast — use a runtime type guard instead",
   );
   // Verify each valid value is guarded individually (resilient to formatting changes)
-  assert.match(chartSource, /v\s*===\s*"current_month"/, "type guard must check for current_month");
-  assert.match(chartSource, /v\s*===\s*"monthly"/, "type guard must check for monthly");
-  assert.match(chartSource, /v\s*===\s*"yearly"/, "type guard must check for yearly");
+  assert.match(
+    chartSource,
+    /v\s*===\s*"current_month"/,
+    "type guard must check for current_month",
+  );
+  assert.match(
+    chartSource,
+    /v\s*===\s*"monthly"/,
+    "type guard must check for monthly",
+  );
+  assert.match(
+    chartSource,
+    /v\s*===\s*"yearly"/,
+    "type guard must check for yearly",
+  );
 });
 
 // ─── UsageChart: O(n) monthly aggregation uses pre-grouped Map ──────────────

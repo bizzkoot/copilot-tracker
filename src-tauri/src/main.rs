@@ -151,19 +151,8 @@ impl PollingState {
         }
     }
 
-    /// Stop background polling and mark as shutting down
+    /// Stop background polling without blocking future restarts.
     fn stop_polling(&self) {
-        // Set shutdown flag FIRST to prevent restart attempts
-        {
-            let mut shutting_down = self
-                .is_shutting_down
-                .lock()
-                .unwrap_or_else(|e| e.into_inner());
-            *shutting_down = true;
-            log::info!("[PollingState] Shutdown flag set");
-        }
-
-        // Then cancel the polling task
         if let Ok(mut guard) = self.cancel_tx.lock() {
             if let Some(tx) = guard.take() {
                 match tx.try_send(()) {
@@ -177,6 +166,20 @@ impl PollingState {
                 }
             }
         }
+    }
+
+    /// Stop background polling permanently because the app is shutting down.
+    fn shutdown_polling(&self) {
+        {
+            let mut shutting_down = self
+                .is_shutting_down
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            *shutting_down = true;
+            log::info!("[PollingState] Shutdown flag set");
+        }
+
+        self.stop_polling();
     }
 }
 
@@ -1069,7 +1072,8 @@ fn reset_settings(app: AppHandle) -> Result<copilot_tracker::AppSettings, String
     let _ = app.emit("settings:changed", defaults.clone());
     log::info!("Emitted settings:changed with defaults");
 
-    // CRITICAL: Emit usage:updated with empty data to reset tray icon
+    // Emit empty usage:data so renderer consumers clear stale state without
+    // re-triggering the tray's usage:updated repaint path.
     let (used, limit) = store.get_usage();
     log::info!("Reset usage values: used={}, limit={}", used, limit);
 
@@ -1084,8 +1088,15 @@ fn reset_settings(app: AppHandle) -> Result<copilot_tracker::AppSettings, String
         },
         timestamp: chrono::Utc::now().timestamp(),
     };
-    let _ = app.emit("usage:updated", &summary);
-    log::info!("Emitted usage:updated to reset tray icon");
+    let _ = app.emit(
+        "usage:data",
+        copilot_tracker::UsagePayload {
+            summary: summary.clone(),
+            history: vec![],
+            prediction: None,
+        },
+    );
+    log::info!("Emitted empty usage:data to clear renderer state");
 
     // Update tray icon directly to "1" (unauthenticated state)
     let tray_state = app.state::<TrayState>();
@@ -1187,7 +1198,7 @@ fn delete_backup(app: AppHandle, backup_id: String) -> Result<(), String> {
 #[tauri::command]
 async fn logout(app: AppHandle) -> Result<(), String> {
     let store = app.state::<StoreManager>();
-    store.clear_auth()?;
+    store.clear_user_session()?;
 
     // Stop background polling when user logs out
     let polling_state = app.state::<PollingState>();
@@ -1196,6 +1207,35 @@ async fn logout(app: AppHandle) -> Result<(), String> {
 
     // Emit event to frontend
     let _ = app.emit("auth:state-changed", "unauthenticated");
+    let (used, limit) = store.get_usage();
+    let summary = copilot_tracker::UsageSummary {
+        used,
+        limit,
+        remaining: (limit as f64 - used).max(0.0),
+        percentage: if limit > 0 {
+            (used / limit as f64 * 100.0) as f32
+        } else {
+            0.0
+        },
+        timestamp: chrono::Utc::now().timestamp(),
+    };
+    let _ = app.emit(
+        "usage:data",
+        copilot_tracker::UsagePayload {
+            summary: summary.clone(),
+            history: vec![],
+            prediction: None,
+        },
+    );
+    let tray_state = app.state::<TrayState>();
+    let _ = update_tray_icon(&app, &tray_state, 1.0, 0, "currentTotal");
+
+    let update_state = app.state::<UpdateState>();
+    let latest = update_state
+        .latest
+        .lock()
+        .map_err(|_| "Internal state error".to_string())?;
+    let _ = rebuild_tray_menu(&app, latest.as_ref());
 
     Ok(())
 }
@@ -2233,7 +2273,7 @@ fn main() {
 
                         // Stop background polling before app exit
                         let polling_state = app.state::<PollingState>();
-                        polling_state.stop_polling();
+                        polling_state.shutdown_polling();
                         log::info!("[Shutdown] Background polling stopped, exiting app");
                         app.exit(0);
                     }
@@ -2428,6 +2468,25 @@ fn main() {
                 let latest = update_state.latest.lock().unwrap_or_else(|e| e.into_inner());
                 let _ = rebuild_tray_menu(&listener_handle, latest.as_ref());
                 log::info!("[TrayListener] Tray icon and menu updated successfully");
+            });
+
+            let auth_listener_handle = app_handle.clone();
+            app_handle.listen("auth:state-changed", move |event| {
+                let state = event.payload().trim_matches('"');
+                let polling_state = auth_listener_handle.state::<PollingState>();
+
+                if state == "authenticated" {
+                    let store = auth_listener_handle.state::<StoreManager>();
+                    let interval_seconds = store.get_settings().refresh_interval as u64;
+                    polling_state.restart_polling(auth_listener_handle.clone(), interval_seconds);
+                    log::info!(
+                        "[AuthListener] Restarted polling after authentication with interval: {}s",
+                        interval_seconds
+                    );
+                } else if state == "unauthenticated" {
+                    polling_state.stop_polling();
+                    log::info!("[AuthListener] Stopped polling after logout");
+                }
             });
 
             // Prevent app from quitting when main window is closed (hide instead)
@@ -2694,4 +2753,20 @@ fn main() {
         })
         .run(context)
         .expect("error while running tauri app");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stop_polling_does_not_mark_shutdown() {
+        let polling = PollingState::new();
+        polling.stop_polling();
+
+        assert!(!*polling
+            .is_shutting_down
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()));
+    }
 }

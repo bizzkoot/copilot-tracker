@@ -78,7 +78,9 @@ export function Settings({ onClose }: SettingsProps) {
     null,
   );
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(
+    null,
+  );
   const [backupStatus, setBackupStatus] = useState<{
     type: "success" | "error";
     message: string;
@@ -243,7 +245,10 @@ export function Settings({ onClose }: SettingsProps) {
         console.error("Restore succeeded but failed to refresh list:", listErr);
       }
     } catch (e) {
-      setBackupStatus({ type: "error", message: `Failed to restore: ${toErrorMessage(e)}` });
+      setBackupStatus({
+        type: "error",
+        message: `Failed to restore: ${toErrorMessage(e)}`,
+      });
     } finally {
       setRestoringId(null);
     }
@@ -258,10 +263,16 @@ export function Settings({ onClose }: SettingsProps) {
       try {
         await loadBackups();
       } catch (listErr) {
-        console.error("Deletion succeeded but failed to refresh list:", listErr);
+        console.error(
+          "Deletion succeeded but failed to refresh list:",
+          listErr,
+        );
       }
     } catch (e) {
-      setBackupStatus({ type: "error", message: `Failed to delete: ${toErrorMessage(e)}` });
+      setBackupStatus({
+        type: "error",
+        message: `Failed to delete: ${toErrorMessage(e)}`,
+      });
     } finally {
       setDeletingId(null);
     }
@@ -959,7 +970,9 @@ export function Settings({ onClose }: SettingsProps) {
                                 variant="destructive"
                                 size="sm"
                                 disabled={!!deletingId || !!restoringId}
-                                onClick={() => handleDeleteBackup(backup.backupId)}
+                                onClick={() =>
+                                  handleDeleteBackup(backup.backupId)
+                                }
                               >
                                 {deletingId === backup.backupId ? (
                                   <RefreshCw className="h-3.5 w-3.5 animate-spin" />
@@ -978,21 +991,23 @@ export function Settings({ onClose }: SettingsProps) {
                               </Button>
                             </>
                           ) : (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                            disabled={
-                              deletingId === backup.backupId || !!restoringId
-                            }
-                            onClick={() => setConfirmingDeleteId(backup.backupId)}
-                          >
-                            {deletingId === backup.backupId ? (
-                              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Trash2 className="h-3.5 w-3.5" />
-                            )}
-                          </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              disabled={
+                                deletingId === backup.backupId || !!restoringId
+                              }
+                              onClick={() =>
+                                setConfirmingDeleteId(backup.backupId)
+                              }
+                            >
+                              {deletingId === backup.backupId ? (
+                                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
                           )}
                         </div>
                       </div>
