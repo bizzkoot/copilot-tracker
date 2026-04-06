@@ -857,14 +857,7 @@ async fn force_fetch_usage(
     app: AppHandle,
     _state: tauri::State<'_, AuthManagerState>,
 ) -> Result<copilot_tracker::UsageSummary, String> {
-    log::info!("Force fetch usage - clearing cache first");
-
-    // Clear cache first
-    {
-        let store = app.state::<StoreManager>();
-        store.clear_usage_cache();
-        store.clear_usage_history();
-    }
+    log::info!("Force fetch usage - keeping cached data until refresh succeeds");
 
     // Now fetch fresh data
     let _ = app.emit("usage:loading", true);
@@ -1778,48 +1771,9 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
         };
 
         log::warn!(
-            "[Update] Windows reqwest failed: {}. Trying relaxed TLS fallback...",
+            "[Update] Windows reqwest failed: {}. Falling back to browser releases page.",
             reqwest_error
         );
-
-        let relaxed_client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(10))
-            .danger_accept_invalid_certs(true)
-            .danger_accept_invalid_hostnames(true)
-            .build()
-            .map_err(|e| format!("Failed to build relaxed reqwest client: {}", e))?;
-
-        let relaxed_response = relaxed_client
-            .get(GITHUB_API_URL)
-            .header("User-Agent", "Copilot-Tracker-App")
-            .send()
-            .await;
-
-        let relaxed_error = match relaxed_response {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    let mut parse_error: Option<String> = None;
-                    let release = match resp.json().await {
-                        Ok(value) => value,
-                        Err(err) => {
-                            parse_error = Some(format!("failed to parse response: {}", err));
-                            serde_json::Value::Null
-                        }
-                    };
-
-                    if !release.is_null() {
-                        log::info!("[Update] Relaxed reqwest fallback succeeded");
-                        process_release_data(&app, release, &send_status)?;
-                        return Ok(());
-                    }
-
-                    parse_error.unwrap_or_else(|| "failed to parse response".to_string())
-                } else {
-                    format!("HTTP {}", resp.status())
-                }
-            }
-            Err(err) => err.to_string(),
-        };
 
         let update_state = app.state::<UpdateState>();
         let now = chrono::Local::now();
@@ -1832,8 +1786,8 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
         let _ = store.set_last_update_check_timestamp(now.timestamp());
 
         let final_error = format!(
-            "Update check failed (webview: {}, reqwest: {}, reqwest_relaxed: {})",
-            webview_error, reqwest_error, relaxed_error
+            "Update check failed (webview: {}, reqwest: {})",
+            webview_error, reqwest_error
         );
         send_status("error", Some(final_error.as_str()));
 
@@ -2768,5 +2722,47 @@ mod tests {
             .is_shutting_down
             .lock()
             .unwrap_or_else(|e| e.into_inner()));
+    }
+
+    #[test]
+    fn windows_update_fallback_never_disables_tls_or_hostname_validation() {
+        let source = include_str!("main.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("main.rs should contain test module marker");
+
+        assert!(
+            !source.contains("danger_accept_invalid_certs"),
+            "update checks must not disable TLS certificate validation"
+        );
+        assert!(
+            !source.contains("danger_accept_invalid_hostnames"),
+            "update checks must not disable hostname validation"
+        );
+        assert!(
+            source.contains("https://github.com/bizzkoot/copilot-tracker/releases/latest"),
+            "safe browser fallback should still use the hardcoded releases URL"
+        );
+    }
+
+    #[test]
+    fn force_fetch_usage_keeps_cached_usage_until_refresh_succeeds() {
+        let source = include_str!("main.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("main.rs should contain test module marker");
+        let force_fetch_section = source
+            .split("async fn force_fetch_usage")
+            .nth(1)
+            .expect("force_fetch_usage should exist");
+
+        assert!(
+            !force_fetch_section.contains("clear_usage_cache"),
+            "force refresh must not clear offline cached usage before a new fetch succeeds"
+        );
+        assert!(
+            !force_fetch_section.contains("clear_usage_history"),
+            "force refresh must not clear offline cached history before a new fetch succeeds"
+        );
     }
 }

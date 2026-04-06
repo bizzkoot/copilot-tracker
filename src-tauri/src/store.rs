@@ -598,6 +598,25 @@ impl StoreManager {
         Ok(())
     }
 
+    pub fn persist_usage_snapshot(
+        &self,
+        used: f64,
+        limit: u32,
+        history: Vec<UsageEntry>,
+        quota: HashMap<String, u32>,
+    ) -> Result<(), String> {
+        let mut cache = self.snapshot_usage_state()?.0;
+        cache.last_usage = used;
+        cache.usage_limit = limit;
+        cache.last_fetch_timestamp = chrono::Utc::now().timestamp();
+        self.replace_usage_state(cache, history, quota)
+    }
+
+    pub fn persist_history_snapshot(&self, history: Vec<UsageEntry>) -> Result<(), String> {
+        let (cache, _, quota) = self.snapshot_usage_state()?;
+        self.replace_usage_state(cache, history, quota)
+    }
+
     /// Get a copy of current settings
     pub fn get_settings(&self) -> AppSettings {
         self.settings
@@ -724,17 +743,23 @@ impl StoreManager {
 
     /// Set usage data (active data - written to usage_cache.json)
     pub fn set_usage(&self, used: f64, limit: u32) -> Result<(), String> {
+        let _state_operation = self.lock_state_operation()?;
+        let mut updated = self
+            .usage_cache
+            .lock()
+            .map_err(|_| "Internal state error".to_string())?
+            .clone();
+        updated.last_usage = used;
+        updated.usage_limit = limit;
+        updated.last_fetch_timestamp = chrono::Utc::now().timestamp();
+
+        Self::save_usage_cache_to_disk(&self.usage_cache_path, &updated)?;
+
         let mut cache = self
             .usage_cache
             .lock()
             .map_err(|_| "Internal state error".to_string())?;
-        cache.last_usage = used;
-        cache.usage_limit = limit;
-        cache.last_fetch_timestamp = chrono::Utc::now().timestamp();
-
-        // Persist to usage_cache.json
-        Self::save_usage_cache_to_disk(&self.usage_cache_path, &cache)?;
-        drop(cache);
+        *cache = updated;
 
         Ok(())
     }
@@ -755,6 +780,7 @@ impl StoreManager {
 
     /// Set last update check timestamp (active data - written to usage_cache.json)
     pub fn set_last_update_check_timestamp(&self, timestamp: i64) -> Result<(), String> {
+        let _state_operation = self.lock_state_operation()?;
         let mut cache = self
             .usage_cache
             .lock()
@@ -946,14 +972,12 @@ impl StoreManager {
     }
 
     pub fn set_usage_history(&self, history: Vec<UsageEntry>) {
-        let mut guard = self.usage_history.lock().unwrap_or_else(|e| e.into_inner());
-        *guard = history.clone();
-        drop(guard); // Release lock before disk I/O
-
-        // Persist to disk
         if let Err(e) = Self::save_history_to_disk(&self.history_path, &history) {
             log::error!("Failed to save usage history to disk: {}", e);
         } else {
+            let mut guard = self.usage_history.lock().unwrap_or_else(|e| e.into_inner());
+            *guard = history.clone();
+            drop(guard);
             log::info!(
                 "Successfully saved {} history entries to disk",
                 history.len()
@@ -980,22 +1004,23 @@ impl StoreManager {
         if limit == 0 {
             return;
         }
-        // Only write to disk when the value actually changes to reduce I/O.
-        // Insert and capture snapshot under a single lock acquisition to avoid a
-        // concurrent-write window between insert and clone.
-        let snapshot = {
-            let mut h = self.quota_history.lock().unwrap_or_else(|e| e.into_inner());
+        let updated_snapshot = {
+            let h = self.quota_history.lock().unwrap_or_else(|e| e.into_inner());
             if h.get(month) == Some(&limit) {
-                return; // Value unchanged, exit early
+                return;
             }
-            h.insert(month.to_string(), limit);
-            h.clone() // Capture snapshot while holding lock
+            let mut snapshot = h.clone();
+            snapshot.insert(month.to_string(), limit);
+            snapshot
         };
-        // Persist snapshot to disk (best-effort; called from a sync context).
-        match serde_json::to_string_pretty(&snapshot) {
+
+        match serde_json::to_string_pretty(&updated_snapshot) {
             Ok(json) => {
                 if let Err(e) = write_file_atomic(&self.quota_history_path, &json) {
                     log::warn!("Failed to persist quota_history.json: {}", e);
+                } else {
+                    let mut h = self.quota_history.lock().unwrap_or_else(|e| e.into_inner());
+                    *h = updated_snapshot;
                 }
             }
             Err(e) => log::warn!("Failed to serialize quota history: {}", e),
@@ -1285,36 +1310,32 @@ impl StoreManager {
 
         // Write metadata
         let mut files = Vec::new();
-        if self.history_path.exists() {
-            let history_path = temp_dir.join("usage_history.json");
-            write_file_atomic(
-                &history_path,
-                &serde_json::to_string_pretty(&history)
-                    .map_err(|e| format!("Failed to serialize history backup: {}", e))?,
-            )
-            .map_err(|e| format!("Failed to write history backup to temp: {}", e))?;
-            files.push("usage_history.json".to_string());
-        }
-        if self.usage_cache_path.exists() {
-            let cache_path = temp_dir.join("usage_cache.json");
-            write_file_atomic(
-                &cache_path,
-                &serde_json::to_string_pretty(&usage_cache)
-                    .map_err(|e| format!("Failed to serialize cache backup: {}", e))?,
-            )
-            .map_err(|e| format!("Failed to write cache backup to temp: {}", e))?;
-            files.push("usage_cache.json".to_string());
-        }
-        if self.quota_history_path.exists() {
-            let quota_path = temp_dir.join("quota_history.json");
-            write_file_atomic(
-                &quota_path,
-                &serde_json::to_string_pretty(&quota_history)
-                    .map_err(|e| format!("Failed to serialize quota history backup: {}", e))?,
-            )
-            .map_err(|e| format!("Failed to write quota history backup to temp: {}", e))?;
-            files.push("quota_history.json".to_string());
-        }
+        let history_path = temp_dir.join("usage_history.json");
+        write_file_atomic(
+            &history_path,
+            &serde_json::to_string_pretty(&history)
+                .map_err(|e| format!("Failed to serialize history backup: {}", e))?,
+        )
+        .map_err(|e| format!("Failed to write history backup to temp: {}", e))?;
+        files.push("usage_history.json".to_string());
+
+        let cache_path = temp_dir.join("usage_cache.json");
+        write_file_atomic(
+            &cache_path,
+            &serde_json::to_string_pretty(&usage_cache)
+                .map_err(|e| format!("Failed to serialize cache backup: {}", e))?,
+        )
+        .map_err(|e| format!("Failed to write cache backup to temp: {}", e))?;
+        files.push("usage_cache.json".to_string());
+
+        let quota_path = temp_dir.join("quota_history.json");
+        write_file_atomic(
+            &quota_path,
+            &serde_json::to_string_pretty(&quota_history)
+                .map_err(|e| format!("Failed to serialize quota history backup: {}", e))?,
+        )
+        .map_err(|e| format!("Failed to write quota history backup to temp: {}", e))?;
+        files.push("quota_history.json".to_string());
 
         let metadata = BackupMetadata {
             backup_id: backup_id.clone(),
@@ -1375,21 +1396,27 @@ impl StoreManager {
             )
             .map_err(|e| format!("Invalid metadata: {}", e))?;
 
-            if let Some(current_customer_id) = self.get_customer_id() {
-                match metadata.customer_id {
-                    Some(backup_customer_id) if backup_customer_id != current_customer_id => {
-                        return Err(format!(
-                            "Backup belongs to a different account (backup={}, current={})",
-                            backup_customer_id, current_customer_id
-                        ));
-                    }
-                    None => {
-                        return Err(
-                            "Backup does not include customer identity and cannot be restored while authenticated".to_string(),
-                        );
-                    }
-                    _ => {}
+            match (self.get_customer_id(), metadata.customer_id) {
+                (Some(current_customer_id), Some(backup_customer_id))
+                    if backup_customer_id != current_customer_id =>
+                {
+                    return Err(format!(
+                        "Backup belongs to a different account (backup={}, current={})",
+                        backup_customer_id, current_customer_id
+                    ));
                 }
+                (Some(_), None) => {
+                    return Err(
+                        "Backup does not include customer identity and cannot be restored while authenticated".to_string(),
+                    );
+                }
+                (None, Some(backup_customer_id)) => {
+                    return Err(format!(
+                        "Authenticated backup for account {} cannot be restored while logged out",
+                        backup_customer_id
+                    ));
+                }
+                _ => {}
             }
 
             let expected_files: HashSet<String> = metadata.files.iter().cloned().collect();
@@ -2047,7 +2074,6 @@ mod tests {
         let backup_dir = store.get_backups_path().join(&backup_id);
         std::fs::remove_file(backup_dir.join("usage_history.json")).unwrap();
 
-        store.clear_user_session().unwrap();
         let result = store.restore_backup(&backup_id);
 
         assert!(result.is_err());
@@ -2055,7 +2081,8 @@ mod tests {
             .unwrap_err()
             .contains("usage_history.json is missing from backup"));
         assert_eq!(store.get_usage(), (0.0, 0));
-        assert!(store.get_usage_history().is_empty());
+        assert_eq!(store.get_customer_id(), Some(1));
+        assert_eq!(store.get_usage_history().len(), 1);
     }
 
     #[test]
@@ -2089,6 +2116,27 @@ mod tests {
         assert!(result
             .unwrap_err()
             .contains("does not include customer identity"));
+    }
+
+    #[test]
+    fn restore_backup_rejects_authenticated_backup_while_logged_out() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+
+        store.set_customer_id(77).unwrap();
+        store.set_usage(42.0, 1200).unwrap();
+        let backup_id = store.create_backup().unwrap();
+
+        store.clear_user_session().unwrap();
+        let result = store.restore_backup(&backup_id);
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("cannot be restored while logged out"));
+        assert_eq!(store.get_customer_id(), None);
+        assert!(!store.is_authenticated());
+        assert_eq!(store.get_usage(), (0.0, 0));
     }
 
     #[test]
@@ -2523,6 +2571,145 @@ mod tests {
         let meta: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert_eq!(meta["backup_id"].as_str().unwrap(), backup_id);
         assert!(meta["created_at"].as_str().is_some());
+    }
+
+    #[test]
+    fn create_backup_serializes_snapshotted_state_when_sidecar_files_are_missing() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        store.set_customer_id(77).unwrap();
+        store.set_usage(42.0, 1200).unwrap();
+        store.set_usage_history(vec![usage_entry(1_712_448_000, 42.0, 1200)]);
+        store.record_quota_for_month("2026-04", 1200);
+
+        std::fs::remove_file(&store.usage_cache_path).unwrap();
+        std::fs::remove_file(&store.history_path).unwrap();
+        std::fs::remove_file(&store.quota_history_path).unwrap();
+
+        let backup_id = store.create_backup().unwrap();
+        let backup_dir = store.get_backups_path().join(&backup_id);
+        let metadata: BackupMetadata = serde_json::from_str(
+            &std::fs::read_to_string(backup_dir.join("metadata.json")).unwrap(),
+        )
+        .unwrap();
+
+        assert!(
+            metadata.files.contains(&"usage_cache.json".to_string()),
+            "in-memory cache snapshot must be backed up even when usage_cache.json is missing"
+        );
+        assert!(
+            metadata.files.contains(&"usage_history.json".to_string()),
+            "in-memory history snapshot must be backed up even when usage_history.json is missing"
+        );
+        assert!(
+            metadata.files.contains(&"quota_history.json".to_string()),
+            "in-memory quota snapshot must be backed up even when quota_history.json is missing"
+        );
+
+        let restored_cache: UsageCacheData = serde_json::from_str(
+            &std::fs::read_to_string(backup_dir.join("usage_cache.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(restored_cache.last_usage, 42.0);
+        assert_eq!(restored_cache.usage_limit, 1200);
+
+        let restored_history: Vec<crate::usage::UsageEntry> = serde_json::from_str(
+            &std::fs::read_to_string(backup_dir.join("usage_history.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(restored_history.len(), 1);
+        assert_eq!(restored_history[0].used, 42.0);
+
+        let restored_quota: HashMap<String, u32> = serde_json::from_str(
+            &std::fs::read_to_string(backup_dir.join("quota_history.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            restored_quota,
+            HashMap::from([(String::from("2026-04"), 1200)])
+        );
+    }
+
+    #[test]
+    fn set_usage_keeps_previous_cache_when_persistence_fails() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        store.set_usage(42.0, 1200).unwrap();
+
+        std::fs::remove_file(&store.usage_cache_path).unwrap();
+        std::fs::create_dir(&store.usage_cache_path).unwrap();
+
+        let result = store.set_usage(99.0, 2400);
+
+        assert!(result.is_err());
+        assert_eq!(store.get_usage(), (42.0, 1200));
+    }
+
+    #[test]
+    fn set_usage_history_keeps_previous_state_when_persistence_fails() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        store.set_usage_history(vec![usage_entry(1_712_448_000, 42.0, 1200)]);
+
+        std::fs::remove_file(&store.history_path).unwrap();
+        std::fs::create_dir(&store.history_path).unwrap();
+
+        store.set_usage_history(vec![usage_entry(1_712_534_400, 99.0, 2400)]);
+
+        let history = store.get_usage_history();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].timestamp, 1_712_448_000);
+        assert_eq!(history[0].used, 42.0);
+        assert_eq!(history[0].limit, 1200);
+    }
+
+    #[test]
+    fn record_quota_for_month_keeps_previous_state_when_persistence_fails() {
+        let tmp = TempDir::new().unwrap();
+        let store = make_store(&tmp);
+        store.record_quota_for_month("2026-04", 1200);
+
+        std::fs::remove_file(&store.quota_history_path).unwrap();
+        std::fs::create_dir(&store.quota_history_path).unwrap();
+
+        store.record_quota_for_month("2026-05", 2400);
+
+        assert_eq!(
+            store.get_quota_map(),
+            HashMap::from([(String::from("2026-04"), 1200)])
+        );
+    }
+
+    #[test]
+    fn usage_cache_mutations_are_serialized_under_state_operation_lock() {
+        let source = include_str!("store.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("store.rs should contain test module marker");
+
+        let set_usage = source
+            .split("pub fn set_usage(&self, used: f64, limit: u32) -> Result<(), String> {")
+            .nth(1)
+            .expect("set_usage should exist")
+            .split("/// Get usage data")
+            .next()
+            .unwrap();
+        assert!(
+            set_usage.contains("lock_state_operation"),
+            "set_usage should serialize mutations under the state operation lock"
+        );
+
+        let set_last_update = source
+            .split("pub fn set_last_update_check_timestamp(&self, timestamp: i64) -> Result<(), String> {")
+            .nth(1)
+            .expect("set_last_update_check_timestamp should exist")
+            .split("/// Get last update check timestamp")
+            .next()
+            .unwrap();
+        assert!(
+            set_last_update.contains("lock_state_operation"),
+            "set_last_update_check_timestamp should serialize mutations under the state operation lock"
+        );
     }
 
     #[test]

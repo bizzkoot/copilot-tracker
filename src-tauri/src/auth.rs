@@ -486,25 +486,34 @@ impl AuthManager {
                       if store.set_customer_id_locked(id).is_ok() {
                           log::info!("Successfully authenticated with Customer ID: {}", id);
 
-                         // Process usage data and emit events via shared helper
-                          if let Some(ref usage) = extracted_usage_data {
-                              crate::usage::UsageManager::process_and_emit_usage(
-                                  &app_handle,
-                                  id,
-                                  usage,
-                                  extracted_usage_history.take(),
-                              );
-                          } else if let Some(rows) = extracted_usage_history.take() {
-                              log::warn!(
-                                  "No usage data was extracted from GitHub API; persisting {} history rows only",
-                                  rows.len()
-                              );
-                              crate::usage::UsageManager::persist_history_without_usage_data(
-                                  &store, &rows,
-                              );
-                          } else {
-                              log::warn!("No usage data was extracted from GitHub API");
-                          }
+                          // Process usage data and emit events via shared helper
+                           if let Some(ref usage) = extracted_usage_data {
+                               if let Err(error) = crate::usage::UsageManager::process_and_emit_usage(
+                                   &app_handle,
+                                   id,
+                                   usage,
+                                   extracted_usage_history.take(),
+                               ) {
+                                   log::error!("Failed to persist usage after authentication: {}", error);
+                               }
+                           } else if let Some(rows) = extracted_usage_history.take() {
+                               log::warn!(
+                                   "No usage data was extracted from GitHub API; persisting {} history rows only",
+                                   rows.len()
+                               );
+                               if let Err(error) =
+                                   crate::usage::UsageManager::persist_history_without_usage_data(
+                                       &store, &rows,
+                                   )
+                               {
+                                   log::error!(
+                                       "Failed to persist history-only usage data after authentication: {}",
+                                       error
+                                   );
+                               }
+                           } else {
+                               log::warn!("No usage data was extracted from GitHub API");
+                           }
 
                          let _ = app_handle.emit("auth:state-changed", "authenticated");
 

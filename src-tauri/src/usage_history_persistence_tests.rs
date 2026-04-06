@@ -97,7 +97,7 @@ fn stores_history_rows_when_extraction_has_history_but_no_usage_summary() {
 
     let rows = vec![history_row("2026-04-01", 10.0, 0.0)];
 
-    let merged = UsageManager::persist_history_without_usage_data(&store, &rows);
+    let merged = UsageManager::persist_history_without_usage_data(&store, &rows).unwrap();
 
     assert_eq!(
         merged.len(),
@@ -159,7 +159,8 @@ fn persists_history_only_refresh_using_cached_summary_for_reconciliation() {
         timestamp: 0,
     };
 
-    let merged = UsageManager::persist_history_with_cached_summary(&store, &rows, &summary);
+    let merged =
+        UsageManager::persist_history_with_cached_summary(&store, &rows, &summary).unwrap();
 
     let month_total: f64 = merged
         .iter()
@@ -337,4 +338,57 @@ fn partial_current_month_refresh_does_not_double_count_preserved_days() {
             .used,
         40.0
     );
+}
+
+#[test]
+fn stale_current_month_preserved_rows_are_pruned_when_authoritative_total_drops() {
+    let now = chrono::DateTime::parse_from_rfc3339("2026-04-02T12:00:00Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc);
+    let existing = vec![
+        history_entry("2026-04-01", 30.0, 1200, false),
+        history_entry("2026-04-02", 20.0, 1200, false),
+        history_entry("2026-03-31", 240.0, 3000, false),
+    ];
+    let rows = vec![history_row("2026-04-02", 20.0, 0.0)];
+    let quota_map = HashMap::from([
+        (String::from("2026-04"), 1200),
+        (String::from("2026-03"), 3000),
+    ]);
+
+    let merged = UsageManager::merge_history_rows_with_persisted_history_at(
+        &existing,
+        &rows,
+        &quota_map,
+        1200,
+        Some(20.0),
+        now,
+    );
+
+    let april_total: f64 = merged
+        .iter()
+        .filter(|entry| {
+            chrono::DateTime::from_timestamp(entry.timestamp, 0)
+                .map(|dt| dt.format("%Y-%m").to_string() == "2026-04")
+                .unwrap_or(false)
+        })
+        .map(|entry| entry.included_requests + entry.billed_requests)
+        .sum();
+
+    assert_eq!(
+        april_total, 20.0,
+        "stale preserved current-month rows should be pruned to the authoritative current total"
+    );
+    assert!(
+        merged
+            .iter()
+            .all(|entry| entry.timestamp != timestamp_for("2026-04-01")),
+        "fully stale preserved current-month rows should be removed"
+    );
+    let march_entry = merged
+        .iter()
+        .find(|entry| entry.timestamp == timestamp_for("2026-03-31"))
+        .unwrap();
+    assert_eq!(march_entry.used, 240.0);
+    assert_eq!(march_entry.limit, 3000);
 }

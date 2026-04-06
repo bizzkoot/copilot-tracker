@@ -93,10 +93,10 @@ impl UsageManager {
     /// extraction path.
     pub fn process_and_emit_usage(
         app: &AppHandle,
-        customer_id: u64,
+        _customer_id: u64,
         usage_data: &crate::auth::UsageData,
         history_rows: Option<Vec<crate::auth::UsageHistoryRow>>,
-    ) -> Option<UsageSummary> {
+    ) -> Result<Option<UsageSummary>, String> {
         let store = app.state::<crate::store::StoreManager>();
 
         let used = round_request_count(usage_data.discount_quantity);
@@ -114,35 +114,32 @@ impl UsageManager {
             log::warn!("Usage data shows 0/0 - API may have returned empty data");
         }
 
-        let _ = store.set_usage(used, limit);
-
         // Always record the current month's quota so new-month history entries
         // are paired with the observed limit immediately rather than being
         // marked as estimated.
         let current_month = chrono::Utc::now().format("%Y-%m").to_string();
-        store.record_quota_for_month(&current_month, limit);
-
-        // Update cache
-        let cache = crate::store::UsageCache {
-            customer_id,
-            net_quantity: usage_data.net_quantity,
-            discount_quantity: usage_data.discount_quantity,
-            user_premium_request_entitlement: usage_data.user_premium_request_entitlement,
-            filtered_user_premium_request_entitlement: usage_data
-                .filtered_user_premium_request_entitlement,
-            net_billed_amount: usage_data.net_billed_amount,
-            timestamp: chrono::Utc::now().timestamp(),
-        };
-        store.set_usage_cache(cache);
+        let mut quota_map = store.get_quota_map();
+        if limit > 0 {
+            quota_map.insert(current_month, limit);
+        }
 
         // Merge history rows with persisted data if available
-        let mut usage_entries: Vec<UsageEntry> = vec![];
-        if let Some(rows) = history_rows {
+        let existing_history = store.get_usage_history();
+        let usage_entries = if let Some(rows) = history_rows {
             log::info!("Processing {} usage history rows", rows.len());
-            usage_entries = Self::merge_and_store_history_rows(&store, &rows, limit, Some(used));
+            Self::merge_history_rows_with_persisted_history(
+                &existing_history,
+                &rows,
+                &quota_map,
+                limit,
+                Some(used),
+            )
         } else {
             log::warn!("No usage history rows to process");
-        }
+            existing_history
+        };
+
+        store.persist_usage_snapshot(used, limit, usage_entries.clone(), quota_map)?;
 
         // Build summary
         let summary = UsageSummary {
@@ -193,7 +190,7 @@ impl UsageManager {
         );
         let _ = app.emit("usage:updated", &summary);
 
-        Some(summary)
+        Ok(Some(summary))
     }
 
     pub fn merge_and_store_history_rows(
@@ -201,7 +198,7 @@ impl UsageManager {
         rows: &[UsageHistoryRow],
         current_quota: u32,
         current_used: Option<f64>,
-    ) -> Vec<UsageEntry> {
+    ) -> Result<Vec<UsageEntry>, String> {
         let quota_map = store.get_quota_map();
         let existing_history = store.get_usage_history();
         let merged_entries = Self::merge_history_rows_with_persisted_history(
@@ -211,14 +208,14 @@ impl UsageManager {
             current_quota,
             current_used,
         );
-        store.set_usage_history(merged_entries.clone());
-        merged_entries
+        store.persist_history_snapshot(merged_entries.clone())?;
+        Ok(merged_entries)
     }
 
     pub fn persist_history_without_usage_data(
         store: &StoreManager,
         rows: &[UsageHistoryRow],
-    ) -> Vec<UsageEntry> {
+    ) -> Result<Vec<UsageEntry>, String> {
         Self::merge_and_store_history_rows(store, rows, 0, None)
     }
 
@@ -226,7 +223,7 @@ impl UsageManager {
         store: &StoreManager,
         rows: &[UsageHistoryRow],
         summary: &UsageSummary,
-    ) -> Vec<UsageEntry> {
+    ) -> Result<Vec<UsageEntry>, String> {
         Self::merge_and_store_history_rows(store, rows, summary.limit, Some(summary.used))
     }
 
@@ -323,7 +320,7 @@ impl UsageManager {
                             customer_id,
                             usage,
                             result.usage_history.take(),
-                        ) {
+                        )? {
                             return Ok(summary);
                         }
                     } else if let Some(rows) = result.usage_history.take() {
@@ -337,9 +334,9 @@ impl UsageManager {
                                 store.get_last_fetch_timestamp(),
                                 chrono::Utc::now(),
                             ) {
-                                Self::persist_history_with_cached_summary(&store, &rows, &summary)
+                                Self::persist_history_with_cached_summary(&store, &rows, &summary)?
                             } else {
-                                Self::persist_history_without_usage_data(&store, &rows)
+                                Self::persist_history_without_usage_data(&store, &rows)?
                             }
                         };
                         let store = app.state::<crate::store::StoreManager>();
@@ -585,6 +582,8 @@ impl UsageManager {
 
         let mut mapped_entries =
             Self::map_history_rows_with_quota(rows, &merged_quota_map, current_quota);
+        let refreshed_timestamps: std::collections::HashSet<i64> =
+            mapped_entries.iter().map(|entry| entry.timestamp).collect();
 
         for entry in &mut mapped_entries {
             if !entry.quota_estimated {
@@ -610,6 +609,7 @@ impl UsageManager {
                 used,
                 current_quota,
                 now,
+                Some(&refreshed_timestamps),
             );
         }
 
@@ -640,7 +640,7 @@ impl UsageManager {
         used: f64,
         limit: u32,
     ) {
-        Self::reconcile_history_with_usage_total_at(entries, used, limit, chrono::Utc::now());
+        Self::reconcile_history_with_usage_total_at(entries, used, limit, chrono::Utc::now(), None);
     }
 
     fn reconcile_history_with_usage_total_at(
@@ -648,33 +648,100 @@ impl UsageManager {
         used: f64,
         limit: u32,
         now: chrono::DateTime<chrono::Utc>,
+        refreshed_timestamps: Option<&std::collections::HashSet<i64>>,
     ) {
         let current_year = now.year();
         let current_month = now.month();
 
-        let month_total: f64 = entries
+        let current_month_indices: Vec<usize> = entries
             .iter()
-            .filter_map(|entry| {
+            .enumerate()
+            .filter_map(|(index, entry)| {
                 chrono::DateTime::from_timestamp(entry.timestamp, 0).and_then(|dt| {
                     if dt.year() == current_year && dt.month() == current_month {
-                        Some(entry.included_requests + entry.billed_requests)
+                        Some(index)
                     } else {
                         None
                     }
                 })
             })
+            .collect();
+
+        let month_total: f64 = current_month_indices
+            .iter()
+            .map(|index| entries[*index].included_requests + entries[*index].billed_requests)
             .sum();
 
-        if used <= month_total {
+        let difference = round_request_count(used - month_total);
+
+        if difference.abs() < 0.5 {
             return;
         }
 
-        // Ignore tiny differences from mixed integer/decimal sources.
-        if used - month_total < 0.5 {
+        if difference < 0.0 {
+            let refreshed = refreshed_timestamps.cloned().unwrap_or_default();
+            let mut excess = round_request_count(-difference);
+            let mut candidates: Vec<usize> = current_month_indices;
+            candidates.sort_by_key(|index| {
+                (
+                    refreshed.contains(&entries[*index].timestamp),
+                    entries[*index].timestamp,
+                )
+            });
+
+            let mut remove_indices = Vec::new();
+            for index in candidates {
+                if excess < 0.5 {
+                    break;
+                }
+
+                let entry_total = entries[index].included_requests + entries[index].billed_requests;
+                if entry_total <= excess + 0.0001 {
+                    excess = round_request_count((excess - entry_total).max(0.0));
+                    remove_indices.push(index);
+                    continue;
+                }
+
+                let billed_reduction = entries[index].billed_requests.min(excess);
+                entries[index].billed_requests = round_request_count(
+                    (entries[index].billed_requests - billed_reduction).max(0.0),
+                );
+                excess = round_request_count((excess - billed_reduction).max(0.0));
+
+                if excess > 0.0 {
+                    entries[index].included_requests =
+                        round_request_count((entries[index].included_requests - excess).max(0.0));
+                    excess = 0.0;
+                }
+
+                entries[index].used = round_request_count(
+                    entries[index].included_requests + entries[index].billed_requests,
+                );
+                entries[index].limit = limit;
+
+                if entries[index].used < 0.5 {
+                    remove_indices.push(index);
+                }
+            }
+
+            if excess >= 0.5 {
+                log::warn!(
+                    "[Usage] Unable to fully prune stale current-month history; {} requests remain above the authoritative total",
+                    excess
+                );
+            }
+
+            remove_indices.sort_unstable_by(|a, b| b.cmp(a));
+            remove_indices.dedup();
+            for index in remove_indices {
+                entries.remove(index);
+            }
+
+            entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
             return;
         }
 
-        let delta = round_request_count(used - month_total);
+        let delta = difference;
         let today_timestamp = now
             .date_naive()
             .and_hms_opt(0, 0, 0)
