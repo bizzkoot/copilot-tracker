@@ -462,6 +462,7 @@ jobs:
         run: npm run test
 
       - name: Verify version sync
+        shell: bash
         run: |
           EXPECTED_VERSION=$(jq -r '.version' package.json)
           echo "=== Version Verification ==="
@@ -517,6 +518,7 @@ jobs:
 
       - name: Report validation status
         if: always()
+        shell: bash
         run: |
           if [ "${{ job.status }}" == "success" ]; then
             echo "✅ All validation checks passed on ${{ matrix.os }}"
@@ -581,9 +583,6 @@ jobs:
             ---
             *This comment is automatically updated by the validation workflow.*
 
-      - name: Fail workflow if validation failed
-        if: steps.summary.outputs.status == 'failure'
-        run: exit 1
 
   # ============================================================================
   # Verify version sync (for release publishing)

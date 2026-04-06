@@ -2488,10 +2488,12 @@ mod tests {
     fn get_backups_path_returns_custom_directory_when_set() {
         let tmp = TempDir::new().unwrap();
         let store = make_store(&tmp);
-        let custom = "/tmp/my-custom-backups".to_string();
-        store.set_backup_directory(Some(custom.clone())).unwrap();
+        let custom = std::env::temp_dir().join("my-custom-backups");
+        store
+            .set_backup_directory(Some(custom.to_string_lossy().into_owned()))
+            .unwrap();
         let backups_path = store.get_backups_path();
-        assert_eq!(backups_path.to_string_lossy(), custom);
+        assert_eq!(backups_path, custom);
     }
 
     #[test]

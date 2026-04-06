@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-env node */
 
 /**
  * Cross-platform test runner script.
@@ -12,11 +13,18 @@
  * file paths — no shell glob expansion required.
  */
 
-import { readdirSync } from 'node:fs';
-import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { existsSync, readdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = join(scriptDir, '..');
+const testDir = join(repoRoot, 'tests', 'regression');
 
-const testDir = join(import.meta.dirname, '..', 'tests', 'regression');
+if (!existsSync(testDir)) {
+  console.error(`Test directory not found: ${testDir}`);
+  process.exit(1);
+}
 
 // Read all .test.mjs files from the regression directory
 const testFiles = readdirSync(testDir)
@@ -32,9 +40,9 @@ if (testFiles.length === 0) {
 console.log(`Running ${testFiles.length} test files...\n`);
 
 try {
-  execFileSync('node', ['--test', ...testFiles], {
+  execFileSync(process.execPath, ['--test', ...testFiles], {
     stdio: 'inherit',
-    cwd: join(import.meta.dirname, '..'),
+    cwd: repoRoot,
   });
 } catch (e) {
   // node --test already printed failures; exit with its code

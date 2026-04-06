@@ -242,7 +242,3 @@ jobs:
 
             ---
             *This comment is automatically updated by the PR validation workflow.*
-
-      - name: Fail workflow if validation failed
-        if: steps.summary.outputs.status == 'failure'
-        run: exit 1

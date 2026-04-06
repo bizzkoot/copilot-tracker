@@ -593,12 +593,30 @@ test("store.rs get_backups_path resolves relative custom paths against app direc
   );
 });
 
-// ─── main.rs: restore_backup restarts polling with restored interval ──────────
+// ─── main.rs: restore_backup re-emits restored usage state ────────────────────
 
-test("main.rs restore_backup restarts polling with the restored refresh_interval", () => {
+test("main.rs restore_backup emits refreshed usage events after restoring usage state", () => {
   assert.match(
     mainRsSource,
-    /restart_polling/,
-    "restore_backup must call restart_polling so the polling timer uses the restored interval",
+    /app\.emit\("usage:data", payload\)/,
+    "restore_backup must emit usage:data so the renderer reloads restored usage state",
+  );
+  assert.match(
+    mainRsSource,
+    /app\.emit\("usage:updated", &summary\)/,
+    "restore_backup must emit usage:updated so the tray refreshes restored usage totals",
+  );
+  assert.doesNotMatch(
+    mainRsSource,
+    /settings:changed after restore|restored refresh interval/,
+    "restore_backup should not imply that app settings are restored when only usage state is restored",
+  );
+});
+
+test("Settings.tsx restore success message describes usage restoration scope accurately", () => {
+  assert.match(
+    settingsComponentSource,
+    /Usage data and history have been updated\./,
+    "restore success message should describe the restored usage snapshot instead of implying all settings changed",
   );
 });

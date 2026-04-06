@@ -237,7 +237,8 @@ export function Settings({ onClose }: SettingsProps) {
       await window.electron.restoreBackup(backupId);
       setBackupStatus({
         type: "success",
-        message: "Backup restored successfully! All data has been updated.",
+        message:
+          "Backup restored successfully! Usage data and history have been updated.",
       });
       try {
         await loadBackups();
