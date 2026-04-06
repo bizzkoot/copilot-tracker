@@ -84,18 +84,18 @@ export interface RendererToMainEvents {
 // App API exposed to renderer
 export interface AppAPI {
   // Auth
-  login: () => void;
-  logout: () => void;
-  checkAuth: () => void;
+  login: () => Promise<void>;
+  logout: () => Promise<void>;
+  checkAuth: () => Promise<void>;
   onAuthStateChanged: (callback: (state: AuthState) => void) => () => void;
   onSessionExpired: (callback: () => void) => () => void;
   onAlreadyAuthenticated: (callback: () => void) => () => void;
   onAuthExtractionFailed: (callback: (error: string) => void) => () => void;
 
   // Usage
-  fetchUsage: () => void;
-  refreshUsage: () => void;
-  forceRefreshUsage: () => void;
+  fetchUsage: () => Promise<void>;
+  refreshUsage: () => Promise<void>;
+  forceRefreshUsage: () => Promise<void>;
   captureExtractionDebug: () => Promise<unknown>;
   getCachedUsage: () => Promise<UsageFetchResult | null>;
   onUsageData: (callback: (data: UsageFetchResult) => void) => () => void;
@@ -114,11 +114,11 @@ export interface AppAPI {
   deleteBackup: (backupId: string) => Promise<void>;
 
   // App
-  quit: () => void;
-  showWindow: () => void;
-  hideWindow: () => void;
-  openExternal: (url: string) => void;
-  checkForUpdates: () => void;
+  quit: () => Promise<void>;
+  showWindow: () => Promise<void>;
+  hideWindow: () => Promise<void>;
+  openExternal: (url: string) => Promise<void>;
+  checkForUpdates: () => Promise<void>;
   onNavigate: (callback: (route: string) => void) => () => void;
   onUpdateAvailable: (callback: (info: UpdateInfo) => void) => () => void;
   onUpdateChecked: (

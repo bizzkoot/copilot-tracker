@@ -19,15 +19,15 @@ test("UsageFetchResult allows prediction to be cleared explicitly", () => {
 test("usage:data listener maps missing prediction to null instead of undefined", () => {
   assert.match(
     adapterSource,
-    /prediction:\s*payload\.prediction[\s\S]*:\s*null,/,
-    "usage:data listener should map missing prediction to null so Zustand clears stale forecast state",
+    /const mapUsagePayload = \(payload: RustUsagePayload\): UsageFetchResult => \{[\s\S]*prediction:\s*payload\.prediction[\s\S]*:\s*null,/,
+    "usage:data payload mapping should convert missing prediction to null so Zustand clears stale forecast state",
   );
 });
 
 test("getCachedUsage maps missing prediction to null instead of undefined", () => {
   assert.match(
     adapterSource,
-    /prediction:\s*payload\.prediction[\s\S]*:\s*null,\s*\n\s*};\s*\n\s*return result;/,
-    "getCachedUsage should map missing prediction to null so cached empty payloads clear stale forecast state",
+    /return payload \? mapUsagePayload\(payload\) : null;/,
+    "getCachedUsage should reuse the full payload mapper so cached empty payloads clear stale forecast state",
   );
 });

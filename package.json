@@ -14,6 +14,8 @@
     "format:js": "prettier --write .",
     "format:rust": "cd src-tauri && cargo fmt --all",
     "lint:js": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",
+    "lint:js:check": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts",
+    "lint:ci": "npm run lint:js:check && npm run lint:rust",
     "lint": "npm run lint:js && npm run lint:rust",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",

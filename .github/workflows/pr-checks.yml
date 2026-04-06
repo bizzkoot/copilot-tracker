@@ -106,8 +106,11 @@ jobs:
       - name: Run TypeScript type checking
         run: npm run typecheck
 
+      - name: Run repository tests
+        run: npm run test
+
       - name: Run ESLint
-        run: npm run lint
+        run: npm run lint:ci
         continue-on-error: false
 
       - name: Build - Full Tauri build for ${{ matrix.os }}
@@ -198,11 +201,11 @@ jobs:
         run: |
           if [ "${{ needs.validate-pr.result }}" == "success" ]; then
             echo "summary=✅ **All validation checks passed!**" >> $GITHUB_OUTPUT
-            echo "details=<br><br>### Validation Results<br>✅ TypeScript type checking (all platforms)<br>✅ ESLint (all platforms)<br>✅ Full Tauri build (Windows, macOS, Linux)<br><br>### 📦 Download Test Artifacts<br>Build artifacts are available for testing! Download them from the workflow run page:<br>- [Windows Installer (.msi/.exe)](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})<br>- [macOS DMG / App Bundle](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})<br>- [Linux deb / AppImage](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})<br><br>Artifacts are retained for 7 days." >> $GITHUB_OUTPUT
+            echo "details=<br><br>### Validation Results<br>✅ TypeScript type checking (all platforms)<br>✅ Repository tests (all platforms)<br>✅ ESLint (all platforms, non-mutating)<br>✅ Full Tauri build (Windows, macOS, Linux)<br><br>### 📦 Download Test Artifacts<br>Build artifacts are available for testing! Download them from the workflow run page:<br>- [Windows Installer (.msi/.exe)](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})<br>- [macOS DMG / App Bundle](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})<br>- [Linux deb / AppImage](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})<br><br>Artifacts are retained for 7 days." >> $GITHUB_OUTPUT
             echo "status=success" >> $GITHUB_OUTPUT
           else
             echo "summary=❌ **Validation checks failed**" >> $GITHUB_OUTPUT
-            echo "details=<br><br>### Validation Results<br>⚠️ Some validation checks failed. Please check the workflow logs for details.<br><br>**Failed checks may include:**<br>- TypeScript type errors<br>- ESLint violations<br>- Tauri build failures (Windows/macOS/Linux)<br>- Rust compilation errors" >> $GITHUB_OUTPUT
+            echo "details=<br><br>### Validation Results<br>⚠️ Some validation checks failed. Please check the workflow logs for details.<br><br>**Failed checks may include:**<br>- TypeScript type errors<br>- Repository test failures<br>- ESLint violations<br>- Tauri build failures (Windows/macOS/Linux)<br>- Rust compilation errors" >> $GITHUB_OUTPUT
             echo "status=failure" >> $GITHUB_OUTPUT
           fi
 

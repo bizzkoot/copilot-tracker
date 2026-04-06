@@ -88,7 +88,7 @@ export function UsageCard({ usage, isLoading }: UsageCardProps) {
   const addOnCost = usage.netBilledAmount;
 
   return (
-    <Card className="h-full overflow-hidden border-primary/20 bg-gradient-to-br from-card to-primary/5">
+    <Card className="h-full border-primary/20 bg-gradient-to-br from-card to-primary/5">
       <CardHeader className="pb-2">
         <CardTitle className="text-base font-medium text-muted-foreground uppercase tracking-wider">
           Quota {displayLabel}

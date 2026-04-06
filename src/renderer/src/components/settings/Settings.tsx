@@ -691,7 +691,8 @@ export function Settings({ onClose }: SettingsProps) {
                 </p>
                 <p>
                   <span className="font-medium text-foreground">Force:</span>{" "}
-                  clear cache and force fresh extraction from GitHub.
+                  force fresh extraction from GitHub while keeping offline data
+                  until new results succeed.
                 </p>
               </div>
             </CardContent>

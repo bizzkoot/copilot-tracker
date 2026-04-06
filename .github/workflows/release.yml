@@ -458,6 +458,9 @@ jobs:
       - name: Run TypeScript type checking
         run: npm run typecheck
 
+      - name: Run repository tests
+        run: npm run test
+
       - name: Verify version sync
         run: |
           EXPECTED_VERSION=$(jq -r '.version' package.json)
@@ -501,7 +504,7 @@ jobs:
           echo "✅ All versions verified successfully!"
 
       - name: Run ESLint
-        run: npm run lint
+        run: npm run lint:ci
         continue-on-error: false
 
       - name: Dry run build - Frontend
@@ -538,11 +541,11 @@ jobs:
         run: |
           if [ "${{ needs.validate-release-pr.result }}" == "success" ]; then
             echo "summary=✅ **All validation checks passed!**" >> $GITHUB_OUTPUT
-            echo "details=<br><br>### Validation Results<br>✅ TypeScript type checking<br>✅ ESLint<br>✅ Version sync<br>✅ Frontend build<br>✅ Rust compilation (all platforms)" >> $GITHUB_OUTPUT
+            echo "details=<br><br>### Validation Results<br>✅ TypeScript type checking<br>✅ Repository tests<br>✅ ESLint (non-mutating)<br>✅ Version sync<br>✅ Frontend build<br>✅ Rust compilation (all platforms)" >> $GITHUB_OUTPUT
             echo "status=success" >> $GITHUB_OUTPUT
           else
             echo "summary=❌ **Validation checks failed**" >> $GITHUB_OUTPUT
-            echo "details=<br><br>### Validation Results<br>⚠️ Some validation checks failed. Please check the workflow logs for details.<br><br>**Failed checks may include:**<br>- TypeScript type errors<br>- ESLint violations<br>- Version sync issues<br>- Build failures<br>- Rust compilation errors" >> $GITHUB_OUTPUT
+            echo "details=<br><br>### Validation Results<br>⚠️ Some validation checks failed. Please check the workflow logs for details.<br><br>**Failed checks may include:**<br>- TypeScript type errors<br>- Repository test failures<br>- ESLint violations<br>- Version sync issues<br>- Build failures<br>- Rust compilation errors" >> $GITHUB_OUTPUT
             echo "status=failure" >> $GITHUB_OUTPUT
           fi
 
