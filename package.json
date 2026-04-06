@@ -7,7 +7,7 @@
   "homepage": "",
   "scripts": {
     "test": "npm run test:js && npm run test:rust",
-    "test:js": "node --test tests/regression/*.test.mjs",
+    "test:js": "node scripts/run-tests.mjs",
     "test:rust": "cd src-tauri && cargo test",
     "validate:assets": "ts-node scripts/validate-assets.ts",
     "format": "npm run format:js && npm run format:rust",
