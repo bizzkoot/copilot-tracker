@@ -9,6 +9,9 @@ concurrency:
   cancel-in-progress: true
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       version:
@@ -29,13 +32,15 @@ on:
 jobs:
   release-please:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(main): release '))
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
       upload_url: ${{ steps.release.outputs.upload_url }}
-      pr_created: ${{ steps.resolve-release-pr.outputs.pr_found }}
-      pr_number: ${{ steps.resolve-release-pr.outputs.pr_number }}
+      pr_created: ${{ steps.release-pr-metadata.outputs.pr_created }}
+      pr_number: ${{ steps.release-pr-metadata.outputs.pr_number }}
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v4
@@ -44,6 +49,7 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
       - name: Get current version
+        if: github.event_name == 'workflow_dispatch'
         id: current-version
         run: |
           CURRENT_VERSION=$(jq -r '.version' package.json)
@@ -51,6 +57,7 @@ jobs:
           echo "📌 Current version: $CURRENT_VERSION"
 
       - name: Parse version input
+        if: github.event_name == 'workflow_dispatch'
         id: parse-version
         run: |
           chmod +x .github/scripts/parse_version.sh
@@ -59,6 +66,7 @@ jobs:
             "${{ steps.current-version.outputs.version }}"
 
       - name: Validate version bump
+        if: github.event_name == 'workflow_dispatch'
         run: |
           NEW_VERSION="${{ steps.parse-version.outputs.version }}"
           CURRENT_VERSION="${{ steps.current-version.outputs.version }}"
@@ -81,19 +89,19 @@ jobs:
           echo "✅ Version bump validated: $CURRENT_VERSION → $NEW_VERSION"
 
       - name: Dry run check
-        if: inputs.dry_run == true
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run == true
         run: |
           echo "🧪 Dry run mode - stopping before release creation"
           echo "Version would be: ${{ steps.parse-version.outputs.version }}"
 
       - name: Install Node.js
-        if: inputs.dry_run != true
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run != true }}
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
       - name: Create GitHub release from merged release PR
-        if: inputs.dry_run != true
+        if: ${{ github.event_name == 'push' || inputs.dry_run != true }}
         uses: googleapis/release-please-action@v4
         id: release
         with:
@@ -104,33 +112,21 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           skip-github-pull-request: true
 
-      - name: Create or update release PR
-        if: inputs.dry_run != true
-        run: |
-          # release-please-action v4 does not forward release-as in manifest mode,
-          # so use the CLI for exact manual release PR versions.
-          npx --yes release-please@17.4.1 release-pr \
-            --token="${{ secrets.RELEASE_PLEASE_TOKEN }}" \
-            --repo-url="${{ github.repository }}" \
-            --target-branch="main" \
-            --config-file=.release-please.json \
-            --manifest-file=.release-please-manifest.json \
-            --release-as="${{ steps.parse-version.outputs.version }}"
-
-      - name: Resolve release PR metadata
-        if: inputs.dry_run != true
-        id: resolve-release-pr
+      - name: Capture release PR state before update
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run != true
+        id: release-pr-before
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           script: |
+            const targetBranch = '${{ github.ref_name }}';
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const { data: pulls } = await github.rest.pulls.list({
               owner,
               repo,
               state: 'open',
-              base: 'main',
+              base: targetBranch,
               sort: 'updated',
               direction: 'desc',
               per_page: 50,
@@ -139,13 +135,69 @@ jobs:
             const pr = pulls.find((item) => item.head.ref.startsWith('release-please--'));
 
             if (!pr) {
-              core.info('No open release-please PR found for base main.');
+              core.info(`No open release-please PR found for base ${targetBranch} before update.`);
               core.setOutput('pr_found', 'false');
+              return;
+            }
+
+            core.info(`Found existing release PR #${pr.number} before update.`);
+            core.setOutput('pr_found', 'true');
+            core.setOutput('pr_number', String(pr.number));
+            core.setOutput('head_sha', pr.head.sha);
+            core.setOutput('updated_at', pr.updated_at);
+
+      - name: Create or update release PR
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run != true
+        run: |
+          # release-please-action v4 does not forward release-as in manifest mode,
+          # so use the CLI for exact manual release PR versions.
+          npx --yes release-please@17.4.1 release-pr \
+            --token="${{ secrets.RELEASE_PLEASE_TOKEN }}" \
+            --repo-url="${{ github.repository }}" \
+            --target-branch="${{ github.ref_name }}" \
+            --config-file=.release-please.json \
+            --manifest-file=.release-please-manifest.json \
+            --release-as="${{ steps.parse-version.outputs.version }}"
+
+      - name: Resolve release PR metadata
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run != true
+        id: release-pr-metadata
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          script: |
+            const targetBranch = '${{ github.ref_name }}';
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const beforeNumber = '${{ steps.release-pr-before.outputs.pr_number }}'.trim();
+            const beforeHeadSha = '${{ steps.release-pr-before.outputs.head_sha }}'.trim();
+            const beforeUpdatedAt = '${{ steps.release-pr-before.outputs.updated_at }}'.trim();
+            const { data: pulls } = await github.rest.pulls.list({
+              owner,
+              repo,
+              state: 'open',
+              base: targetBranch,
+              sort: 'updated',
+              direction: 'desc',
+              per_page: 50,
+            });
+
+            const pr = pulls.find((item) => item.head.ref.startsWith('release-please--'));
+
+            if (!pr) {
+              core.info(`No open release-please PR found for base ${targetBranch}.`);
+              core.setOutput('pr_found', 'false');
+              core.setOutput('pr_created', 'false');
               return;
             }
 
             core.info(`Using release PR #${pr.number} (${pr.head.ref})`);
             core.setOutput('pr_found', 'true');
+            const prCreated = !beforeNumber ||
+              beforeNumber !== String(pr.number) ||
+              beforeHeadSha !== pr.head.sha ||
+              beforeUpdatedAt !== pr.updated_at;
+            core.setOutput('pr_created', prCreated ? 'true' : 'false');
             core.setOutput('pr_number', String(pr.number));
 
   # ============================================================================
@@ -154,7 +206,7 @@ jobs:
   format-release-pr:
     needs: release-please
     # Run whenever release-please succeeds; resolve the active release PR inside the job
-    if: ${{ needs.release-please.result == 'success' }}
+    if: ${{ needs.release-please.result == 'success' && needs.release-please.outputs.pr_created == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -169,6 +221,7 @@ jobs:
         with:
           github-token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           script: |
+            const targetBranch = '${{ github.ref_name }}';
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const outputPr = '${{ needs.release-please.outputs.pr_number }}'.trim();
@@ -191,7 +244,7 @@ jobs:
                 owner,
                 repo,
                 state: 'open',
-                base: 'main',
+                base: targetBranch,
                 sort: 'updated',
                 direction: 'desc',
                 per_page: 50,
@@ -201,7 +254,7 @@ jobs:
             }
 
             if (!pr) {
-              core.info('No open release-please PR found for base main. Skipping format step.');
+              core.info(`No open release-please PR found for base ${targetBranch}. Skipping format step.`);
               core.setOutput('pr_found', 'false');
               return;
             }

@@ -1,0 +1,107 @@
+name: Manual Publish Existing Release
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Merged version on main to publish (e.g., 2.4.8)"
+        required: true
+        type: string
+      dry_run:
+        description: "Validate version and changelog notes without creating the release"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  publish-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Validate requested release state
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          VERSION="${{ inputs.version }}"
+          TAG="v${VERSION}"
+
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9._-]+)?$ ]]; then
+            echo "Invalid version input: $VERSION"
+            exit 1
+          fi
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "GitHub release $TAG already exists"
+            exit 1
+          fi
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Git tag $TAG already exists locally"
+            exit 1
+          fi
+
+          PKG_VERSION=$(jq -r '.version' package.json)
+          TAURI_CONF_VERSION=$(jq -r '.version' src-tauri/tauri.conf.json)
+          CARGO_VERSION=$(awk -F '"' '/^version = "/ { print $2; exit }' src-tauri/Cargo.toml)
+
+          if [ "$PKG_VERSION" != "$VERSION" ] || [ "$TAURI_CONF_VERSION" != "$VERSION" ] || [ "$CARGO_VERSION" != "$VERSION" ]; then
+            echo "main is not at the requested release version"
+            echo "package.json: $PKG_VERSION"
+            echo "tauri.conf.json: $TAURI_CONF_VERSION"
+            echo "Cargo.toml: $CARGO_VERSION"
+            exit 1
+          fi
+
+      - name: Extract release notes from changelog
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VERSION="${{ inputs.version }}"
+
+          awk -v version="$VERSION" '
+            $0 ~ "^## \\[" version "\\]" { capture = 1 }
+            capture && $0 ~ "^## \\[" && $0 !~ "^## \\[" version "\\]" { exit }
+            capture { print }
+          ' CHANGELOG.md > release_notes.md
+
+          if [ ! -s release_notes.md ]; then
+            echo "Could not find CHANGELOG.md entry for $VERSION"
+            exit 1
+          fi
+
+          sed -n '1,120p' release_notes.md
+
+      - name: Dry run summary
+        if: inputs.dry_run == true
+        shell: bash
+        run: |
+          echo "Would create release v${{ inputs.version }} from main at $(git rev-parse HEAD)"
+
+      - name: Create GitHub release and tag
+        if: inputs.dry_run != true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          VERSION="${{ inputs.version }}"
+          TAG="v${VERSION}"
+
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$(git rev-parse HEAD)" \
+            --title "$TAG" \
+            --notes-file release_notes.md

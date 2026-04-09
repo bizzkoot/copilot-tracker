@@ -14,6 +14,14 @@ const releaseWorkflowSource = fs.readFileSync(
   path.resolve(".github/workflows/release.yml"),
   "utf8",
 );
+const manualReleasePublishWorkflowPath = path.resolve(
+  ".github/workflows/manual-release-publish.yml",
+);
+const manualReleasePublishSource = fs.existsSync(
+  manualReleasePublishWorkflowPath,
+)
+  ? fs.readFileSync(manualReleasePublishWorkflowPath, "utf8")
+  : "";
 const runTestsSource = fs.readFileSync(
   path.resolve("scripts/run-tests.mjs"),
   "utf8",
@@ -152,5 +160,81 @@ test("release workflow uses the release-please CLI for exact manual release-as P
     releaseWorkflowSource,
     /--release-as="\$\{\{ steps\.parse-version\.outputs\.version \}\}"/,
     "release workflow should pass the parsed exact version to the CLI release-pr command",
+  );
+  assert.match(
+    releaseWorkflowSource,
+    /pr_created:\s*\$\{\{ steps\.release-pr-metadata\.outputs\.pr_created \}\}/,
+    "release workflow should derive pr_created from explicit release PR metadata rather than simple PR existence",
+  );
+  assert.doesNotMatch(
+    releaseWorkflowSource,
+    /pr_created:\s*\$\{\{ steps\.resolve-release-pr\.outputs\.pr_found \}\}/,
+    "release workflow should not treat any discovered open PR as newly created or updated",
+  );
+  assert.match(
+    releaseWorkflowSource,
+    /--target-branch="\$\{\{ github\.ref_name \}\}"/,
+    "release workflow should target the same branch that triggered the manual run",
+  );
+  assert.doesNotMatch(
+    releaseWorkflowSource,
+    /--target-branch="main"/,
+    "release workflow should not hardcode main for CLI release PR creation",
+  );
+  assert.doesNotMatch(
+    releaseWorkflowSource,
+    /base:\s*'main'/,
+    "release workflow should not hardcode main when resolving release PRs",
+  );
+});
+
+test("release workflow can publish automatically on merged release commits to main", () => {
+  assert.match(
+    releaseWorkflowSource,
+    /push:\s*[\s\S]*?branches:\s*[\s\S]*?- main/,
+    "release workflow should listen to pushes on main for release publishing",
+  );
+  assert.match(
+    releaseWorkflowSource,
+    /startsWith\(github\.event\.head_commit\.message, 'chore\(main\): release '\)/,
+    "release workflow should only auto-publish when the pushed commit is a merged release commit",
+  );
+  assert.match(
+    releaseWorkflowSource,
+    /needs\.release-please\.outputs\.pr_created == 'true'/,
+    "release PR formatting and validation should only run when the current run actually created or updated a release PR",
+  );
+});
+
+test("manual release publish workflow can publish an already-merged version from changelog notes", () => {
+  assert.match(
+    manualReleasePublishSource,
+    /name:\s*Manual Publish Existing Release/,
+    "manual release publish workflow should be present",
+  );
+  assert.match(
+    manualReleasePublishSource,
+    /workflow_dispatch:\s*[\s\S]*?inputs:\s*[\s\S]*?version:/,
+    "manual release publish workflow should accept a version input",
+  );
+  assert.match(
+    manualReleasePublishSource,
+    /ref:\s*main/,
+    "manual release publish workflow should publish from main",
+  );
+  assert.match(
+    manualReleasePublishSource,
+    /CHANGELOG\.md/,
+    "manual release publish workflow should extract notes from CHANGELOG.md",
+  );
+  assert.match(
+    manualReleasePublishSource,
+    /gh release create/,
+    "manual release publish workflow should create the GitHub release directly",
+  );
+  assert.match(
+    manualReleasePublishSource,
+    /--notes-file\s+release_notes\.md/,
+    "manual release publish workflow should publish the extracted changelog section as release notes",
   );
 });
