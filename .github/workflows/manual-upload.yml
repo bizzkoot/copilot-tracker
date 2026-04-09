@@ -24,24 +24,32 @@ on:
 jobs:
   build-and-upload:
     runs-on: ${{ matrix.os }}
+    if: |
+      inputs.platforms == 'all' ||
+      (inputs.platforms == 'macos-only' && matrix.platform == 'macos') ||
+      (inputs.platforms == 'linux-only' && matrix.platform == 'linux') ||
+      (inputs.platforms == 'windows-only' && matrix.platform == 'windows')
     strategy:
       fail-fast: false
       matrix:
         os: [macos-latest, ubuntu-latest, windows-latest]
         include:
           - os: macos-latest
+            platform: macos
             target: universal-apple-darwin
             rust_target: aarch64-apple-darwin,x86_64-apple-darwin
             artifacts: |
               src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
               src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.zip
           - os: ubuntu-latest
+            platform: linux
             target: x86_64-unknown-linux-gnu
             rust_target: x86_64-unknown-linux-gnu
             artifacts: |
               src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb
               src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
           - os: windows-latest
+            platform: windows
             target: x86_64-pc-windows-msvc
             rust_target: x86_64-pc-windows-msvc
             artifacts: |
