@@ -1,5 +1,46 @@
 # Changelog
 
+## [2.4.8](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.7...v2.4.8) (2026-04-09)
+
+
+### Features
+
+* add backup and restore functionality in settings ([43716b5](https://github.com/bizzkoot/copilot-tracker/commit/43716b5002007bf03c54110f13d606d7a33d46e7))
+* add cargo.lock for reproducible builds ([4622e3f](https://github.com/bizzkoot/copilot-tracker/commit/4622e3f249d600e08e58a3a8576b1f9c792a61df))
+
+
+### Bug Fixes
+
+* adaptive polling tick and jq-safe release config generation ([6150091](https://github.com/bizzkoot/copilot-tracker/commit/6150091069b684e9311eee80cf645ed5f9f5681e))
+* address bot review findings - validation, quota accuracy, polling, O(n) improvements ([ca6c074](https://github.com/bizzkoot/copilot-tracker/commit/ca6c074a09bd9b767612b86be15876dd8d49dc55))
+* address codebase audit findings — security, data integrity, and dependency cleanup ([8450b49](https://github.com/bizzkoot/copilot-tracker/commit/8450b49260a3af7362ebbae33eb99f5a983dc258))
+* address security audit findings and quota history backup gap ([9ecb65f](https://github.com/bizzkoot/copilot-tracker/commit/9ecb65f0e370f57c3b8d49737028bf20bfa845cf))
+* address valid findings from 3rd-round bot review ([03bf149](https://github.com/bizzkoot/copilot-tracker/commit/03bf149f5d8737339689c947ee8382b5570a6706))
+* address valid findings from 4th-round bot review ([b83609d](https://github.com/bizzkoot/copilot-tracker/commit/b83609d1f546c6d5397399661fcadc660fb353a8))
+* address valid findings from 5th-round bot review ([3b2c6f3](https://github.com/bizzkoot/copilot-tracker/commit/3b2c6f355792814b104ad45517c33ebc2686e924))
+* address valid findings from 6th-round bot review ([6143d11](https://github.com/bizzkoot/copilot-tracker/commit/6143d11adbefd8b71d3a58cc0309e8396783d9a1))
+* address valid findings from PR bot review (post ca6c074) ([42ace46](https://github.com/bizzkoot/copilot-tracker/commit/42ace4645d5cbdeffaebb50f1eacb1a9f0e798e4))
+* address Z.ai code review findings + add CodeRabbit unit tests ([a6c4ca2](https://github.com/bizzkoot/copilot-tracker/commit/a6c4ca283219a697422d0fab017d01050b7e6adc))
+* Backup, Restore & Polling Improvements ([9304b9d](https://github.com/bizzkoot/copilot-tracker/commit/9304b9de5dff1356d5961e8e80d9f652069982fb))
+* **ci:** harden cross-platform validation ([c7503f2](https://github.com/bizzkoot/copilot-tracker/commit/c7503f2dd32280d8d8cde69638b928ed34d9248a))
+* **ci:** refine release workflow handling ([14d2627](https://github.com/bizzkoot/copilot-tracker/commit/14d2627ff599f4fc5d71cc90b0e8444bdccb27f3))
+* **ci:** use committed release-please config ([1889e0a](https://github.com/bizzkoot/copilot-tracker/commit/1889e0ac8e9c015df16c76c2fb70ba0e57450a4f))
+* harden backend persistence and restore flows ([7349b42](https://github.com/bizzkoot/copilot-tracker/commit/7349b42034c68682a19b887efd8790a79fbdc1f5))
+* harden renderer usage sync and CI validation ([0564e97](https://github.com/bizzkoot/copilot-tracker/commit/0564e9778b4569e53676bb3e4d11d0613991a625))
+* **polling:** resolve blocking I/O, busy-loop, and quota estimation bugs ([7e82db3](https://github.com/bizzkoot/copilot-tracker/commit/7e82db30e1ed0a62b4e27ab0609364827d235f07))
+* **polling:** restart background timer when settings change from UI ([4625532](https://github.com/bizzkoot/copilot-tracker/commit/4625532baf0e6ef1622b94831ab9e3a0ce691f9f))
+* prevent cross-month history loss, harden session lifecycle and backup integrity ([f24633f](https://github.com/bizzkoot/copilot-tracker/commit/f24633fbc24187799b37f63484307ca124d969e0))
+* resolve lint and typecheck failures from PR check ([d943a2f](https://github.com/bizzkoot/copilot-tracker/commit/d943a2f952ce623766e6b7cfb50f079264b8816f))
+* **test:** use cross-platform test runner script ([e6a9ed2](https://github.com/bizzkoot/copilot-tracker/commit/e6a9ed2cfbb6ace45e1bb94667bed6833aed0b2a))
+* update code review action version and add prebuild script ([7f9e158](https://github.com/bizzkoot/copilot-tracker/commit/7f9e158ca954ab9c90cf12d5c209c91673f0a6dc))
+* update format command to include Rust formatting ([553c1b7](https://github.com/bizzkoot/copilot-tracker/commit/553c1b7d0e6f13915a105eefedc80f56ea4ec4c1))
+
+
+### Other
+
+* **deps:** cargo update — 77 packages updated to latest patch ([7e82db3](https://github.com/bizzkoot/copilot-tracker/commit/7e82db30e1ed0a62b4e27ab0609364827d235f07))
+* **tooling:** add .prettierignore to exclude auto-generated files ([ea5b088](https://github.com/bizzkoot/copilot-tracker/commit/ea5b088bbebc70af3dc2e237576d54710af46241))
+
 ## [2.4.7](https://github.com/bizzkoot/copilot-tracker/compare/v2.4.6...v2.4.7) (2026-03-05)
 
 ### Bug Fixes
