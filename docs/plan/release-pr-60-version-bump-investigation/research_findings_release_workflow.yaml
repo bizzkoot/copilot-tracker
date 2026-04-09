@@ -1,0 +1,244 @@
+plan_id: release-pr-60-version-bump-investigation
+objective: Investigate why release PR #60 bumped from 2.4.7 to 2.5.0 when the manual workflow input was 0.0.1 and the local parser resolves that to 2.4.8.
+focus_area: release_workflow
+created_at: 2026-04-09T00:00:00Z
+created_by: GitHub Copilot
+status: completed
+
+tldr: |
+  - Main branch was at version 2.4.7 in package.json and .release-please-manifest.json immediately before PR #60.
+  - The current manual workflow parses input 0.0.1 to 2.4.8 and passes that value to release-please via release-as.
+  - PR #60 was generated as 2.5.0 and its changelog contains feat commits, which matches normal conventional-commit minor bumping, not the requested manual patch bump.
+  - Upstream release-please code and tests show release-as should win exactly over conventional-commit bumping in manifest mode.
+  - Repo history shows a regression window: an earlier workflow variant tried to control release boundaries dynamically, then commit 1889e0a removed that path because release-please cannot read a job-generated config file from the runner filesystem.
+
+research_metadata:
+  methodology: hybrid retrieval across local workflow/script/config files, PR metadata, git history, repo memory, and upstream release-please docs/source/tests
+  tools_used:
+    - read_file
+    - github-pull-request_issue_fetch
+    - run_in_terminal
+    - search_subagent
+    - fetch_webpage
+    - mcp_context7_get-library-docs
+    - github_repo
+    - memory
+  scope: Investigated release workflow inputs, parse_version behavior, release-please manifest config, PR #60 contents, related release workflow history, and upstream release-please semantics.
+  confidence: medium
+  coverage: 85
+
+files_analyzed:
+  - file: release.yml
+    path: /Users/muhammadfaiz/Custom APP/copilot-tracker/.github/workflows/release.yml
+    purpose: Manual release workflow that parses user input and invokes release-please.
+    key_elements:
+      - element: workflow_dispatch.version
+        type: variable
+        location: .github/workflows/release.yml:11
+        description: Manual version input accepted by the release workflow.
+      - element: Parse version input
+        type: pattern
+        location: .github/workflows/release.yml:40
+        description: Calls parse_version.sh with the manual input and current package.json version.
+      - element: Run release-please
+        type: pattern
+        location: .github/workflows/release.yml:69
+        description: Invokes googleapis/release-please-action@v4 with config-file, manifest-file, and release-as.
+    language: yaml
+    lines: 260
+  - file: parse_version.sh
+    path: /Users/muhammadfaiz/Custom APP/copilot-tracker/.github/scripts/parse_version.sh
+    purpose: Parses manual version input into an exact semver string.
+    key_elements:
+      - element: is_increment_pattern
+        type: function
+        location: .github/scripts/parse_version.sh:47
+        description: Treats 0.x.y as an increment pattern rather than a literal semver target.
+      - element: increment addition logic
+        type: pattern
+        location: .github/scripts/parse_version.sh:84
+        description: Adds increment components to the current version, making 0.0.1 on 2.4.7 become 2.4.8.
+    language: bash
+    lines: 111
+  - file: .release-please.json
+    path: /Users/muhammadfaiz/Custom APP/copilot-tracker/.release-please.json
+    purpose: Committed manifest configuration consumed by release-please.
+    key_elements:
+      - element: packages[.].release-type
+        type: variable
+        location: .release-please.json:3
+        description: Uses node strategy at the repo root.
+      - element: changelog-sections
+        type: pattern
+        location: .release-please.json:15
+        description: Maps feat/fix/refactor/chore/docs commit types to release notes sections.
+    language: json
+    lines: 31
+  - file: .release-please-manifest.json
+    path: /Users/muhammadfaiz/Custom APP/copilot-tracker/.release-please-manifest.json
+    purpose: Tracks the last released version for the root package.
+    key_elements:
+      - element: root version
+        type: variable
+        location: .release-please-manifest.json:2
+        description: Was 2.4.7 on main before PR #60 and became 2.5.0 in the release PR.
+    language: json
+    lines: 3
+  - file: PR #60 metadata
+    path: /Users/muhammadfaiz/Library/Application Support/Code - Insiders/User/workspaceStorage/6cbb33f00936522d9b3542c1b941f215/GitHub.copilot-chat/chat-session-resources/c5402172-1258-4fc1-aaf6-005e4ee44173/call_7xK2KifpQq73QVN1MKMN2q9J__vscode-1775728783583/content.json
+    purpose: Captured PR title, body, and file changes for release PR #60.
+    key_elements:
+      - element: title
+        type: variable
+        location: PR metadata:1
+        description: PR title is chore(main): release 2.5.0.
+      - element: changelog body
+        type: pattern
+        location: PR metadata:1
+        description: Changelog range is v2.4.7...v2.5.0 and includes feat commits.
+      - element: fileChanges
+        type: pattern
+        location: PR metadata:1
+        description: package.json, Cargo.toml, tauri.conf.json, and manifest were all bumped to 2.5.0.
+    language: json
+    lines: 1
+  - file: RELEASE_WORKFLOW.md
+    path: /Users/muhammadfaiz/Custom APP/copilot-tracker/.github/workflows/RELEASE_WORKFLOW.md
+    purpose: Documents intended manual release behavior.
+    key_elements:
+      - element: increment notation docs
+        type: pattern
+        location: .github/workflows/RELEASE_WORKFLOW.md:37
+        description: Explicitly documents 0.0.1 as a patch increment against the current version.
+      - element: workflow claims
+        type: pattern
+        location: .github/workflows/RELEASE_WORKFLOW.md:78
+        description: Claims manual workflow gives explicit version control.
+    language: markdown
+    lines: 240
+
+patterns_found:
+  - category: architecture
+    pattern: Manual input is converted locally before being handed to release-please
+    description: The workflow separates version parsing from release-please invocation and expects release-please to honor the parsed exact value.
+    examples:
+      - file: /Users/muhammadfaiz/Custom APP/copilot-tracker/.github/workflows/release.yml
+        location: .github/workflows/release.yml:40
+        snippet: ".github/scripts/parse_version.sh \"${{ inputs.version }}\" \"${{ steps.current-version.outputs.version }}\""
+      - file: /Users/muhammadfaiz/Custom APP/copilot-tracker/.github/workflows/release.yml
+        location: .github/workflows/release.yml:79
+        snippet: "release-as: ${{ steps.parse-version.outputs.version }}"
+    prevalence: common
+  - category: architecture
+    pattern: Release PR output still reflects conventional-commit semantics
+    description: PR #60 produced a minor release and feature-heavy changelog exactly as release-please would do without a manual exact-version override.
+    examples:
+      - file: PR #60 metadata
+        location: PR metadata:1
+        snippet: "title: chore(main): release 2.5.0"
+      - file: PR #60 metadata
+        location: PR metadata:1
+        snippet: "### Features\n* add backup and restore functionality in settings"
+    prevalence: occasional
+  - category: structure
+    pattern: Previous workflow revisions tried to constrain release-please's release boundary dynamically
+    description: Repo history contains local release workflow iterations that added bootstrap-sha and last-release-sha specifically to respect exact release-as behavior.
+    examples:
+      - file: git history
+        location: reflog/local history
+        snippet: "fix(release): use dynamic last-release-sha to respect exact release-as version"
+      - file: git diff 1889e0a^
+        location: release.yml diff
+        snippet: "removed Resolve bootstrap SHA and Generate release-please config steps"
+    prevalence: occasional
+
+related_architecture:
+  components_relevant_to_domain:
+    - component: Manual release workflow
+      responsibility: Accepts human version input and invokes release-please.
+      location: /Users/muhammadfaiz/Custom APP/copilot-tracker/.github/workflows/release.yml
+      relationship_to_domain: domain depends on this
+    - component: Version parser
+      responsibility: Converts smart version input into an explicit semver.
+      location: /Users/muhammadfaiz/Custom APP/copilot-tracker/.github/scripts/parse_version.sh
+      relationship_to_domain: domain depends on this
+    - component: Release-please manifest config
+      responsibility: Defines release strategy and extra file updates.
+      location: /Users/muhammadfaiz/Custom APP/copilot-tracker/.release-please.json
+      relationship_to_domain: domain depends on this
+    - component: Release PR branch
+      responsibility: Holds the generated release PR updates.
+      location: origin/release-please--branches--main--components--copilot-tracker
+      relationship_to_domain: this uses domain outputs
+  interfaces_used_by_domain:
+    - interface: googleapis/release-please-action input release-as
+      location: upstream action input
+      usage_pattern: passed from workflow expression into manifest mode
+    - interface: .release-please-manifest.json
+      location: repo root
+      usage_pattern: last released version for path .
+  data_flow_involving_domain: Manual input 0.0.1 -> parse_version.sh resolves to 2.4.8 -> workflow passes 2.4.8 as release-as -> release-please should create/update a release PR -> actual PR #60 was generated at 2.5.0.
+  key_relationships_to_domain:
+    - from: parse_version.sh
+      to: release.yml
+      relationship: called by
+    - from: release.yml
+      to: .release-please.json
+      relationship: references
+    - from: release.yml
+      to: .release-please-manifest.json
+      relationship: references
+    - from: release.yml
+      to: googleapis/release-please-action
+      relationship: calls
+
+related_technology_stack:
+  languages_used_in_domain:
+    - YAML
+    - Bash
+    - JSON
+    - TypeScript
+  frameworks_used_in_domain:
+    - name: GitHub Actions
+      usage_in_domain: workflow_dispatch pipeline for releases
+  libraries_used_in_domain:
+    - name: googleapis/release-please-action@v4
+      purpose_in_domain: generates and updates release PRs from conventional commits and manifest state
+    - name: release-please manifest releaser
+      purpose_in_domain: computes release PR content from manifest version, commits, and optional release-as
+  external_apis_used_in_domain:
+    - name: GitHub API via release-please
+      integration_point: release PR creation and update
+
+related_conventions:
+  naming_patterns_in_domain: Release PR titles use chore(main): release X.Y.Z and tags use vX.Y.Z because include-component-in-tag is false.
+  structure_of_domain: Manual release pipeline is split into parse/validate/release-please/format/validate jobs.
+  error_handling_in_domain: Workflow validates parsed version before calling release-please; runtime-generated release-please config was abandoned because the action reads config from the repository branch.
+  testing_in_domain: Contract tests assert the workflow references committed release-please config rather than a generated config file.
+  documentation_in_domain: RELEASE_WORKFLOW.md documents 0.0.1 as a patch increment and claims explicit control over version selection.
+
+related_dependencies:
+  internal:
+    - component: /Users/muhammadfaiz/Custom APP/copilot-tracker/.github/workflows/RELEASE_WORKFLOW.md
+      relationship_to_domain: documents intended behavior
+      direction: inbound
+    - component: /Users/muhammadfaiz/Custom APP/copilot-tracker/tests/regression/ci-validation-contracts.test.mjs
+      relationship_to_domain: guards committed-config workflow behavior
+      direction: inbound
+  external:
+    - name: googleapis/release-please
+      purpose_for_domain: version calculation and release PR generation
+
+open_questions:
+  - question: Which exact workflow run created PR #60, and what resolved value was logged for steps.parse-version.outputs.version?
+    context: The repository evidence shows what should happen locally and what PR #60 produced, but the actual workflow run logs were not available in the workspace.
+  - question: Was PR #60 created by a run of the current workflow on main, or by an earlier committed workflow revision/selected branch in the Actions UI?
+    context: GitHub Actions manual dispatch runs the selected branch's committed workflow file, and the workspace does not include the run metadata.
+
+gaps:
+  - area: GitHub Actions run logs
+    description: The investigation could not inspect the specific workflow run logs or workflow-dispatch inputs attached to PR #60.
+    impact: Prevents proving exactly why release-as failed to take effect in that run; the conclusion about root cause is therefore probabilistic rather than absolute.
+  - area: PR creation event timeline from GitHub UI
+    description: PR metadata available here shows the generated PR content but not the full event timeline or selected branch for the manual dispatch.
+    impact: Leaves a small uncertainty between "override never reached release-please" and "the run executed a different committed workflow revision than expected."

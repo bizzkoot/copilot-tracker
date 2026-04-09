@@ -126,3 +126,31 @@ test("release workflow uses committed release-please configuration", () => {
     "release workflow should not generate a release-please config that the action cannot read",
   );
 });
+
+test("release workflow uses the release-please CLI for exact manual release-as PRs", () => {
+  assert.match(
+    releaseWorkflowSource,
+    /skip-github-pull-request:\s*true/,
+    "release workflow should keep the action limited to release tagging when using the CLI for PR creation",
+  );
+  assert.match(
+    releaseWorkflowSource,
+    /npx --yes release-please@17\.4\.1 release-pr/,
+    "release workflow should use the release-please CLI for manifest PR creation",
+  );
+  assert.match(
+    releaseWorkflowSource,
+    /--config-file=\.release-please\.json/,
+    "release workflow should keep the CLI on the committed release-please config file",
+  );
+  assert.match(
+    releaseWorkflowSource,
+    /--manifest-file=\.release-please-manifest\.json/,
+    "release workflow should keep the CLI on the committed manifest file",
+  );
+  assert.match(
+    releaseWorkflowSource,
+    /--release-as="\$\{\{ steps\.parse-version\.outputs\.version \}\}"/,
+    "release workflow should pass the parsed exact version to the CLI release-pr command",
+  );
+});
