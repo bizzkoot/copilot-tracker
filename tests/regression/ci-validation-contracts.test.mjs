@@ -103,3 +103,26 @@ test("release validation uses bash for bash-specific sync checks and avoids redu
     "release summary should not add a redundant failing job",
   );
 });
+
+test("release workflow uses committed release-please configuration", () => {
+  assert.match(
+    releaseWorkflowSource,
+    /config-file:\s*\.release-please\.json\b/,
+    "release workflow should point release-please at the committed config file",
+  );
+  assert.doesNotMatch(
+    releaseWorkflowSource,
+    /config-file:\s*\.release-please-generated\.json\b/,
+    "release workflow should not reference a runtime-generated config file",
+  );
+  assert.doesNotMatch(
+    releaseWorkflowSource,
+    /- name:\s*Resolve bootstrap SHA\b/,
+    "release workflow should not depend on a bootstrap SHA step for established releases",
+  );
+  assert.doesNotMatch(
+    releaseWorkflowSource,
+    /- name:\s*Generate release-please config\b/,
+    "release workflow should not generate a release-please config that the action cannot read",
+  );
+});
