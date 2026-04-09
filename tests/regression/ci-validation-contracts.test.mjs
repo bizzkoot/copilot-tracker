@@ -22,6 +22,10 @@ const manualReleasePublishSource = fs.existsSync(
 )
   ? fs.readFileSync(manualReleasePublishWorkflowPath, "utf8")
   : "";
+const manualUploadWorkflowSource = fs.readFileSync(
+  path.resolve(".github/workflows/manual-upload.yml"),
+  "utf8",
+);
 const runTestsSource = fs.readFileSync(
   path.resolve("scripts/run-tests.mjs"),
   "utf8",
@@ -236,5 +240,28 @@ test("manual release publish workflow can publish an already-merged version from
     manualReleasePublishSource,
     /--notes-file\s+release_notes\.md/,
     "manual release publish workflow should publish the extracted changelog section as release notes",
+  );
+});
+
+test("manual upload workflow accepts either a version or a full tag input", () => {
+  assert.match(
+    manualUploadWorkflowSource,
+    /id:\s*normalize-tag/,
+    "manual upload workflow should normalize the provided tag input before checkout",
+  );
+  assert.match(
+    manualUploadWorkflowSource,
+    /if \[\[ "\$TAG" != v\* \]\]; then/,
+    "manual upload workflow should add the v prefix when the input is only a version number",
+  );
+  assert.match(
+    manualUploadWorkflowSource,
+    /ref:\s*refs\/tags\/\$\{\{ steps\.normalize-tag\.outputs\.tag \}\}/,
+    "manual upload workflow should checkout the normalized tag",
+  );
+  assert.match(
+    manualUploadWorkflowSource,
+    /tag_name:\s*\$\{\{ steps\.normalize-tag\.outputs\.tag \}\}/,
+    "manual upload workflow should upload assets to the normalized tag",
   );
 });

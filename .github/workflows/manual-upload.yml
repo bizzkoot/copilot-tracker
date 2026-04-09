@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to upload to (e.g., v2.4.1)"
+        description: "Release version or tag to upload to (e.g., 2.4.8 or v2.4.8)"
         required: true
         type: string
       platforms:
@@ -49,10 +49,22 @@ jobs:
               src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
 
     steps:
+      - name: Normalize tag input
+        id: normalize-tag
+        shell: bash
+        run: |
+          TAG="${{ inputs.tag }}"
+
+          if [[ "$TAG" != v* ]]; then
+            TAG="v${TAG}"
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
       - name: Check out Git repository
         uses: actions/checkout@v4
         with:
-          ref: refs/tags/${{ inputs.tag }}
+          ref: refs/tags/${{ steps.normalize-tag.outputs.tag }}
 
       - name: Install Node.js
         uses: actions/setup-node@v4
@@ -120,5 +132,5 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: ${{ matrix.artifacts }}
-          tag_name: ${{ inputs.tag }}
+          tag_name: ${{ steps.normalize-tag.outputs.tag }}
           fail_on_unmatched_files: true
