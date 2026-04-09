@@ -1,10 +1,8 @@
 {
-  "bootstrap-sha": "c5aacbf198a7f243add9b2161f53fe2fad00959e",
   "packages": {
     ".": {
       "release-type": "node",
       "include-component-in-tag": false,
-      "bump-patch-for-minor-pre-major": ["fix", "refactor"],
       "extra-files": [
         {
           "type": "json",

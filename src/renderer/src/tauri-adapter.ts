@@ -13,6 +13,8 @@ import {
   UpdateCheckStatus,
   AppAPI,
   DEFAULT_TRAY_FORMAT,
+  BackupInfo,
+  BackupFrequency,
 } from "./types";
 
 // Rust payload types
@@ -22,6 +24,39 @@ interface RustUsageSummary {
   remaining: number;
   percentage: number;
   timestamp: number;
+}
+
+interface RustUsageModel {
+  name: string;
+  included_requests: number;
+  billed_requests: number;
+  gross_amount: number;
+  billed_amount: number;
+}
+
+interface RustUsageHistoryEntry {
+  timestamp: number;
+  used: number;
+  limit: number;
+  included_requests?: number;
+  billed_requests?: number;
+  gross_amount?: number;
+  billed_amount?: number;
+  quota_estimated?: boolean;
+  models?: RustUsageModel[];
+}
+
+interface RustUsagePrediction {
+  predicted_monthly_requests: number;
+  predicted_billed_amount: number;
+  confidence_level: string;
+  days_used_for_prediction: number;
+}
+
+interface RustUsagePayload {
+  summary: RustUsageSummary;
+  history: RustUsageHistoryEntry[];
+  prediction?: RustUsagePrediction | null;
 }
 
 // Rust AppSettings (full struct with different field names than Settings)
@@ -48,6 +83,11 @@ interface RustAppSettings {
   };
   widgetPinned: boolean;
   widgetVisible: boolean;
+  autoBackupEnabled: boolean;
+  backupFrequency: string;
+  backupRetentionCount: number;
+  lastAutoBackupAt?: string;
+  backupDirectory: string | null;
 }
 
 // Rust AuthState result
@@ -93,19 +133,64 @@ const notifySettingsListeners = (settings: Settings) => {
   settingsListeners.forEach((cb) => cb(settings));
 };
 
-// Helper to convert Rust usage summary to UsageFetchResult
-const convertUsageData = (summary: RustUsageSummary): UsageFetchResult => {
+type TauriInvoke = <T>(cmd: string, args?: unknown) => Promise<T>;
+
+const mapUsagePayload = (payload: RustUsagePayload): UsageFetchResult => {
   return {
     success: true,
     usage: {
-      netQuantity: summary.used,
+      netQuantity: payload.summary.used,
       netBilledAmount: 0,
-      discountQuantity: summary.used,
-      userPremiumRequestEntitlement: summary.limit,
-      filteredUserPremiumRequestEntitlement: summary.limit,
+      discountQuantity: payload.summary.used,
+      userPremiumRequestEntitlement: payload.summary.limit,
+      filteredUserPremiumRequestEntitlement: payload.summary.limit,
     },
+    history: {
+      fetchedAt: new Date(payload.summary.timestamp * 1000),
+      days: payload.history.map((entry) => ({
+        date: new Date(entry.timestamp * 1000),
+        limit: entry.limit,
+        quotaEstimated: entry.quota_estimated ?? false,
+        includedRequests: calculateIncludedRequests(entry),
+        billedRequests: entry.billed_requests ?? 0,
+        grossAmount: entry.gross_amount ?? 0,
+        billedAmount: entry.billed_amount ?? 0,
+        models: entry.models?.map((m) => ({
+          name: m.name,
+          includedRequests: m.included_requests,
+          billedRequests: m.billed_requests,
+          grossAmount: m.gross_amount,
+          billedAmount: m.billed_amount,
+        })),
+      })),
+    },
+    prediction: payload.prediction
+      ? {
+          predictedMonthlyRequests: payload.prediction.predicted_monthly_requests,
+          predictedBilledAmount: payload.prediction.predicted_billed_amount,
+          confidenceLevel: payload.prediction.confidence_level as
+            | "low"
+            | "medium"
+            | "high",
+          daysUsedForPrediction: payload.prediction.days_used_for_prediction,
+        }
+      : null,
   };
 };
+
+async function getCachedUsageResult(
+  invoke: TauriInvoke,
+): Promise<UsageFetchResult | null> {
+  try {
+    const payload = await invoke<RustUsagePayload | null>("get_cached_usage_data");
+    return payload ? mapUsagePayload(payload) : null;
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.error("getCachedUsage failed:", err);
+    }
+    return null;
+  }
+}
 
 /**
  * Wait for Tauri APIs to be available in the window context.
@@ -128,6 +213,16 @@ async function waitForTauri(maxAttempts = 50, delay = 20): Promise<boolean> {
     );
   }
   return false;
+}
+
+function calculateIncludedRequests(entry: {
+  used: number;
+  billed_requests?: number | null;
+  included_requests?: number | null;
+}): number {
+  if (entry.included_requests != null) return entry.included_requests;
+  const calculated = entry.used - (entry.billed_requests ?? 0);
+  return calculated < 0 ? 0 : calculated;
 }
 
 export async function initTauriAdapter() {
@@ -203,83 +298,16 @@ export async function initTauriAdapter() {
 
     if (!isUsageListenerSetup) {
       isUsageListenerSetup = true;
-      listen<RustUsageSummary>("usage:updated", (event) => {
-        const result = convertUsageData(event.payload);
-        notifyUsageListeners(result);
+      listen<RustUsageSummary>("usage:updated", () => {
+        void getCachedUsageResult(invoke).then((result) => {
+          if (result) {
+            notifyUsageListeners(result);
+          }
+        });
       }).catch((err) => console.error("Failed to set up usage listener:", err));
 
-      listen<{
-        summary: RustUsageSummary;
-        history: Array<{
-          timestamp: number;
-          used: number;
-          limit: number;
-          included_requests?: number;
-          billed_requests?: number;
-          gross_amount?: number;
-          billed_amount?: number;
-          models?: Array<{
-            name: string;
-            included_requests: number;
-            billed_requests: number;
-            gross_amount: number;
-            billed_amount: number;
-          }>;
-        }>;
-        prediction?: {
-          predicted_monthly_requests: number;
-          predicted_billed_amount: number;
-          confidence_level: string;
-          days_used_for_prediction: number;
-        };
-      }>("usage:data", (event) => {
-        const payload = event.payload;
-        const result: UsageFetchResult = {
-          success: true,
-          usage: {
-            netQuantity: payload.summary.used,
-            netBilledAmount: 0,
-            discountQuantity: payload.summary.used,
-            userPremiumRequestEntitlement: payload.summary.limit,
-            filteredUserPremiumRequestEntitlement: payload.summary.limit,
-          },
-          history: {
-            fetchedAt: new Date(payload.summary.timestamp * 1000),
-            days: payload.history.map((entry) => ({
-              date: new Date(entry.timestamp * 1000),
-              includedRequests:
-                entry.included_requests ??
-                (entry.used - (entry.billed_requests ?? 0) < 0
-                  ? 0
-                  : entry.used - (entry.billed_requests ?? 0)),
-              billedRequests: entry.billed_requests ?? 0,
-              grossAmount: entry.gross_amount ?? 0,
-              billedAmount: entry.billed_amount ?? 0,
-              models: entry.models?.map((m) => ({
-                name: m.name,
-                includedRequests: m.included_requests,
-                billedRequests: m.billed_requests,
-                grossAmount: m.gross_amount,
-                billedAmount: m.billed_amount,
-              })),
-            })),
-          },
-          prediction: payload.prediction
-            ? {
-                predictedMonthlyRequests:
-                  payload.prediction.predicted_monthly_requests,
-                predictedBilledAmount:
-                  payload.prediction.predicted_billed_amount,
-                confidenceLevel: payload.prediction.confidence_level as
-                  | "low"
-                  | "medium"
-                  | "high",
-                daysUsedForPrediction:
-                  payload.prediction.days_used_for_prediction,
-              }
-            : undefined,
-        };
-        notifyUsageListeners(result);
+      listen<RustUsagePayload>("usage:data", (event) => {
+        notifyUsageListeners(mapUsagePayload(event.payload));
       }).catch((err) =>
         console.error("Failed to set up usage:data listener:", err),
       );
@@ -363,9 +391,7 @@ export async function initTauriAdapter() {
       // Usage
       fetchUsage: async () => {
         try {
-          const summary = await invoke<RustUsageSummary>("fetch_usage");
-          const result = convertUsageData(summary);
-          notifyUsageListeners(result);
+          await invoke<RustUsageSummary>("fetch_usage");
         } catch (err) {
           if (import.meta.env.DEV) {
             console.error("fetchUsage failed:", err);
@@ -378,9 +404,7 @@ export async function initTauriAdapter() {
       },
       refreshUsage: async () => {
         try {
-          const summary = await invoke<RustUsageSummary>("fetch_usage");
-          const result = convertUsageData(summary);
-          notifyUsageListeners(result);
+          await invoke<RustUsageSummary>("fetch_usage");
         } catch (err) {
           if (import.meta.env.DEV) {
             console.error("refreshUsage failed:", err);
@@ -393,9 +417,7 @@ export async function initTauriAdapter() {
       },
       forceRefreshUsage: async () => {
         try {
-          const summary = await invoke<RustUsageSummary>("force_fetch_usage");
-          const result = convertUsageData(summary);
-          notifyUsageListeners(result);
+          await invoke<RustUsageSummary>("force_fetch_usage");
         } catch (err) {
           if (import.meta.env.DEV) {
             console.error("forceRefreshUsage failed:", err);
@@ -410,89 +432,7 @@ export async function initTauriAdapter() {
         return await invoke<unknown>("perform_auth_extraction");
       },
       getCachedUsage: async () => {
-        try {
-          const payload = await invoke<{
-            summary: RustUsageSummary;
-            history: Array<{
-              timestamp: number;
-              used: number;
-              limit: number;
-              included_requests?: number;
-              billed_requests?: number;
-              gross_amount?: number;
-              billed_amount?: number;
-              models?: Array<{
-                name: string;
-                included_requests: number;
-                billed_requests: number;
-                gross_amount: number;
-                billed_amount: number;
-              }>;
-            }>;
-            prediction?: {
-              predicted_monthly_requests: number;
-              predicted_billed_amount: number;
-              confidence_level: string;
-              days_used_for_prediction: number;
-            };
-          } | null>("get_cached_usage_data");
-
-          if (!payload) {
-            return null;
-          }
-
-          const result: UsageFetchResult = {
-            success: true,
-            usage: {
-              netQuantity: payload.summary.used,
-              netBilledAmount: 0,
-              discountQuantity: payload.summary.used,
-              userPremiumRequestEntitlement: payload.summary.limit,
-              filteredUserPremiumRequestEntitlement: payload.summary.limit,
-            },
-            history: {
-              fetchedAt: new Date(payload.summary.timestamp * 1000),
-              days: payload.history.map((entry) => ({
-                date: new Date(entry.timestamp * 1000),
-                includedRequests:
-                  entry.included_requests ??
-                  (entry.used - (entry.billed_requests ?? 0) < 0
-                    ? 0
-                    : entry.used - (entry.billed_requests ?? 0)),
-                billedRequests: entry.billed_requests ?? 0,
-                grossAmount: entry.gross_amount ?? 0,
-                billedAmount: entry.billed_amount ?? 0,
-                models: entry.models?.map((m) => ({
-                  name: m.name,
-                  includedRequests: m.included_requests,
-                  billedRequests: m.billed_requests,
-                  grossAmount: m.gross_amount,
-                  billedAmount: m.billed_amount,
-                })),
-              })),
-            },
-            prediction: payload.prediction
-              ? {
-                  predictedMonthlyRequests:
-                    payload.prediction.predicted_monthly_requests,
-                  predictedBilledAmount:
-                    payload.prediction.predicted_billed_amount,
-                  confidenceLevel: payload.prediction.confidence_level as
-                    | "low"
-                    | "medium"
-                    | "high",
-                  daysUsedForPrediction:
-                    payload.prediction.days_used_for_prediction,
-                }
-              : undefined,
-          };
-          return result;
-        } catch (err) {
-          if (import.meta.env.DEV) {
-            console.error("getCachedUsage failed:", err);
-          }
-          return null;
-        }
+        return getCachedUsageResult(invoke);
       },
       onUsageData: (callback: (data: UsageFetchResult) => void) => {
         usageListeners.push(callback);
@@ -536,6 +476,11 @@ export async function initTauriAdapter() {
             },
             trayIconFormat: (rustSettings.trayIconFormat ||
               DEFAULT_TRAY_FORMAT) as Settings["trayIconFormat"],
+            autoBackupEnabled: rustSettings.autoBackupEnabled,
+            backupFrequency: (rustSettings.backupFrequency ||
+              "daily") as BackupFrequency,
+            backupRetentionCount: rustSettings.backupRetentionCount ?? 10,
+            backupDirectory: rustSettings.backupDirectory,
           };
         } catch (e) {
           if (import.meta.env.DEV) {
@@ -586,6 +531,16 @@ export async function initTauriAdapter() {
             widgetPosition: current.widgetPosition,
             widgetPinned: current.widgetPinned,
             widgetVisible: current.widgetVisible,
+            autoBackupEnabled:
+              newSettings.autoBackupEnabled ?? current.autoBackupEnabled,
+            backupFrequency:
+              newSettings.backupFrequency ?? current.backupFrequency,
+            backupRetentionCount:
+              newSettings.backupRetentionCount ?? current.backupRetentionCount,
+            backupDirectory:
+              newSettings.backupDirectory !== undefined
+                ? newSettings.backupDirectory
+                : current.backupDirectory,
             // Backend-managed fields (always include from current)
             customerId: current.customerId,
             usageLimit: current.usageLimit,
@@ -638,6 +593,11 @@ export async function initTauriAdapter() {
           },
           trayIconFormat: (rustSettings.trayIconFormat ||
             DEFAULT_TRAY_FORMAT) as Settings["trayIconFormat"],
+          autoBackupEnabled: rustSettings.autoBackupEnabled,
+          backupFrequency: (rustSettings.backupFrequency ||
+            "daily") as BackupFrequency,
+          backupRetentionCount: rustSettings.backupRetentionCount ?? 10,
+          backupDirectory: rustSettings.backupDirectory,
         };
         notifySettingsListeners(settings);
 
@@ -663,6 +623,44 @@ export async function initTauriAdapter() {
           notifyAuthListeners("error");
         }
       },
+      createBackup: async () => {
+        if (import.meta.env.DEV) {
+          console.log("[TauriAdapter] Creating backup...");
+        }
+        const backupId = await invoke<string>("create_backup");
+        if (import.meta.env.DEV) {
+          console.log("[TauriAdapter] Backup created:", backupId);
+        }
+        return backupId;
+      },
+      restoreBackup: async (backupId: string) => {
+        if (import.meta.env.DEV) {
+          console.log("[TauriAdapter] Restoring backup:", backupId);
+        }
+        await invoke("restore_backup", { backupId });
+        if (import.meta.env.DEV) {
+          console.log("[TauriAdapter] Backup restored successfully");
+        }
+      },
+      listBackups: async () => {
+        if (import.meta.env.DEV) {
+          console.log("[TauriAdapter] Listing backups...");
+        }
+        const backups = await invoke<BackupInfo[]>("list_backups");
+        if (import.meta.env.DEV) {
+          console.log("[TauriAdapter] Found backups:", backups.length);
+        }
+        return backups;
+      },
+      deleteBackup: async (backupId: string) => {
+        if (import.meta.env.DEV) {
+          console.log("[TauriAdapter] Deleting backup:", backupId);
+        }
+        await invoke("delete_backup", { backupId });
+        if (import.meta.env.DEV) {
+          console.log("[TauriAdapter] Backup deleted:", backupId);
+        }
+      },
       onSettingsChanged: (callback: (settings: Settings) => void) => {
         settingsListeners.push(callback);
         let unlisten: (() => void) | null = null;
@@ -683,6 +681,11 @@ export async function initTauriAdapter() {
             },
             trayIconFormat: (rustSettings.trayIconFormat ||
               DEFAULT_TRAY_FORMAT) as Settings["trayIconFormat"],
+            autoBackupEnabled: rustSettings.autoBackupEnabled,
+            backupFrequency: (rustSettings.backupFrequency ||
+              "daily") as BackupFrequency,
+            backupRetentionCount: rustSettings.backupRetentionCount ?? 10,
+            backupDirectory: rustSettings.backupDirectory,
           };
           callback(settings);
         })
@@ -700,17 +703,29 @@ export async function initTauriAdapter() {
       },
 
       // App
-      quit: () => invoke("plugin:process|exit"),
-      showWindow: () =>
-        invoke("plugin:window|show").catch((e) =>
-          console.error("Failed to show window", e),
-        ),
-      hideWindow: () =>
-        invoke("hide_main_window").catch((e) =>
-          console.error("Failed to hide window", e),
-        ),
-      openExternal: (url: string) => invoke("open_external_url", { url }),
-      checkForUpdates: () => invoke("check_for_updates"),
+      quit: async () => {
+        await invoke("plugin:process|exit");
+      },
+      showWindow: async () => {
+        try {
+          await invoke("plugin:window|show");
+        } catch (e) {
+          console.error("Failed to show window", e);
+        }
+      },
+      hideWindow: async () => {
+        try {
+          await invoke("hide_main_window");
+        } catch (e) {
+          console.error("Failed to hide window", e);
+        }
+      },
+      openExternal: async (url: string) => {
+        await invoke("open_external_url", { url });
+      },
+      checkForUpdates: async () => {
+        await invoke("check_for_updates");
+      },
       onNavigate: (callback: (route: string) => void) => {
         let unlisten: (() => void) | null = null;
         listen<string>("navigate", (event) => callback(event.payload))
@@ -865,6 +880,10 @@ function setupMockAdapter() {
     isWidgetEnabled: async () => false,
     setWidgetEnabled: async () => {},
     onWidgetEnabledChanged: () => () => {},
+    createBackup: async () => "mock-backup-id",
+    restoreBackup: async () => {},
+    listBackups: async () => [],
+    deleteBackup: async () => {},
   };
   (window as any).electron = mockAPI;
 }

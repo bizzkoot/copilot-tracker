@@ -13,10 +13,9 @@ export function useAuth() {
   const authState = useUsageStore((state) => state.authState);
   const setAuthState = useUsageStore((state) => state.setAuthState);
   const setError = useUsageStore((state) => state.setError);
-  const reset = useUsageStore((state) => state.reset);
 
   // Login - opens GitHub auth window
-  const login = useCallback(() => {
+  const login = useCallback(async () => {
     if (isDev) {
       console.log(
         "[Auth] login() called, electron available:",
@@ -24,30 +23,49 @@ export function useAuth() {
       );
     }
     if (typeof window.electron !== "undefined") {
-      window.electron.login();
-    } else {
-      if (isDev) {
-        console.error(
-          "[Auth] window.electron is undefined - IPC not available",
+      try {
+        await window.electron.login();
+        setError(null);
+      } catch (err) {
+        console.error("[Auth] login failed:", err);
+        setError(err instanceof Error ? err.message : "Failed to start login");
+      }
+      return;
+    }
+
+    if (isDev) {
+      console.error("[Auth] window.electron is undefined - IPC not available");
+    }
+  }, [setError]);
+
+  // Logout - clears session
+  const logout = useCallback(async () => {
+    if (typeof window.electron !== "undefined") {
+      try {
+        await window.electron.logout();
+        setAuthState("unauthenticated");
+        setError(null);
+      } catch (err) {
+        console.error("[Auth] logout failed:", err);
+        setError(err instanceof Error ? err.message : "Failed to log out");
+      }
+    }
+  }, [setAuthState, setError]);
+
+  // Check current auth state
+  const checkAuth = useCallback(async () => {
+    if (typeof window.electron !== "undefined") {
+      try {
+        await window.electron.checkAuth();
+      } catch (err) {
+        console.error("[Auth] checkAuth failed:", err);
+        setAuthState("error");
+        setError(
+          err instanceof Error ? err.message : "Failed to check auth state",
         );
       }
     }
-  }, []);
-
-  // Logout - clears session
-  const logout = useCallback(() => {
-    if (typeof window.electron !== "undefined") {
-      window.electron.logout();
-      reset();
-    }
-  }, [reset]);
-
-  // Check current auth state
-  const checkAuth = useCallback(() => {
-    if (typeof window.electron !== "undefined") {
-      window.electron.checkAuth();
-    }
-  }, []);
+  }, [setAuthState, setError]);
 
   // Setup IPC listeners
   useEffect(() => {
@@ -86,7 +104,7 @@ export function useAuth() {
     );
 
     // Initial auth check
-    checkAuth();
+    void checkAuth();
 
     return () => {
       unsubAuthState?.();

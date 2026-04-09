@@ -29,6 +29,19 @@ export interface NotificationSettings {
   thresholds: number[]; // e.g., [50, 75, 90, 100]
 }
 
+export interface BackupInfo {
+  backupId: string;
+  createdAt: string;
+  files: string[];
+  sizeBytes: number;
+}
+
+export type BackupFrequency =
+  | "everyRefresh"
+  | "daily"
+  | "every3Days"
+  | "weekly";
+
 export interface Settings {
   refreshInterval: 10 | 30 | 60 | 300 | 1800; // seconds
   predictionPeriod: 7 | 14 | 21; // days
@@ -38,6 +51,10 @@ export interface Settings {
   notifications: NotificationSettings;
   theme: "light" | "dark" | "system";
   trayIconFormat: TrayIconFormat;
+  autoBackupEnabled: boolean;
+  backupFrequency: BackupFrequency;
+  backupRetentionCount: number; // 0 = unlimited
+  backupDirectory: string | null;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -52,6 +69,10 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   theme: "system",
   trayIconFormat: DEFAULT_TRAY_FORMAT,
+  autoBackupEnabled: false,
+  backupFrequency: "daily",
+  backupRetentionCount: 10,
+  backupDirectory: null,
 };
 
 // Refresh interval options for UI
@@ -107,3 +128,35 @@ export const TRAY_ICON_FORMAT_OPTIONS = [
     example: "750/1200 (62%)",
   },
 ] as const;
+
+// Backup frequency options for UI
+export const BACKUP_FREQUENCY_OPTIONS: Array<{
+  value: BackupFrequency;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "everyRefresh",
+    label: "Every Refresh",
+    description: "After every data sync",
+  },
+  { value: "daily", label: "Daily", description: "Once per 24 hours" },
+  {
+    value: "every3Days",
+    label: "Every 3 Days",
+    description: "Once every 3 days",
+  },
+  { value: "weekly", label: "Weekly", description: "Once every 7 days" },
+];
+
+// Backup retention count options for UI (0 = unlimited)
+export const BACKUP_RETENTION_OPTIONS: Array<{
+  value: number;
+  label: string;
+}> = [
+  { value: 3, label: "3" },
+  { value: 5, label: "5" },
+  { value: 10, label: "10" },
+  { value: 20, label: "20" },
+  { value: 0, label: "Unlimited" },
+];

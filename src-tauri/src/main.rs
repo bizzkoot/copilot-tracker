@@ -92,7 +92,10 @@ impl PollingState {
     fn restart_polling(&self, app: AppHandle, interval_seconds: u64) {
         // Check if we're shutting down - don't start new polling tasks
         {
-            let shutting_down = self.is_shutting_down.lock().unwrap();
+            let shutting_down = self
+                .is_shutting_down
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
             if *shutting_down {
                 log::warn!("[PollingState] Ignoring restart request during shutdown");
                 return;
@@ -102,8 +105,8 @@ impl PollingState {
         // Debounce: Skip if called with same interval within debounce window
         {
             let now = std::time::Instant::now();
-            let mut last_restart = self.last_restart.lock().unwrap();
-            let mut last_interval = self.last_interval.lock().unwrap();
+            let mut last_restart = self.last_restart.lock().unwrap_or_else(|e| e.into_inner());
+            let mut last_interval = self.last_interval.lock().unwrap_or_else(|e| e.into_inner());
 
             if *last_interval == interval_seconds
                 && now.duration_since(*last_restart)
@@ -148,16 +151,8 @@ impl PollingState {
         }
     }
 
-    /// Stop background polling and mark as shutting down
+    /// Stop background polling without blocking future restarts.
     fn stop_polling(&self) {
-        // Set shutdown flag FIRST to prevent restart attempts
-        {
-            let mut shutting_down = self.is_shutting_down.lock().unwrap();
-            *shutting_down = true;
-            log::info!("[PollingState] Shutdown flag set");
-        }
-
-        // Then cancel the polling task
         if let Ok(mut guard) = self.cancel_tx.lock() {
             if let Some(tx) = guard.take() {
                 match tx.try_send(()) {
@@ -171,6 +166,20 @@ impl PollingState {
                 }
             }
         }
+    }
+
+    /// Stop background polling permanently because the app is shutting down.
+    fn shutdown_polling(&self) {
+        {
+            let mut shutting_down = self
+                .is_shutting_down
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            *shutting_down = true;
+            log::info!("[PollingState] Shutdown flag set");
+        }
+
+        self.stop_polling();
     }
 }
 
@@ -774,7 +783,9 @@ async fn perform_auth_extraction(
     }
 
     {
-        let mut manager = auth_manager_state.lock().unwrap();
+        let mut manager = auth_manager_state
+            .lock()
+            .map_err(|_| "Internal state error".to_string())?;
         manager.finish_extraction();
     }
 
@@ -830,6 +841,12 @@ async fn fetch_usage(
             prediction,
         };
         let _ = app.emit("usage:data", payload);
+
+        // Auto backup if scheduled (offload sync I/O)
+        let app_handle = app.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            handle_auto_backup(&app_handle);
+        });
     }
 
     result
@@ -840,14 +857,7 @@ async fn force_fetch_usage(
     app: AppHandle,
     _state: tauri::State<'_, AuthManagerState>,
 ) -> Result<copilot_tracker::UsageSummary, String> {
-    log::info!("Force fetch usage - clearing cache first");
-
-    // Clear cache first
-    {
-        let store = app.state::<StoreManager>();
-        store.clear_usage_cache();
-        store.clear_usage_history();
-    }
+    log::info!("Force fetch usage - keeping cached data until refresh succeeds");
 
     // Now fetch fresh data
     let _ = app.emit("usage:loading", true);
@@ -871,9 +881,31 @@ async fn force_fetch_usage(
             prediction,
         };
         let _ = app.emit("usage:data", payload);
+
+        // Auto backup if scheduled (offload sync I/O)
+        let app_handle = app.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            handle_auto_backup(&app_handle);
+        });
     }
 
     result
+}
+
+/// Helper function to handle auto-backup after successful usage fetch
+fn handle_auto_backup(app: &AppHandle) {
+    let store = app.state::<StoreManager>();
+    if store.should_auto_backup() {
+        match store.create_backup() {
+            Ok(backup_id) => {
+                log::info!("Auto backup created: {}", backup_id);
+                let _ = store.record_auto_backup_time();
+            }
+            Err(e) => {
+                log::warn!("Auto backup failed (non-fatal): {}", e);
+            }
+        }
+    }
 }
 
 #[tauri::command]
@@ -956,13 +988,17 @@ fn get_app_version(app: AppHandle) -> Result<String, String> {
 fn update_settings(app: AppHandle, settings: copilot_tracker::AppSettings) -> Result<(), String> {
     let store = app.state::<StoreManager>();
     let previous = store.get_settings();
+
+    let mut sanitized_settings = settings;
+    sanitized_settings.refresh_interval = sanitized_settings.refresh_interval.clamp(10, 86400);
+
     store.update_settings(|s| {
-        *s = settings.clone();
+        *s = sanitized_settings.clone();
     })?;
 
-    if previous.launch_at_login != settings.launch_at_login {
+    if previous.launch_at_login != sanitized_settings.launch_at_login {
         use tauri_plugin_autostart::ManagerExt;
-        let result = if settings.launch_at_login {
+        let result = if sanitized_settings.launch_at_login {
             app.autolaunch().enable()
         } else {
             app.autolaunch().disable()
@@ -977,9 +1013,24 @@ fn update_settings(app: AppHandle, settings: copilot_tracker::AppSettings) -> Re
         }
     }
 
-    let _ = app.emit("settings:changed", settings.clone());
+    // Restart background polling if refresh_interval changed
+    if previous.refresh_interval != sanitized_settings.refresh_interval {
+        let polling_state = app.state::<PollingState>();
+        let interval_seconds = sanitized_settings.refresh_interval as u64;
+        polling_state.restart_polling(app.clone(), interval_seconds);
+        log::info!(
+            "[Settings] Refresh interval changed: {}s → {}s, polling restarted",
+            previous.refresh_interval,
+            sanitized_settings.refresh_interval
+        );
+    }
+
+    let _ = app.emit("settings:changed", sanitized_settings.clone());
     let update_state = app.state::<UpdateState>();
-    let latest = update_state.latest.lock().unwrap();
+    let latest = update_state
+        .latest
+        .lock()
+        .map_err(|_| "Internal state error".to_string())?;
     let _ = rebuild_tray_menu(&app, latest.as_ref());
 
     // Update tray icon with new format
@@ -1014,7 +1065,8 @@ fn reset_settings(app: AppHandle) -> Result<copilot_tracker::AppSettings, String
     let _ = app.emit("settings:changed", defaults.clone());
     log::info!("Emitted settings:changed with defaults");
 
-    // CRITICAL: Emit usage:updated with empty data to reset tray icon
+    // Emit empty usage:data so renderer consumers clear stale state without
+    // re-triggering the tray's usage:updated repaint path.
     let (used, limit) = store.get_usage();
     log::info!("Reset usage values: used={}, limit={}", used, limit);
 
@@ -1029,8 +1081,15 @@ fn reset_settings(app: AppHandle) -> Result<copilot_tracker::AppSettings, String
         },
         timestamp: chrono::Utc::now().timestamp(),
     };
-    let _ = app.emit("usage:updated", &summary);
-    log::info!("Emitted usage:updated to reset tray icon");
+    let _ = app.emit(
+        "usage:data",
+        copilot_tracker::UsagePayload {
+            summary: summary.clone(),
+            history: vec![],
+            prediction: None,
+        },
+    );
+    log::info!("Emitted empty usage:data to clear renderer state");
 
     // Update tray icon directly to "1" (unauthenticated state)
     let tray_state = app.state::<TrayState>();
@@ -1039,16 +1098,84 @@ fn reset_settings(app: AppHandle) -> Result<copilot_tracker::AppSettings, String
 
     // Rebuild tray menu
     let update_state = app.state::<UpdateState>();
-    let latest = update_state.latest.lock().unwrap();
+    let latest = update_state
+        .latest
+        .lock()
+        .map_err(|_| "Internal state error".to_string())?;
     let _ = rebuild_tray_menu(&app, latest.as_ref());
 
     Ok(defaults)
 }
 
 #[tauri::command]
+fn create_backup(app: AppHandle) -> Result<String, String> {
+    log::info!("Creating backup...");
+    let store = app.state::<StoreManager>();
+    store.create_backup()
+}
+
+#[tauri::command]
+fn restore_backup(app: AppHandle, backup_id: String) -> Result<(), String> {
+    log::info!("Restoring backup: {}", backup_id);
+    let store = app.state::<StoreManager>();
+    store.restore_backup(&backup_id)?;
+
+    // Emit events to refresh frontend with restored data
+    log::info!("Emitting events after restore");
+
+    // Emit usage:data with restored history and cache
+    let history = UsageManager::get_cached_history(&app);
+    let (used, limit) = store.get_usage();
+    let settings = store.get_settings();
+    let prediction =
+        UsageManager::predict_usage_from_history(&history, used, limit, settings.prediction_period);
+
+    let summary = copilot_tracker::UsageSummary {
+        used,
+        limit,
+        remaining: (limit as f64 - used).max(0.0),
+        percentage: if limit > 0 {
+            (used / limit as f64 * 100.0) as f32
+        } else {
+            0.0
+        },
+        timestamp: chrono::Utc::now().timestamp(),
+    };
+
+    let payload = copilot_tracker::UsagePayload {
+        summary: summary.clone(),
+        history,
+        prediction,
+    };
+    let _ = app.emit("usage:data", payload);
+    log::info!("Emitted usage:data after restore");
+
+    // Emit usage:updated to update tray icon
+    let _ = app.emit("usage:updated", &summary);
+    log::info!("Emitted usage:updated after restore");
+
+    log::info!("Backup restore complete and usage events emitted");
+    Ok(())
+}
+
+#[tauri::command]
+fn list_backups(app: AppHandle) -> Result<Vec<copilot_tracker::BackupInfo>, String> {
+    log::info!("Listing backups...");
+    let store = app.state::<StoreManager>();
+    store.list_backups()
+}
+
+#[tauri::command]
+fn delete_backup(app: AppHandle, backup_id: String) -> Result<(), String> {
+    log::info!("Deleting backup: {}", backup_id);
+    let store = app.state::<StoreManager>();
+    store.delete_backup(&backup_id)
+}
+
+#[tauri::command]
 async fn logout(app: AppHandle) -> Result<(), String> {
     let store = app.state::<StoreManager>();
-    store.clear_auth()?;
+    store.clear_user_session()?;
 
     // Stop background polling when user logs out
     let polling_state = app.state::<PollingState>();
@@ -1057,6 +1184,35 @@ async fn logout(app: AppHandle) -> Result<(), String> {
 
     // Emit event to frontend
     let _ = app.emit("auth:state-changed", "unauthenticated");
+    let (used, limit) = store.get_usage();
+    let summary = copilot_tracker::UsageSummary {
+        used,
+        limit,
+        remaining: (limit as f64 - used).max(0.0),
+        percentage: if limit > 0 {
+            (used / limit as f64 * 100.0) as f32
+        } else {
+            0.0
+        },
+        timestamp: chrono::Utc::now().timestamp(),
+    };
+    let _ = app.emit(
+        "usage:data",
+        copilot_tracker::UsagePayload {
+            summary: summary.clone(),
+            history: vec![],
+            prediction: None,
+        },
+    );
+    let tray_state = app.state::<TrayState>();
+    let _ = update_tray_icon(&app, &tray_state, 1.0, 0, "currentTotal");
+
+    let update_state = app.state::<UpdateState>();
+    let latest = update_state
+        .latest
+        .lock()
+        .map_err(|_| "Internal state error".to_string())?;
+    let _ = rebuild_tray_menu(&app, latest.as_ref());
 
     Ok(())
 }
@@ -1080,7 +1236,10 @@ fn set_launch_at_login(app: AppHandle, enabled: bool) -> Result<(), String> {
     }
 
     let update_state = app.state::<UpdateState>();
-    let latest = update_state.latest.lock().unwrap();
+    let latest = update_state
+        .latest
+        .lock()
+        .map_err(|_| "Internal state error".to_string())?;
     let _ = rebuild_tray_menu(&app, latest.as_ref());
 
     Ok(())
@@ -1096,6 +1255,10 @@ fn hide_main_window(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 fn open_external_url(app: AppHandle, url: String) -> Result<(), String> {
+    // Only allow http/https URLs to prevent file://, smb://, javascript:// etc.
+    if !url.starts_with("https://") && !url.starts_with("http://") {
+        return Err(format!("Blocked URL with disallowed scheme: {}", url));
+    }
     app.opener()
         .open_url(url, None::<&str>)
         .map_err(|e| e.to_string())
@@ -1398,7 +1561,10 @@ fn process_release_data(
     // Store the last check time at the start (regardless of outcome)
     let update_state = app.state::<UpdateState>();
     let now = chrono::Local::now();
-    *update_state.last_check_time.lock().unwrap() = Some(now);
+    *update_state
+        .last_check_time
+        .lock()
+        .map_err(|_| "Internal state error".to_string())? = Some(now);
 
     // Persist to store
     let store = app.state::<StoreManager>();
@@ -1460,7 +1626,10 @@ fn process_release_data(
                 .map(|s| s.to_string()),
         };
 
-        *update_state.latest.lock().unwrap() = Some(info.clone());
+        *update_state
+            .latest
+            .lock()
+            .map_err(|_| "Internal state error".to_string())? = Some(info.clone());
 
         let _ = app.emit("update:available", info.clone());
         send_status("available", None);
@@ -1477,7 +1646,10 @@ fn process_release_data(
 
         let _ = rebuild_tray_menu(app, Some(&info));
     } else {
-        *update_state.latest.lock().unwrap() = None;
+        *update_state
+            .latest
+            .lock()
+            .map_err(|_| "Internal state error".to_string())? = None;
         send_status("none", None);
 
         // Show notification that app is up to date
@@ -1583,59 +1755,23 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
         };
 
         log::warn!(
-            "[Update] Windows reqwest failed: {}. Trying relaxed TLS fallback...",
+            "[Update] Windows reqwest failed: {}. Falling back to browser releases page.",
             reqwest_error
         );
 
-        let relaxed_client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(10))
-            .danger_accept_invalid_certs(true)
-            .danger_accept_invalid_hostnames(true)
-            .build()
-            .map_err(|e| format!("Failed to build relaxed reqwest client: {}", e))?;
-
-        let relaxed_response = relaxed_client
-            .get(GITHUB_API_URL)
-            .header("User-Agent", "Copilot-Tracker-App")
-            .send()
-            .await;
-
-        let relaxed_error = match relaxed_response {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    let mut parse_error: Option<String> = None;
-                    let release = match resp.json().await {
-                        Ok(value) => value,
-                        Err(err) => {
-                            parse_error = Some(format!("failed to parse response: {}", err));
-                            serde_json::Value::Null
-                        }
-                    };
-
-                    if !release.is_null() {
-                        log::info!("[Update] Relaxed reqwest fallback succeeded");
-                        process_release_data(&app, release, &send_status)?;
-                        return Ok(());
-                    }
-
-                    parse_error.unwrap_or_else(|| "failed to parse response".to_string())
-                } else {
-                    format!("HTTP {}", resp.status())
-                }
-            }
-            Err(err) => err.to_string(),
-        };
-
         let update_state = app.state::<UpdateState>();
         let now = chrono::Local::now();
-        *update_state.last_check_time.lock().unwrap() = Some(now);
+        *update_state
+            .last_check_time
+            .lock()
+            .map_err(|_| "Internal state error".to_string())? = Some(now);
 
         let store = app.state::<StoreManager>();
         let _ = store.set_last_update_check_timestamp(now.timestamp());
 
         let final_error = format!(
-            "Update check failed (webview: {}, reqwest: {}, reqwest_relaxed: {})",
-            webview_error, reqwest_error, relaxed_error
+            "Update check failed (webview: {}, reqwest: {})",
+            webview_error, reqwest_error
         );
         send_status("error", Some(final_error.as_str()));
 
@@ -1677,7 +1813,10 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
                     // Store last check time even on error
                     let update_state = app.state::<UpdateState>();
                     let now = chrono::Local::now();
-                    *update_state.last_check_time.lock().unwrap() = Some(now);
+                    *update_state
+                        .last_check_time
+                        .lock()
+                        .map_err(|_| "Internal state error".to_string())? = Some(now);
 
                     // Persist to store
                     let store = app.state::<StoreManager>();
@@ -1728,7 +1867,10 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
                             // Store last check time even on error
                             let update_state = app.state::<UpdateState>();
                             let now = chrono::Local::now();
-                            *update_state.last_check_time.lock().unwrap() = Some(now);
+                            *update_state
+                                .last_check_time
+                                .lock()
+                                .map_err(|_| "Internal state error".to_string())? = Some(now);
 
                             // Persist to store
                             let store = app.state::<StoreManager>();
@@ -1766,7 +1908,10 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
                                 // Store last check time even on error
                                 let update_state = app.state::<UpdateState>();
                                 let now = chrono::Local::now();
-                                *update_state.last_check_time.lock().unwrap() = Some(now);
+                                *update_state
+                                    .last_check_time
+                                    .lock()
+                                    .map_err(|_| "Internal state error".to_string())? = Some(now);
 
                                 // Persist to store
                                 let store = app.state::<StoreManager>();
@@ -1807,7 +1952,10 @@ async fn check_for_updates(app: AppHandle) -> Result<(), String> {
                         // Store last check time even on error
                         let update_state = app.state::<UpdateState>();
                         let now = chrono::Local::now();
-                        *update_state.last_check_time.lock().unwrap() = Some(now);
+                        *update_state
+                            .last_check_time
+                            .lock()
+                            .map_err(|_| "Internal state error".to_string())? = Some(now);
 
                         // Persist to store
                         let store = app.state::<StoreManager>();
@@ -1853,7 +2001,11 @@ fn get_update_info(app: AppHandle) -> Result<Option<UpdateInfo>, String> {
     // This prevents missed "update:available" events by allowing the renderer
     // to pull current state on startup.
     let update_state = app.state::<UpdateState>();
-    let latest = update_state.latest.lock().unwrap().clone();
+    let latest = update_state
+        .latest
+        .lock()
+        .map_err(|_| "Internal state error".to_string())?
+        .clone();
     Ok(latest)
 }
 
@@ -1963,6 +2115,11 @@ fn main() {
             update_settings,
             reset_settings,
             set_launch_at_login,
+            // Backup commands
+            create_backup,
+            restore_backup,
+            list_backups,
+            delete_backup,
             // Tray commands
             update_tray_usage,
             // Widget commands
@@ -2054,7 +2211,7 @@ fn main() {
 
                         // Stop background polling before app exit
                         let polling_state = app.state::<PollingState>();
-                        polling_state.stop_polling();
+                        polling_state.shutdown_polling();
                         log::info!("[Shutdown] Background polling stopped, exiting app");
                         app.exit(0);
                     }
@@ -2096,7 +2253,7 @@ fn main() {
 
                                     // Rebuild tray menu to show updated timestamp
                                     let update_state = app_handle.state::<UpdateState>();
-                                    let latest = update_state.latest.lock().unwrap();
+                                    let latest = update_state.latest.lock().unwrap_or_else(|e| e.into_inner());
                                     let _ = rebuild_tray_menu(&app_handle, latest.as_ref());
 
                                     // Show notification on success (if enabled)
@@ -2140,11 +2297,11 @@ fn main() {
                         let _ = toggle_widget(app.clone());
                         // Rebuild tray menu to update widget label
                         let update_state = app.state::<UpdateState>();
-                        let latest = update_state.latest.lock().unwrap();
+                        let latest = update_state.latest.lock().unwrap_or_else(|e| e.into_inner());
                         let _ = rebuild_tray_menu(app, latest.as_ref());
                     }
                     "update_check" => {
-                        let info = app.state::<UpdateState>().latest.lock().unwrap().clone();
+                        let info = app.state::<UpdateState>().latest.lock().unwrap_or_else(|e| e.into_inner()).clone();
                         if let Some(info) = info {
                             let _ = app.opener().open_url(info.release_url, None::<&str>);
                         } else {
@@ -2210,7 +2367,7 @@ fn main() {
                         let _ = toggle_widget(app.clone());
                         // Rebuild tray menu to update widget label
                         let update_state = app.state::<UpdateState>();
-                        let latest = update_state.latest.lock().unwrap();
+                        let latest = update_state.latest.lock().unwrap_or_else(|e| e.into_inner());
                         let _ = rebuild_tray_menu(app, latest.as_ref());
                     }
                 })
@@ -2246,9 +2403,28 @@ fn main() {
                 let _ = update_tray_icon_from_store(&listener_handle);
                 // Rebuild menu with fresh data from store (not using update state)
                 let update_state = listener_handle.state::<UpdateState>();
-                let latest = update_state.latest.lock().unwrap();
+                let latest = update_state.latest.lock().unwrap_or_else(|e| e.into_inner());
                 let _ = rebuild_tray_menu(&listener_handle, latest.as_ref());
                 log::info!("[TrayListener] Tray icon and menu updated successfully");
+            });
+
+            let auth_listener_handle = app_handle.clone();
+            app_handle.listen("auth:state-changed", move |event| {
+                let state = event.payload().trim_matches('"');
+                let polling_state = auth_listener_handle.state::<PollingState>();
+
+                if state == "authenticated" {
+                    let store = auth_listener_handle.state::<StoreManager>();
+                    let interval_seconds = store.get_settings().refresh_interval as u64;
+                    polling_state.restart_polling(auth_listener_handle.clone(), interval_seconds);
+                    log::info!(
+                        "[AuthListener] Restarted polling after authentication with interval: {}s",
+                        interval_seconds
+                    );
+                } else if state == "unauthenticated" {
+                    polling_state.stop_polling();
+                    log::info!("[AuthListener] Stopped polling after logout");
+                }
             });
 
             // Prevent app from quitting when main window is closed (hide instead)
@@ -2376,7 +2552,7 @@ fn main() {
             // CRITICAL: Start background polling AFTER setup completes to prevent race condition
             // Spawn a delayed task to ensure polling starts after initialization is complete
             let app_for_polling = app_handle.clone();
-            let polling_interval = settings.refresh_interval.max(10) as u64;
+            let polling_interval = settings.refresh_interval.clamp(10, 86400) as u64;
             let is_authenticated = settings.is_authenticated;
             tauri::async_runtime::spawn(async move {
                 // Small delay to ensure setup() completes and all state is managed
@@ -2463,7 +2639,7 @@ fn main() {
 
                         // Rebuild tray menu immediately after showing widget to avoid stale label
                         let update_state = app.state::<UpdateState>();
-                        let latest = update_state.latest.lock().unwrap();
+                        let latest = update_state.latest.lock().unwrap_or_else(|e| e.into_inner());
                         let _ = rebuild_tray_menu(app.handle(), latest.as_ref());
                         drop(latest);
                     } else {
@@ -2480,7 +2656,7 @@ fn main() {
 
             // Update tray menu after widget restoration to keep label in sync
             let update_state = app.state::<UpdateState>();
-            let latest = update_state.latest.lock().unwrap();
+            let latest = update_state.latest.lock().unwrap_or_else(|e| e.into_inner());
             let _ = rebuild_tray_menu(app.handle(), latest.as_ref());
             // Explicitly drop the lock before moving on
             drop(latest);
@@ -2515,4 +2691,62 @@ fn main() {
         })
         .run(context)
         .expect("error while running tauri app");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stop_polling_does_not_mark_shutdown() {
+        let polling = PollingState::new();
+        polling.stop_polling();
+
+        assert!(!*polling
+            .is_shutting_down
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()));
+    }
+
+    #[test]
+    fn windows_update_fallback_never_disables_tls_or_hostname_validation() {
+        let source = include_str!("main.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("main.rs should contain test module marker");
+
+        assert!(
+            !source.contains("danger_accept_invalid_certs"),
+            "update checks must not disable TLS certificate validation"
+        );
+        assert!(
+            !source.contains("danger_accept_invalid_hostnames"),
+            "update checks must not disable hostname validation"
+        );
+        assert!(
+            source.contains("https://github.com/bizzkoot/copilot-tracker/releases/latest"),
+            "safe browser fallback should still use the hardcoded releases URL"
+        );
+    }
+
+    #[test]
+    fn force_fetch_usage_keeps_cached_usage_until_refresh_succeeds() {
+        let source = include_str!("main.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("main.rs should contain test module marker");
+        let force_fetch_section = source
+            .split("async fn force_fetch_usage")
+            .nth(1)
+            .expect("force_fetch_usage should exist");
+
+        assert!(
+            !force_fetch_section.contains("clear_usage_cache"),
+            "force refresh must not clear offline cached usage before a new fetch succeeds"
+        );
+        assert!(
+            !force_fetch_section.contains("clear_usage_history"),
+            "force refresh must not clear offline cached history before a new fetch succeeds"
+        );
+    }
 }

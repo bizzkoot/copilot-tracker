@@ -52,6 +52,9 @@ urlencoding = "2.1.3"
 [build-dependencies]
 tauri-build = { version = "2", features = ["codegen"] }
 
+[dev-dependencies]
+tempfile = "3"
+
 # Bundle configuration for Windows resource file generation
 # Required for embedding icons in the Windows executable
 [package.metadata.bundle]
@@ -76,6 +79,18 @@ strip = true       # Ensures debug symbols are removed
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-clippy"))'] }
+
+# ─── Dependency notes ─────────────────────────────────────────────────────────
+# Multiple getrandom major versions (0.1, 0.2, 0.3, 0.4) appear in the tree.
+# This is expected and NOT a security issue:
+#   0.1.16 — rand 0.7 → kuchikiki → tauri-utils (Tauri HTML parser used in build)
+#   0.2.17 — ring → rustls → reqwest (TLS crypto stack)
+#   0.3.4  — tauri 2.x directly + rand 0.9 → tauri-plugin-notification
+#   0.4.2  — uuid 1.x → cfb → infer → tauri-utils + tempfile (dev dep)
+# Each 0.x line is a semver-incompatible major series pulled by Tauri's own
+# transitive deps. Forcing a single version via [patch.crates-io] would break
+# downstream compilation. Cargo handles them correctly as separate crates.
+# ──────────────────────────────────────────────────────────────────────────────
 
 # Windows-only dependency for theme detection (must be at end of file)
 [target.'cfg(windows)'.dependencies]

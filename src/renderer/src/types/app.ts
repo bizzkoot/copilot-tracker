@@ -4,7 +4,7 @@
  */
 
 import type { CopilotUsage, UsageHistory, UsagePrediction } from "./usage";
-import type { Settings } from "./settings";
+import type { BackupInfo, Settings } from "./settings";
 
 // Auth state
 export type AuthState =
@@ -26,7 +26,7 @@ export interface UsageFetchResult {
   success: boolean;
   usage?: CopilotUsage;
   history?: UsageHistory;
-  prediction?: UsagePrediction;
+  prediction?: UsagePrediction | null;
   error?: string;
   debugRawRows?: unknown[];
 }
@@ -84,18 +84,18 @@ export interface RendererToMainEvents {
 // App API exposed to renderer
 export interface AppAPI {
   // Auth
-  login: () => void;
-  logout: () => void;
-  checkAuth: () => void;
+  login: () => Promise<void>;
+  logout: () => Promise<void>;
+  checkAuth: () => Promise<void>;
   onAuthStateChanged: (callback: (state: AuthState) => void) => () => void;
   onSessionExpired: (callback: () => void) => () => void;
   onAlreadyAuthenticated: (callback: () => void) => () => void;
   onAuthExtractionFailed: (callback: (error: string) => void) => () => void;
 
   // Usage
-  fetchUsage: () => void;
-  refreshUsage: () => void;
-  forceRefreshUsage: () => void;
+  fetchUsage: () => Promise<void>;
+  refreshUsage: () => Promise<void>;
+  forceRefreshUsage: () => Promise<void>;
   captureExtractionDebug: () => Promise<unknown>;
   getCachedUsage: () => Promise<UsageFetchResult | null>;
   onUsageData: (callback: (data: UsageFetchResult) => void) => () => void;
@@ -107,12 +107,18 @@ export interface AppAPI {
   resetSettings: () => Promise<void>;
   onSettingsChanged: (callback: (settings: Settings) => void) => () => void;
 
+  // Backup
+  createBackup: () => Promise<string>;
+  restoreBackup: (backupId: string) => Promise<void>;
+  listBackups: () => Promise<BackupInfo[]>;
+  deleteBackup: (backupId: string) => Promise<void>;
+
   // App
-  quit: () => void;
-  showWindow: () => void;
-  hideWindow: () => void;
-  openExternal: (url: string) => void;
-  checkForUpdates: () => void;
+  quit: () => Promise<void>;
+  showWindow: () => Promise<void>;
+  hideWindow: () => Promise<void>;
+  openExternal: (url: string) => Promise<void>;
+  checkForUpdates: () => Promise<void>;
   onNavigate: (callback: (route: string) => void) => () => void;
   onUpdateAvailable: (callback: (info: UpdateInfo) => void) => () => void;
   onUpdateChecked: (

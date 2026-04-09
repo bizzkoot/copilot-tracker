@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+out/
+build/
+release/
+src-tauri/target/
+
+# Auto-generated Tauri schemas (owned by tauri-build, not Prettier)
+# These are regenerated as compact JSON on every `tauri build` run.
+# Formatting them causes perpetual build/format diffs.
+src-tauri/gen/
+
+# Lockfiles
+Cargo.lock
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Test fixtures & snapshots
+**/__snapshots__/

@@ -34,25 +34,37 @@ export function useUsage() {
     setError(null);
 
     try {
-      window.electron.fetchUsage();
+      await window.electron.fetchUsage();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch usage");
     }
   }, [setIsLoading, setError]);
 
   // Refresh usage data
-  const refresh = useCallback(() => {
+  const refresh = useCallback(async () => {
     if (typeof window.electron !== "undefined") {
-      window.electron.refreshUsage();
+      try {
+        setError(null);
+        await window.electron.refreshUsage();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to refresh usage");
+      }
     }
-  }, []);
+  }, [setError]);
 
-  // Force refresh - clears cache and fetches fresh data
-  const forceRefresh = useCallback(() => {
+  // Force refresh - bypasses stale cache and fetches fresh data
+  const forceRefresh = useCallback(async () => {
     if (typeof window.electron !== "undefined") {
-      window.electron.forceRefreshUsage();
+      try {
+        setError(null);
+        await window.electron.forceRefreshUsage();
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Failed to force refresh usage",
+        );
+      }
     }
-  }, []);
+  }, [setError]);
 
   // Setup IPC listeners and request cached data on mount
   useEffect(() => {

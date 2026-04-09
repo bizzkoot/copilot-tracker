@@ -1,4 +1,8 @@
 use serde::{Deserialize, Serialize};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc,
+};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tokio::sync::{mpsc, Mutex as TokioMutex};
 use tokio::time::Duration;
@@ -6,9 +10,20 @@ use url::Url;
 
 use crate::StoreManager;
 
-/// Global channel for hidden webview events
+/// Global channel for hidden extraction webview events.
 static HIDDEN_WEBVIEW_EVENTS: TokioMutex<Option<mpsc::Sender<HiddenWebviewEvent>>> =
     TokioMutex::const_new(None);
+
+/// Global channel for hidden update-check webview events.
+static UPDATE_CHECK_WEBVIEW_EVENTS: TokioMutex<Option<mpsc::Sender<HiddenWebviewEvent>>> =
+    TokioMutex::const_new(None);
+
+/// Serializes concurrent extraction attempts so only one runs at a time.
+static EXTRACTION_LOCK: TokioMutex<()> = TokioMutex::const_new(());
+
+/// Serializes concurrent update checks so they cannot clobber each other's
+/// event channel.
+static UPDATE_CHECK_LOCK: TokioMutex<()> = TokioMutex::const_new(());
 
 #[derive(Debug, Clone)]
 pub struct HiddenWebviewEvent {
@@ -281,6 +296,7 @@ pub struct AuthManager {
     customer_id: Option<u64>,
     extraction_in_progress: bool,
     auth_window_listener_attached: bool,
+    visible_auth_generation: Arc<AtomicU64>,
 }
 
 impl AuthManager {
@@ -290,11 +306,82 @@ impl AuthManager {
             customer_id: None,
             extraction_in_progress: false,
             auth_window_listener_attached: false,
+            visible_auth_generation: Arc::new(AtomicU64::new(0)),
+        }
+    }
+
+    fn can_apply_visible_auth_result(store: &StoreManager, expected_generation: u64) -> bool {
+        expected_generation > 0
+            && !store.is_session_transition_in_progress()
+            && store.get_session_generation() == expected_generation
+    }
+
+    fn apply_customer_extraction_result(
+        result: &serde_json::Value,
+        customer_id: &mut Option<u64>,
+        error: &mut Option<String>,
+    ) {
+        if result
+            .get("success")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
+            if let Some(id) = result.get("id").and_then(|v| v.as_u64()) {
+                *customer_id = Some(id);
+                *error = None;
+            } else if customer_id.is_none() {
+                *error = Some("Customer extraction succeeded without an id".to_string());
+            }
+        } else if customer_id.is_none() {
+            *error = result
+                .get("error")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+        }
+    }
+
+    fn apply_usage_extraction_result(
+        result: &serde_json::Value,
+        customer_id: &mut Option<u64>,
+        usage_data: &mut Option<UsageData>,
+        usage_history: &mut Option<Vec<UsageHistoryRow>>,
+        raw_usage_payload: &mut Option<serde_json::Value>,
+        error: &mut Option<String>,
+    ) {
+        *raw_usage_payload = Some(result.clone());
+
+        if customer_id.is_none() {
+            *customer_id = result.get("customerId").and_then(|v| v.as_u64());
+        }
+
+        let parsed_usage = result
+            .get("usageCard")
+            .and_then(|v| v.get("data"))
+            .and_then(parse_usage_card_data);
+        *usage_data = merge_entitlement_usage(parsed_usage, result.get("entitlement"));
+
+        *usage_history = result
+            .get("usageTable")
+            .and_then(|v| v.get("data"))
+            .and_then(|v| v.get("table"))
+            .and_then(|v| v.get("rows"))
+            .and_then(|v| v.as_array())
+            .map(|rows| rows.iter().filter_map(parse_usage_history_row).collect());
+
+        if customer_id.is_some() && (usage_data.is_some() || usage_history.is_some()) {
+            *error = None;
         }
     }
 
     /// Create or show the auth webview window
     pub fn show_auth_window(&mut self, app: &AppHandle) -> Result<(), String> {
+        let current_generation = {
+            let store = app.state::<StoreManager>();
+            store.get_session_generation()
+        };
+        self.visible_auth_generation
+            .store(current_generation, Ordering::SeqCst);
+
         // If window exists, just show it
         if let Some(window) = &self.auth_window {
             if window.is_visible().unwrap_or(false) {
@@ -318,6 +405,7 @@ impl AuthManager {
             Url::parse(GITHUB_LOGIN_URL).map_err(|e| format!("Failed to parse URL: {}", e))?;
 
         let app_handle = app.clone();
+        let visible_auth_generation = Arc::clone(&self.visible_auth_generation);
         let window = WebviewWindowBuilder::new(app, "auth", WebviewUrl::External(url))
         .on_navigation(move |url| {
             let url_str = url.as_str();
@@ -376,92 +464,56 @@ impl AuthManager {
                 }
 
                 if let Some(id) = extracted_id {
-                     let store = app_handle.state::<StoreManager>();
-                     if store.set_customer_id(id).is_ok() {
-                         log::info!("Successfully authenticated with Customer ID: {}", id);
-
-                         // Save usage data and history
-                          let mut usage_summary = None;
-                          let mut usage_entries = vec![];
-
-                          if let Some(usage) = extracted_usage_data {
-                              log::info!("Extracted usage data: net_quantity={}, discount_quantity={}, entitlement={}",
-                                  usage.net_quantity, usage.discount_quantity, usage.user_premium_request_entitlement);
-
-                              let used = round_request_count(usage.discount_quantity);
-                              let limit = usage.user_premium_request_entitlement;
-
-                                if used == 0.0 && limit == 0 {
-                                  log::warn!("Usage data shows 0/0 - API may have returned empty data");
-                              }
-
-                              let _ = store.set_usage(used, limit);
-
-                              // Update cache
-                              let cache = crate::store::UsageCache {
-                                  customer_id: id,
-                                  net_quantity: usage.net_quantity,
-                                  discount_quantity: usage.discount_quantity,
-                                  user_premium_request_entitlement: usage.user_premium_request_entitlement,
-                                  filtered_user_premium_request_entitlement: usage.filtered_user_premium_request_entitlement,
-                                  net_billed_amount: usage.net_billed_amount,
-                                  timestamp: chrono::Utc::now().timestamp(),
-                              };
-                              store.set_usage_cache(cache);
-
-                              // Create summary
-                              let remaining = (limit as f64 - used).max(0.0);
-                              let percentage = if limit > 0 { (used / limit as f64 * 100.0) as f32 } else { 0.0 };
-                              usage_summary = Some(crate::usage::UsageSummary {
-                                  used,
-                                  limit,
-                                  remaining,
-                                  percentage,
-                                  timestamp: chrono::Utc::now().timestamp(),
-                              });
-                          } else {
-                              log::warn!("No usage data was extracted from GitHub API");
-                          }
-
-                          // Save history
-                          if let Some(rows) = extracted_usage_history {
-                              log::info!("Extracted {} usage history rows", rows.len());
-                              usage_entries = crate::usage::UsageManager::map_history_rows(&rows);
-                              store.set_usage_history(usage_entries.clone());
-                          } else {
-                              log::warn!("No usage history was extracted from GitHub API");
-                          }
-
-                          // Emit full usage:data payload with prediction
-                          if let Some(summary) = usage_summary {
-                              let history = if !usage_entries.is_empty() {
-                                  usage_entries
-                              } else {
-                                  crate::usage::UsageManager::get_cached_history(&app_handle)
-                              };
-
-                              let settings = store.get_settings();
-                              let prediction = crate::usage::UsageManager::predict_usage_from_history(
-                                  &history,
-                                  summary.used,
-                                  summary.limit,
-                                  settings.prediction_period,
+                      let expected_generation = visible_auth_generation.load(Ordering::SeqCst);
+                      let store = app_handle.state::<StoreManager>();
+                      let _state_operation = match store.lock_state_operation() {
+                          Ok(guard) => guard,
+                          Err(error) => {
+                              log::error!(
+                                  "Failed to lock state for auth window success handling: {}",
+                                  error
                               );
-
-                              log::info!("Emitting usage:data event - used: {}, limit: {}, history entries: {}",
-                                  summary.used, summary.limit, history.len());
-
-                              let payload = crate::usage::UsagePayload {
-                                  summary: summary.clone(),
-                                  history,
-                                  prediction,
-                              };
-
-                              let _ = app_handle.emit("usage:data", payload);
-                              let _ = app_handle.emit("usage:updated", &summary);
-                          } else {
-                              log::warn!("No usage summary to emit - authentication succeeded but no usage data available");
+                              return false;
                           }
+                      };
+                      if !AuthManager::can_apply_visible_auth_result(&store, expected_generation) {
+                          log::warn!(
+                              "Discarding auth window success because the session changed while login was in progress"
+                          );
+                          return false;
+                      }
+
+                      if store.set_customer_id_locked(id).is_ok() {
+                          log::info!("Successfully authenticated with Customer ID: {}", id);
+
+                          // Process usage data and emit events via shared helper
+                           if let Some(ref usage) = extracted_usage_data {
+                               if let Err(error) = crate::usage::UsageManager::process_and_emit_usage(
+                                   &app_handle,
+                                   id,
+                                   usage,
+                                   extracted_usage_history.take(),
+                               ) {
+                                   log::error!("Failed to persist usage after authentication: {}", error);
+                               }
+                           } else if let Some(rows) = extracted_usage_history.take() {
+                               log::warn!(
+                                   "No usage data was extracted from GitHub API; persisting {} history rows only",
+                                   rows.len()
+                               );
+                               if let Err(error) =
+                                   crate::usage::UsageManager::persist_history_without_usage_data(
+                                       &store, &rows,
+                                   )
+                               {
+                                   log::error!(
+                                       "Failed to persist history-only usage data after authentication: {}",
+                                       error
+                                   );
+                               }
+                           } else {
+                               log::warn!("No usage data was extracted from GitHub API");
+                           }
 
                          let _ = app_handle.emit("auth:state-changed", "authenticated");
 
@@ -850,6 +902,7 @@ impl AuthManager {
     pub fn clear_auth_window(&mut self) {
         self.auth_window = None;
         self.auth_window_listener_attached = false;
+        self.visible_auth_generation.store(0, Ordering::SeqCst);
     }
 
     pub fn mark_auth_window_listener_attached(&mut self) -> bool {
@@ -1218,6 +1271,9 @@ impl AuthManager {
         &mut self,
         app: &AppHandle,
     ) -> Result<ExtractionResult, String> {
+        // Serialize concurrent extractions — second caller waits until first finishes
+        let _extraction_guard = EXTRACTION_LOCK.lock().await;
+
         // Create event channel
         let (tx, mut rx) = mpsc::channel::<HiddenWebviewEvent>(10);
 
@@ -1246,45 +1302,25 @@ impl AuthManager {
                         if let Ok(result) =
                             serde_json::from_str::<serde_json::Value>(&event.payload)
                         {
-                            if result
-                                .get("success")
-                                .and_then(|v| v.as_bool())
-                                .unwrap_or(false)
-                            {
-                                customer_id = result.get("id").and_then(|v| v.as_u64());
-                            } else {
-                                error = result
-                                    .get("error")
-                                    .and_then(|v| v.as_str())
-                                    .map(|s| s.to_string());
-                            }
+                            Self::apply_customer_extraction_result(
+                                &result,
+                                &mut customer_id,
+                                &mut error,
+                            );
                         }
                     }
                     "auth:extraction:usage" => {
                         if let Ok(result) =
                             serde_json::from_str::<serde_json::Value>(&event.payload)
                         {
-                            raw_usage_payload = Some(result.clone());
-
-                            usage_data = result
-                                .get("usageCard")
-                                .and_then(|v| v.get("data"))
-                                .and_then(parse_usage_card_data);
-                            usage_data =
-                                merge_entitlement_usage(usage_data, result.get("entitlement"));
-
-                            // Parse usage table
-                            if let Some(rows) = result
-                                .get("usageTable")
-                                .and_then(|v| v.get("data"))
-                                .and_then(|v| v.get("table"))
-                                .and_then(|v| v.get("rows"))
-                                .and_then(|v| v.as_array())
-                            {
-                                let history: Vec<UsageHistoryRow> =
-                                    rows.iter().filter_map(parse_usage_history_row).collect();
-                                usage_history = Some(history);
-                            }
+                            Self::apply_usage_extraction_result(
+                                &result,
+                                &mut customer_id,
+                                &mut usage_data,
+                                &mut usage_history,
+                                &mut raw_usage_payload,
+                                &mut error,
+                            );
                         }
                     }
                     "auth:extraction:complete" => {
@@ -1344,12 +1380,14 @@ impl AuthManager {
         &mut self,
         app: &AppHandle,
     ) -> Result<serde_json::Value, String> {
+        let _update_check_guard = UPDATE_CHECK_LOCK.lock().await;
+
         // Create event channel
         let (tx, mut rx) = mpsc::channel::<HiddenWebviewEvent>(10);
 
         // Store channel for command handler to use
         {
-            let mut global_tx = HIDDEN_WEBVIEW_EVENTS.lock().await;
+            let mut global_tx = UPDATE_CHECK_WEBVIEW_EVENTS.lock().await;
             *global_tx = Some(tx);
         }
 
@@ -1442,17 +1480,9 @@ impl AuthManager {
                 log::info!("Received update check event payload: {}", event.payload);
 
                 if event.event == "update_check:complete" {
-                    // Clean up global channel
-                    let mut global_tx = HIDDEN_WEBVIEW_EVENTS.lock().await;
-                    *global_tx = None;
-
                     return serde_json::from_str::<serde_json::Value>(&event.payload)
                         .map_err(|e| format!("Failed to parse update check result: {}", e));
                 } else if event.event == "update_check:error" {
-                    // Clean up global channel
-                    let mut global_tx = HIDDEN_WEBVIEW_EVENTS.lock().await;
-                    *global_tx = None;
-
                     // Parse error from payload
                     let error_payload =
                         serde_json::from_str::<serde_json::Value>(&event.payload)
@@ -1471,13 +1501,19 @@ impl AuthManager {
             // If loop completes without result event, it timed out
             Err::<serde_json::Value, String>("Update check timed out".to_string())
         })
-        .await
-        .map_err(|_| "Update check timed out".to_string())?;
+        .await;
 
         // Clean up window
         let _ = window.close();
+        {
+            let mut global_tx = UPDATE_CHECK_WEBVIEW_EVENTS.lock().await;
+            *global_tx = None;
+        }
 
-        result
+        match result {
+            Ok(result) => result,
+            Err(_) => Err("Update check timed out".to_string()),
+        }
     }
 }
 
@@ -1491,9 +1527,200 @@ impl Default for AuthManager {
 /// This receives data from the injected JavaScript in the hidden webview
 #[tauri::command]
 pub async fn hidden_webview_event(event: String, payload: String) -> Result<(), String> {
-    let sender = HIDDEN_WEBVIEW_EVENTS.lock().await;
+    let channel = if event.starts_with("update_check:") {
+        &UPDATE_CHECK_WEBVIEW_EVENTS
+    } else {
+        &HIDDEN_WEBVIEW_EVENTS
+    };
+    let sender = channel.lock().await;
     if let Some(tx) = sender.as_ref() {
         let _ = tx.send(HiddenWebviewEvent { event, payload }).await;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+    use tokio::time::timeout;
+
+    #[test]
+    fn customer_success_clears_stale_extraction_error() {
+        let mut customer_id = None;
+        let mut error = None;
+
+        AuthManager::apply_customer_extraction_result(
+            &serde_json::json!({
+                "success": false,
+                "error": "customer id not found",
+            }),
+            &mut customer_id,
+            &mut error,
+        );
+
+        assert_eq!(customer_id, None);
+        assert_eq!(error.as_deref(), Some("customer id not found"));
+
+        AuthManager::apply_customer_extraction_result(
+            &serde_json::json!({
+                "success": true,
+                "id": 42,
+            }),
+            &mut customer_id,
+            &mut error,
+        );
+
+        assert_eq!(customer_id, Some(42));
+        assert_eq!(error, None);
+    }
+
+    #[test]
+    fn visible_auth_results_are_rejected_after_session_generation_changes() {
+        let tmp = TempDir::new().unwrap();
+        let store = StoreManager::new(tmp.path().to_path_buf()).unwrap();
+        let generation = store.get_session_generation();
+
+        assert!(AuthManager::can_apply_visible_auth_result(
+            &store, generation
+        ));
+
+        store.begin_session_transition();
+        assert!(!AuthManager::can_apply_visible_auth_result(
+            &store, generation
+        ));
+
+        store.finish_session_transition();
+        assert!(!AuthManager::can_apply_visible_auth_result(
+            &store, generation,
+        ));
+    }
+
+    #[test]
+    fn usage_payload_backfills_customer_id_when_customer_event_is_missing() {
+        let mut customer_id = None;
+        let mut error = None;
+        let mut usage_data = None;
+        let mut usage_history = None;
+        let mut raw_usage_payload = None;
+
+        AuthManager::apply_usage_extraction_result(
+            &serde_json::json!({
+                "customerId": 77,
+                "usageCard": {
+                    "data": {
+                        "discountQuantity": 12,
+                        "userPremiumRequestEntitlement": 1200,
+                    }
+                },
+                "usageTable": {
+                    "data": {
+                        "table": {
+                            "rows": []
+                        }
+                    }
+                },
+                "entitlement": {
+                    "success": true,
+                    "used": 12,
+                    "limit": 1200
+                }
+            }),
+            &mut customer_id,
+            &mut usage_data,
+            &mut usage_history,
+            &mut raw_usage_payload,
+            &mut error,
+        );
+
+        assert_eq!(customer_id, Some(77));
+        assert!(usage_data.is_some());
+        assert_eq!(usage_history.as_ref().map(Vec::len), Some(0));
+        assert!(raw_usage_payload.is_some());
+    }
+
+    #[test]
+    fn usage_payload_clears_stale_error_when_it_backfills_customer_id() {
+        let mut customer_id = None;
+        let mut error = None;
+        let mut usage_data = None;
+        let mut usage_history = None;
+        let mut raw_usage_payload = None;
+
+        AuthManager::apply_customer_extraction_result(
+            &serde_json::json!({
+                "success": false,
+                "error": "customer id not found",
+            }),
+            &mut customer_id,
+            &mut error,
+        );
+
+        AuthManager::apply_usage_extraction_result(
+            &serde_json::json!({
+                "customerId": 77,
+                "usageCard": {
+                    "data": {
+                        "discountQuantity": 12,
+                        "userPremiumRequestEntitlement": 1200,
+                    }
+                },
+                "usageTable": {
+                    "data": {
+                        "table": {
+                            "rows": []
+                        }
+                    }
+                },
+                "entitlement": {
+                    "success": true,
+                    "used": 12,
+                    "limit": 1200
+                }
+            }),
+            &mut customer_id,
+            &mut usage_data,
+            &mut usage_history,
+            &mut raw_usage_payload,
+            &mut error,
+        );
+
+        assert_eq!(customer_id, Some(77));
+        assert!(usage_data.is_some());
+        assert_eq!(error, None);
+    }
+
+    #[tokio::test]
+    async fn hidden_webview_event_routes_update_events_to_update_channel() {
+        let (extraction_tx, mut extraction_rx) = mpsc::channel::<HiddenWebviewEvent>(1);
+        let (update_tx, mut update_rx) = mpsc::channel::<HiddenWebviewEvent>(1);
+        {
+            let mut sender = HIDDEN_WEBVIEW_EVENTS.lock().await;
+            *sender = Some(extraction_tx);
+        }
+        {
+            let mut sender = UPDATE_CHECK_WEBVIEW_EVENTS.lock().await;
+            *sender = Some(update_tx);
+        }
+
+        hidden_webview_event("update_check:complete".to_string(), "{}".to_string())
+            .await
+            .unwrap();
+
+        let received = timeout(Duration::from_millis(50), extraction_rx.recv()).await;
+        assert!(
+            received.is_err() || received.unwrap().is_none(),
+            "update events must not be delivered to the extraction channel"
+        );
+        let update_event = timeout(Duration::from_millis(50), update_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(update_event.event, "update_check:complete");
+
+        let mut sender = HIDDEN_WEBVIEW_EVENTS.lock().await;
+        *sender = None;
+        let mut sender = UPDATE_CHECK_WEBVIEW_EVENTS.lock().await;
+        *sender = None;
+    }
 }
