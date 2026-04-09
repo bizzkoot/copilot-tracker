@@ -34,7 +34,7 @@ jobs:
             rust_target: aarch64-apple-darwin,x86_64-apple-darwin
             artifacts: |
               src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
-              src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz
+              src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.zip
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             rust_target: x86_64-unknown-linux-gnu
@@ -122,6 +122,18 @@ jobs:
           npm run build:web && npx tauri build --target x86_64-pc-windows-msvc
         env:
           TAURI_BUNDLE_SKIP_SIGNING: "true"
+
+      - name: Archive macOS .app with ditto (preserve metadata)
+        if: runner.os == 'macOS' && (inputs.platforms == 'all' || inputs.platforms == 'macos-only')
+        run: |
+          set -e
+          APP_DIR="src-tauri/target/universal-apple-darwin/release/bundle/macos/Copilot Tracker.app"
+          if [ -d "$APP_DIR" ]; then
+            echo "Creating zip with ditto..."
+            ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "${APP_DIR}.zip"
+          else
+            echo "No .app found at $APP_DIR, skipping archive creation"
+          fi
 
       - name: Upload Tauri Release Assets
         if: |
